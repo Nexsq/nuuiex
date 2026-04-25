@@ -25,8 +25,9 @@ fn main() {
                     canvas.resize(cols, rows);
                 }
                 Event::Key(key_event) => {
-                    if key_event.code == KeyCode::Esc {
-                        break;
+                    match key_event.code {
+                        KeyCode::Esc => break,
+                        _ => {}
                     }
                 }
                 _ => {}
