@@ -1,5 +1,5 @@
-use nuui::canvas;
+use nuui::Canvas;
 
 fn main() {
-    canvas::hello();
+    println!("test");
 }
