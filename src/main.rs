@@ -1,41 +1,44 @@
-mod canvas;
-use canvas::Canvas;
+use std::io::{self, stdout, Write};
+use std::time::Duration;
 use crossterm::{
-    cursor::MoveTo,
-    event::{poll, read, Event, KeyCode},
-    terminal::{disable_raw_mode, enable_raw_mode},
-    ExecutableCommand,
+    event::{self, Event, KeyCode},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    execute, cursor,
 };
-use std::{io::stdout, time::Duration};
 
-fn main() {
-    enable_raw_mode().unwrap();
+use nuui::canvas::Canvas;
+use nuui::widgets::Box;
 
-    let mut canvas = Canvas::new();
+fn main() -> io::Result<()> {
+    let mut stdout = stdout();
+    enable_raw_mode()?; 
+    execute!(stdout, EnterAlternateScreen, cursor::Hide)?;
+
+    let (width, height) = crossterm::terminal::size()?;
+    let mut canvas = Canvas::new(width, height);
+
+    let box1 = Box { x: 5, y: 2, width: 20, height: 10, corner: 0 };
+    let box2 = Box { x: 30, y: 5, width: 15, height: 8, corner: 0 };
 
     loop {
         canvas.clear();
-        canvas.draw_box((10, 5), (20, 10), 1);
-        canvas.draw_box((20, 8), (15, 8), 1);
-        canvas.render();
 
-        if poll(Duration::from_millis(50)).unwrap() {
-            match read().unwrap() {
-                Event::Resize(cols, rows) => {
-                    canvas.resize(cols, rows);
+        box1.draw_in(&mut canvas);
+        box2.draw_in(&mut canvas);
+
+        canvas.render(&mut stdout)?;
+        stdout.flush()?;
+
+        if event::poll(Duration::from_millis(16))? {
+            if let Event::Key(key) = event::read()? {
+                if key.code == KeyCode::Char('q') {
+                    break;
                 }
-                Event::Key(key_event) => {
-                    match key_event.code {
-                        KeyCode::Esc => break,
-                        _ => {}
-                    }
-                }
-                _ => {}
             }
         }
     }
 
-    disable_raw_mode().unwrap();
-    let mut stdout = stdout();
-    stdout.execute(MoveTo(0, canvas.height)).unwrap();
+    execute!(stdout, LeaveAlternateScreen, cursor::Show)?;
+    disable_raw_mode()?;
+    Ok(())
 }
