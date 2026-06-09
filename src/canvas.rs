@@ -18,3 +18,24 @@ impl Cell {
         println!("{}", self.s);
     }
 }
+
+impl Canvas {
+    pub fn new(w: u16, h: u16) -> Self {
+        Self {
+            w,
+            h,
+            buf: Vec::with_capacity((w * h) as usize), // capacity here might break things, test later
+        }
+    }
+
+    pub fn add_cell(&mut self, cell: Cell) {
+        self.buf.push(cell);
+    }
+
+    pub fn print(&self) {
+        for (_, cell) in self.buf.iter().enumerate() {
+            print!("{}", cell.s);
+        }
+        println!();
+    }
+}
