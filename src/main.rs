@@ -12,6 +12,7 @@ fn main() {
         bg: Color::None,
         md: Modifier::None,
     };
+
     canvas1.put_cell(cell1.clone(), 0, 0);
     canvas1.put_cell(cell1.clone(), w - 1, 0);
     canvas1.put_cell(cell1.clone(), 0, h - 1);
