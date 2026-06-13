@@ -60,20 +60,27 @@ impl Buffer {
 impl Canvas {
     pub fn new(width: u16, height: u16) -> Self {
         let size = (width as usize) * (height as usize);
+
+        let imp_cell = Cell {
+            s: '\0',
+            fg: Color::None,
+            bg: Color::None,
+            md: Modifier::None,
+        };
+
         Self {
             width,
             height,
-            old: vec![Cell::default(); size],
+            old: vec![imp_cell; size],
             new: vec![Cell::default(); size],
         }
     }
 
     pub fn clean(&mut self) {
-        self.old.fill(Cell::default());
         self.new.fill(Cell::default());
     }
 
-    pub fn put_buffer(&mut self, buffer: &Buffer, x: i16, y: i16) {
+    fn put_buffer_impl(&mut self, buffer: &Buffer, x: i16, y: i16, ignore_spaces: bool) {
         let cw = self.width as i16;
         let ch = self.height as i16;
         let bw = buffer.width as i16;
@@ -105,50 +112,84 @@ impl Canvas {
 
         for (b_row, c_row) in buffer_rows.zip(canvas_rows) {
             let src_slice = &b_row[buffer_x..buffer_x + render_w];
-
             let dest_slice = &mut c_row[canvas_x..canvas_x + render_w];
 
-            dest_slice.copy_from_slice(src_slice);
+            if ignore_spaces {
+                for (src_cell, dest_cell) in src_slice.iter().zip(dest_slice.iter_mut()) {
+                    if *src_cell != Cell::default() {
+                        *dest_cell = *src_cell;
+                    }
+                }
+            } else {
+                dest_slice.copy_from_slice(src_slice);
+            }
         }
     }
 
-    pub fn render(&self) {
-        let mut stdout = io::BufWriter::new(io::stdout().lock());
+    pub fn put_buffer(&mut self, buffer: &Buffer, x: i16, y: i16) {
+        self.put_buffer_impl(buffer, x, y, false);
+    }
 
-        write!(stdout, "\x1b[H").unwrap();
+    pub fn put_buffer_overlap(&mut self, buffer: &Buffer, x: i16, y: i16) {
+        self.put_buffer_impl(buffer, x, y, true);
+    }
+
+    pub fn render(&mut self) {
+        let mut stdout = io::BufWriter::new(io::stdout().lock());
 
         let mut cur_fg = Color::None;
         let mut cur_bg = Color::None;
         let mut cur_md = Modifier::None;
 
-        for row in self.new.chunks_exact(self.width as usize) {
-            for cell in row {
-                if cell.fg != cur_fg || cell.bg != cur_bg || cell.md != cur_md {
-                    if cell.fg == Color::None && cell.bg == Color::None && cell.md == Modifier::None
+        let mut cursor_x: u16 = u16::MAX;
+        let mut cursor_y: u16 = u16::MAX;
+
+        let width = self.width;
+
+        for (idx, (old_cell, new_cell)) in self.old.iter_mut().zip(self.new.iter()).enumerate() {
+            if old_cell != new_cell {
+                let x = (idx as u16) % width;
+                let y = (idx as u16) / width;
+
+                if cursor_x != x || cursor_y != y {
+                    write!(stdout, "\x1b[{};{}H", y + 1, x + 1).unwrap();
+                }
+
+                if new_cell.fg != cur_fg || new_cell.bg != cur_bg || new_cell.md != cur_md {
+                    if new_cell.fg == Color::None
+                        && new_cell.bg == Color::None
+                        && new_cell.md == Modifier::None
                     {
                         write!(stdout, "\x1b[0m").unwrap();
                     } else {
                         write!(
                             stdout,
                             "{}{}{}",
-                            cell.md.to_ansi(),
-                            cell.fg.fg_ansi(),
-                            cell.bg.bg_ansi()
+                            new_cell.md.to_ansi(),
+                            new_cell.fg.fg_ansi(),
+                            new_cell.bg.bg_ansi()
                         )
                         .unwrap();
                     }
-                    cur_fg = cell.fg;
-                    cur_bg = cell.bg;
-                    cur_md = cell.md;
+                    cur_fg = new_cell.fg;
+                    cur_bg = new_cell.bg;
+                    cur_md = new_cell.md;
                 }
 
-                write!(stdout, "{}", cell.s).unwrap();
-            }
+                write!(stdout, "{}", new_cell.s).unwrap();
 
-            write!(stdout, "\n").unwrap();
+                cursor_x = x + 1;
+                cursor_y = y;
+
+                if cursor_x >= width {
+                    cursor_x = u16::MAX;
+                }
+
+                *old_cell = *new_cell;
+            }
         }
 
         write!(stdout, "\x1b[0m").unwrap();
         stdout.flush().unwrap();
-    } // this render is temporary and will be replaced with a more efficient diffing render later (yes it was taken from the buffer lol)
+    }
 }
