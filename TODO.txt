@@ -1,1 +1,3 @@
-make Cell private cus it never needs to be used in main
+make Cell private cus it never needs to be used in main, I think?
+
+check if buffers overlap on canvas (and make impl functions for overlapping spaces and not doing that)
