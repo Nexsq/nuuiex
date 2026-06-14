@@ -48,6 +48,12 @@ fn main() {
     let mut box_y: i16 = 0;
 
     loop {
+        let (current_w, current_h) = Terminal::size();
+
+        if current_w != canvas.width || current_h != canvas.height {
+            canvas.resize(current_w, current_h);
+        }
+
         canvas.clean();
         canvas.put_box(&box1, box_x, box_y);
         canvas.render();
