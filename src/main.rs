@@ -20,15 +20,15 @@ fn main() {
     let mut box2 = Box::new(ow, oh);
     let cell1 = Cell {
         s: 'x',
-        fg: Color::Black,
+        fg: Color::None,
         bg: Color::None,
         md: Modifier::Bold,
     };
     let cell2 = Cell {
         s: 'o',
         fg: Color::None,
-        bg: Color::White,
-        md: Modifier::None,
+        bg: Color::Red,
+        md: Modifier::Underline,
     };
 
     box1.put_cell(cell1.clone(), 0, 0);
