@@ -1,7 +1,5 @@
-mod canvas;
-mod style;
-mod terminal;
+mod render;
 
-pub use canvas::{Buffer, Canvas, Cell};
-pub use style::{Color, Modifier};
-pub use terminal::{Key, Terminal};
+pub use render::canvas::{Buffer, Canvas, Cell};
+pub use render::style::{Color, Modifier};
+pub use render::terminal::{Key, Terminal};

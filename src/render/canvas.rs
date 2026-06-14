@@ -1,4 +1,4 @@
-use crate::style::{Color, Modifier};
+use super::style::{Color, Modifier};
 use std::io::{self, Write};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
