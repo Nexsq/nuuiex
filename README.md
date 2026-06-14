@@ -1,2 +1,2 @@
 # nuuiex
-NUUI extended
+NUUI ex(tended)
