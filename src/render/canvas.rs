@@ -109,27 +109,35 @@ impl Canvas {
                     write!(stdout, "\x1b[{};{}H", y + 1, x + 1).unwrap();
                 }
 
+                if new_cell.md != cur_md {
+                    if cur_md != Modifier::None {
+                        write!(stdout, "\x1b[0m").unwrap();
+                        cur_fg = Color::None;
+                        cur_bg = Color::None;
+                    }
+
+                    if new_cell.md != Modifier::None {
+                        write!(stdout, "{}", new_cell.md.to_ansi()).unwrap();
+                    }
+                    cur_md = new_cell.md;
+                }
+
                 if new_cell.fg != cur_fg {
-                    if new_cell.fg == Color::None { write!(stdout, "\x1b[39m").unwrap(); } 
-                    else { write!(stdout, "{}", new_cell.fg.fg_ansi()).unwrap(); }
+                    if new_cell.fg == Color::None {
+                        write!(stdout, "\x1b[39m").unwrap();
+                    } else {
+                        write!(stdout, "{}", new_cell.fg.fg_ansi()).unwrap();
+                    }
                     cur_fg = new_cell.fg;
                 }
 
                 if new_cell.bg != cur_bg {
-                    if new_cell.bg == Color::None { write!(stdout, "\x1b[49m").unwrap(); } 
-                    else { write!(stdout, "{}", new_cell.bg.bg_ansi()).unwrap(); }
-                    cur_bg = new_cell.bg;
-                }
-
-                if new_cell.md != cur_md {
-                    if new_cell.md == Modifier::None {
-                        write!(stdout, "\x1b[0m").unwrap();
-                        if cur_fg != Color::None { write!(stdout, "{}", cur_fg.fg_ansi()).unwrap(); }
-                        if cur_bg != Color::None { write!(stdout, "{}", cur_bg.bg_ansi()).unwrap(); }
+                    if new_cell.bg == Color::None {
+                        write!(stdout, "\x1b[49m").unwrap();
                     } else {
-                        write!(stdout, "{}", new_cell.md.to_ansi()).unwrap();
+                        write!(stdout, "{}", new_cell.bg.bg_ansi()).unwrap();
                     }
-                    cur_md = new_cell.md;
+                    cur_bg = new_cell.bg;
                 }
 
                 write!(stdout, "{}", new_cell.s).unwrap();
@@ -240,13 +248,25 @@ pub trait DrawTarget {
 }
 
 impl DrawTarget for Box {
-    fn width(&self) -> u16 { self.width }
-    fn height(&self) -> u16 { self.height }
-    fn buffer_mut(&mut self) -> &mut [Cell] { &mut self.grid }
+    fn width(&self) -> u16 {
+        self.width
+    }
+    fn height(&self) -> u16 {
+        self.height
+    }
+    fn buffer_mut(&mut self) -> &mut [Cell] {
+        &mut self.grid
+    }
 }
 
 impl DrawTarget for Canvas {
-    fn width(&self) -> u16 { self.width }
-    fn height(&self) -> u16 { self.height }
-    fn buffer_mut(&mut self) -> &mut [Cell] { &mut self.new } 
+    fn width(&self) -> u16 {
+        self.width
+    }
+    fn height(&self) -> u16 {
+        self.height
+    }
+    fn buffer_mut(&mut self) -> &mut [Cell] {
+        &mut self.new
+    }
 }
