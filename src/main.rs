@@ -8,12 +8,12 @@ use nuui::{Key, Terminal};
 fn main() {
     let terminal = Terminal::init();
 
-    let w = 20;
-    let h = 4;
-    let cw = 40;
-    let ch = 8;
+    let (cw, ch) = Terminal::size();
 
-    let mut buffer1 = Buffer::new(w, h);
+    let bw = 40;
+    let bh = 8;
+
+    let mut buffer1 = Buffer::new(bw, bh);
     let cell1 = Cell {
         s: 'x',
         fg: Color::None,
@@ -22,16 +22,17 @@ fn main() {
     };
 
     buffer1.put_cell(cell1.clone(), 0, 0);
-    buffer1.put_cell(cell1.clone(), w - 1, 0);
-    buffer1.put_cell(cell1.clone(), 0, h - 1);
-    buffer1.put_cell(cell1.clone(), w - 1, h - 1);
+    buffer1.put_cell(cell1.clone(), bw - 1, 0);
+    buffer1.put_cell(cell1.clone(), 0, bh - 1);
+    buffer1.put_cell(cell1.clone(), bw - 1, bh - 1);
 
     let mut canvas = Canvas::new(cw, ch);
     let mut buffer_x: i16 = 0;
+    let mut buffer_y: i16 = 0;
 
     loop {
         canvas.clean();
-        canvas.put_buffer(&buffer1, buffer_x, 0);
+        canvas.put_buffer(&buffer1, buffer_x, buffer_y);
         canvas.render();
 
         match terminal.read_key() {
@@ -39,6 +40,8 @@ fn main() {
             Key::Char('\x03') => break,
             Key::Right => buffer_x += 1,
             Key::Left => buffer_x -= 1,
+            Key::Down => buffer_y += 1,
+            Key::Up => buffer_y -= 1,
             _ => {}
         }
 

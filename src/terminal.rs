@@ -60,14 +60,15 @@ impl Terminal {
 
         match b {
             27 => {
-                if let Ok(b'[') = self.key_rx.recv_timeout(Duration::from_millis(16)) {
-                    if let Ok(b3) = self.key_rx.recv_timeout(Duration::from_millis(16)) {
-                        match b3 {
-                            b'A' => return Key::Up,
-                            b'B' => return Key::Down,
-                            b'C' => return Key::Right,
-                            b'D' => return Key::Left,
-                            _ => return Key::Esc,
+                if let Ok(b'[') = self.key_rx.try_recv() {
+                    loop {
+                        match self.key_rx.recv_timeout(Duration::from_millis(10)) {
+                            Ok(b'A') => return Key::Up,
+                            Ok(b'B') => return Key::Down,
+                            Ok(b'C') => return Key::Right,
+                            Ok(b'D') => return Key::Left,
+                            Ok(b'0'..=b'9') | Ok(b';') => continue,
+                            _ => break,
                         }
                     }
                 }
@@ -76,6 +77,10 @@ impl Terminal {
             10 | 13 => Key::Enter,
             b => Key::Char(b as char),
         }
+    }
+
+    pub fn size() -> (u16, u16) {
+        sys::get_terminal_size()
     }
 }
 
@@ -89,6 +94,14 @@ mod sys {
 
     pub struct RawModeGuard {
         orig_termios: termios,
+    }
+
+    impl Drop for RawModeGuard {
+        fn drop(&mut self) {
+            unsafe {
+                tcsetattr(STDIN_FILENO, TCSAFLUSH, &self.orig_termios);
+            }
+        }
     }
 
     impl RawModeGuard {
@@ -108,10 +121,13 @@ mod sys {
         }
     }
 
-    impl Drop for RawModeGuard {
-        fn drop(&mut self) {
-            unsafe {
-                tcsetattr(STDIN_FILENO, TCSAFLUSH, &self.orig_termios);
+    pub fn get_terminal_size() -> (u16, u16) {
+        unsafe {
+            let mut ws: winsize = zeroed();
+            if ioctl(STDOUT_FILENO, TIOCGWINSZ, &mut ws) == 0 {
+                (ws.ws_col, ws.ws_row)
+            } else {
+                (80, 24)
             }
         }
     }
@@ -126,6 +142,15 @@ mod sys {
         in_handle: *mut std::ffi::c_void,
         orig_out: u32,
         orig_in: u32,
+    }
+
+    impl Drop for RawModeGuard {
+        fn drop(&mut self) {
+            unsafe {
+                SetConsoleMode(self.out_handle, self.orig_out);
+                SetConsoleMode(self.in_handle, self.orig_in);
+            }
+        }
     }
 
     impl RawModeGuard {
@@ -156,11 +181,17 @@ mod sys {
         }
     }
 
-    impl Drop for RawModeGuard {
-        fn drop(&mut self) {
-            unsafe {
-                SetConsoleMode(self.out_handle, self.orig_out);
-                SetConsoleMode(self.in_handle, self.orig_in);
+    pub fn get_terminal_size() -> (u16, u16) {
+        unsafe {
+            let out_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+            let mut csbi: CONSOLE_SCREEN_BUFFER_INFO = std::mem::zeroed();
+
+            if GetConsoleScreenBufferInfo(out_handle, &mut csbi) != 0 {
+                let w = (csbi.srWindow.Right - csbi.srWindow.Left + 1) as u16;
+                let h = (csbi.srWindow.Bottom - csbi.srWindow.Top + 1) as u16;
+                (w, h)
+            } else {
+                (80, 24)
             }
         }
     }
