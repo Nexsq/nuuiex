@@ -1,1 +1,3 @@
 further progress (yea no shit)
+
+maybe move some files into a separate directory? like canvas, style and terminal to render or some other name
