@@ -62,7 +62,7 @@ impl Terminal {
             27 => {
                 if let Ok(b'[') = self.key_rx.try_recv() {
                     loop {
-                        match self.key_rx.recv_timeout(Duration::from_millis(10)) {
+                        match self.key_rx.recv_timeout(Duration::from_millis(16)) {
                             Ok(b'A') => return Key::Up,
                             Ok(b'B') => return Key::Down,
                             Ok(b'C') => return Key::Right,
@@ -87,10 +87,10 @@ impl Terminal {
 #[cfg(unix)]
 mod sys {
     use libc::{
-        ECHO, ICANON, ICRNL, IEXTEN, ISIG, IXON, OPOST, STDIN_FILENO, TCSAFLUSH, tcgetattr,
-        tcsetattr, termios,
+        ECHO, ICANON, ICRNL, IEXTEN, ISIG, IXON, OPOST, STDIN_FILENO, STDOUT_FILENO, TCSAFLUSH,
+        TIOCGWINSZ, ioctl, tcgetattr, tcsetattr, termios, winsize,
     };
-    use std::mem;
+    use std::mem::{self, zeroed};
 
     pub struct RawModeGuard {
         orig_termios: termios,
