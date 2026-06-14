@@ -1,7 +1,7 @@
 use std::thread;
 use std::time::Duration;
 
-use nuui::{Buffer, Canvas, Cell};
+use nuui::{Box, Canvas, Cell};
 use nuui::{Color, Modifier};
 use nuui::{Key, Terminal};
 
@@ -10,38 +10,55 @@ fn main() {
 
     let (cw, ch) = Terminal::size();
 
-    let bw = 40;
-    let bh = 8;
+    let xw = 40;
+    let xh = 8;
 
-    let mut buffer1 = Buffer::new(bw, bh);
+    let ow = 30;
+    let oh = 6;
+
+    let mut box1 = Box::new(xw, xh);
+    let mut box2 = Box::new(ow, oh);
     let cell1 = Cell {
         s: 'x',
-        fg: Color::None,
+        fg: Color::Black,
         bg: Color::None,
+        md: Modifier::Bold,
+    };
+    let cell2 = Cell {
+        s: 'o',
+        fg: Color::None,
+        bg: Color::White,
         md: Modifier::None,
     };
 
-    buffer1.put_cell(cell1.clone(), 0, 0);
-    buffer1.put_cell(cell1.clone(), bw - 1, 0);
-    buffer1.put_cell(cell1.clone(), 0, bh - 1);
-    buffer1.put_cell(cell1.clone(), bw - 1, bh - 1);
+    box1.put_cell(cell1.clone(), 0, 0);
+    box1.put_cell(cell1.clone(), xw - 1, 0);
+    box1.put_cell(cell1.clone(), 0, xh - 1);
+    box1.put_cell(cell1.clone(), xw - 1, xh - 1);
+
+    box2.put_cell(cell2.clone(), 0, 0);
+    box2.put_cell(cell2.clone(), ow - 1, 0);
+    box2.put_cell(cell2.clone(), 0, oh - 1);
+    box2.put_cell(cell2.clone(), ow - 1, oh - 1);
+
+    box1.insert_box(&box2, ((xw - ow) / 2) as i16, ((xh - oh) / 2) as i16);
 
     let mut canvas = Canvas::new(cw, ch);
-    let mut buffer_x: i16 = 0;
-    let mut buffer_y: i16 = 0;
+    let mut box_x: i16 = 0;
+    let mut box_y: i16 = 0;
 
     loop {
         canvas.clean();
-        canvas.put_buffer(&buffer1, buffer_x, buffer_y);
+        canvas.put_box(&box1, box_x, box_y);
         canvas.render();
 
         match terminal.read_key() {
             Key::Char('q') | Key::Esc => break,
             Key::Char('\x03') => break,
-            Key::Right => buffer_x += 1,
-            Key::Left => buffer_x -= 1,
-            Key::Down => buffer_y += 1,
-            Key::Up => buffer_y -= 1,
+            Key::Right => box_x += 1,
+            Key::Left => box_x -= 1,
+            Key::Down => box_y += 1,
+            Key::Up => box_y -= 1,
             _ => {}
         }
 
