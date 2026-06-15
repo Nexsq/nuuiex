@@ -16,19 +16,25 @@ fn main() {
     let ow = 30;
     let oh = 6;
 
-    let mut box1 = Box::new(xw, xh);
-    let mut box2 = Box::new(ow, oh);
+    let mut box1 = Box::new(xw, xh, 0);
+    let mut box2 = Box::new(ow, oh, 1);
     let cell1 = Cell {
         s: 'x',
         fg: Color::None,
         bg: Color::None,
-        md: Modifier::Bold,
+        md: Modifier::None,
     };
     let cell2 = Cell {
         s: 'o',
         fg: Color::None,
         bg: Color::Red,
         md: Modifier::Underline,
+    };
+    let text_style = Cell {
+        s: ' ',
+        fg: Color::Red,
+        bg: Color::None,
+        md: Modifier::Bold,
     };
 
     box1.put_cell(cell1.clone(), 0, 0);
@@ -40,6 +46,14 @@ fn main() {
     box2.put_cell(cell2.clone(), ow - 1, 0);
     box2.put_cell(cell2.clone(), 0, oh - 1);
     box2.put_cell(cell2.clone(), ow - 1, oh - 1);
+
+    box2.insert_text(
+        "Hello World!\n\nLorem ipsum dolor sit amet consectetur adipiscing elit",
+        1,
+        0,
+        false,
+        text_style,
+    );
 
     box1.insert_box(&box2, ((xw - ow) / 2) as i16, ((xh - oh) / 2) as i16);
 
