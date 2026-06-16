@@ -4,8 +4,36 @@ use std::time::Duration;
 use nuui::{Border, Color, Modifier, Style};
 use nuui::{Box, Canvas, Cell};
 use nuui::{Key, Terminal};
+use nuui::conf::{self, ConfigError};
 
 fn main() {
+    match conf::init() {
+        Ok(config) => {
+            println!("Config loaded!");
+            // actually use config duh
+        }
+        Err(e) => {
+            match e {
+                ConfigError::Io(io_err) => {
+                    panic!("Could not read/write config file: {}", io_err);
+                }
+                ConfigError::SystemPathNotFound => {
+                    panic!("Could not locate system config directory.");
+                }
+                ConfigError::SyntaxError(msg) => {
+                    eprintln!("ERR: {}", msg);
+                    // trigger popup asking to overwrite with template
+                    return; 
+                }
+                ConfigError::MissingBox(block) => {
+                    eprintln!("ERR: Your config file is missing the required '{}' block.", block);
+                    // trigger popup asking to overwrite with template
+                    return;
+                }
+            }
+        }
+    }
+
     let terminal = Terminal::init();
 
     let (cw, ch) = Terminal::size();
