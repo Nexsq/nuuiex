@@ -27,10 +27,7 @@ pub struct Canvas {
 
 impl Cell {
     pub fn new(c: char, s: Style) -> Self {
-        Self {
-            c,
-            s,
-        }
+        Self { c, s }
     }
 }
 

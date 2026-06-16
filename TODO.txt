@@ -1,1 +1,3 @@
-further progress (yea no shi)
+do not panic when terminal width is low (like very low, like zero low)
+
+generally do the config rendering, yeah Im on it

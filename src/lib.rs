@@ -1,5 +1,5 @@
-mod render;
 mod config;
+mod render;
 
 pub use render::canvas::{Box, Canvas, Cell};
 pub use render::style::{Border, Color, Modifier, Style};
