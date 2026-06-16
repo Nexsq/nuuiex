@@ -25,6 +25,15 @@ pub struct Canvas {
     pub buffer: String,
 }
 
+impl Cell {
+    pub fn new(c: char, s: Style) -> Self {
+        Self {
+            c,
+            s,
+        }
+    }
+}
+
 impl Default for Cell {
     fn default() -> Self {
         Self {
@@ -265,20 +274,12 @@ impl Canvas {
                 }
 
                 if new_cell.s.fg != cur_fg {
-                    if new_cell.s.fg == Color::None {
-                        write!(&mut self.buffer, "\x1b[39m").unwrap();
-                    } else {
-                        write!(&mut self.buffer, "{}", new_cell.s.fg.fg_ansi()).unwrap();
-                    }
+                    new_cell.s.fg.fg_ansi(&mut self.buffer);
                     cur_fg = new_cell.s.fg;
                 }
 
                 if new_cell.s.bg != cur_bg {
-                    if new_cell.s.bg == Color::None {
-                        write!(&mut self.buffer, "\x1b[49m").unwrap();
-                    } else {
-                        write!(&mut self.buffer, "{}", new_cell.s.bg.bg_ansi()).unwrap();
-                    }
+                    new_cell.s.bg.bg_ansi(&mut self.buffer);
                     cur_bg = new_cell.s.bg;
                 }
 

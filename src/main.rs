@@ -34,7 +34,7 @@ fn main() {
         md: Modifier::Bold,
     };
 
-    let cell1 = Cell { c: 'x', s: style1 };
+    let cell1 = Cell::new('x', style1);
 
     let mut box1 = Box::new(xw, xh, 0, Border::Heavy, style2);
     let mut box2 = Box::new(ow, oh, 1, Border::None, Style::default());
