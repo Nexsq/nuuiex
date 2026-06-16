@@ -1,8 +1,8 @@
 use std::thread;
 use std::time::Duration;
 
+use nuui::{Border, Color, Modifier, Style};
 use nuui::{Box, Canvas, Cell};
-use nuui::{Color, Modifier};
 use nuui::{Key, Terminal};
 
 fn main() {
@@ -16,42 +16,39 @@ fn main() {
     let ow = 30;
     let oh = 6;
 
-    let mut box1 = Box::new(xw, xh, 0);
-    let mut box2 = Box::new(ow, oh, 1);
-    let cell1 = Cell {
-        s: 'x',
-        fg: Color::None,
-        bg: Color::None,
-        md: Modifier::None,
-    };
-    let cell2 = Cell {
-        s: 'o',
+    let style1 = Style {
         fg: Color::None,
         bg: Color::Red,
         md: Modifier::Underline,
     };
-    let text_style = Cell {
-        s: ' ',
+
+    let style2 = Style {
+        fg: Color::Green,
+        bg: Color::None,
+        md: Modifier::Dim,
+    };
+
+    let text_style = Style {
         fg: Color::Red,
         bg: Color::None,
         md: Modifier::Bold,
     };
 
-    box1.put_cell(cell1.clone(), 0, 0);
-    box1.put_cell(cell1.clone(), xw - 1, 0);
-    box1.put_cell(cell1.clone(), 0, xh - 1);
-    box1.put_cell(cell1.clone(), xw - 1, xh - 1);
+    let cell1 = Cell { c: 'x', s: style1 };
 
-    box2.put_cell(cell2.clone(), 0, 0);
-    box2.put_cell(cell2.clone(), ow - 1, 0);
-    box2.put_cell(cell2.clone(), 0, oh - 1);
-    box2.put_cell(cell2.clone(), ow - 1, oh - 1);
+    let mut box1 = Box::new(xw, xh, 0, Border::Heavy, style2);
+    let mut box2 = Box::new(ow, oh, 1, Border::None, Style::default());
+
+    box2.put_cell(cell1.clone(), 0, 0);
+    box2.put_cell(cell1.clone(), ow - 1, 0);
+    box2.put_cell(cell1.clone(), 0, oh - 1);
+    box2.put_cell(cell1.clone(), ow - 1, oh - 1);
 
     box2.insert_text(
-        "Hello World!\n\nLorem ipsum dolor sit amet consectetur adipiscing elit",
+        "Hello World!\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit",
         1,
         0,
-        false,
+        true,
         text_style,
     );
 

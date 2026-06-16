@@ -1,2 +1,1 @@
-modify insert_text in impl Box:
-- maybe add possibility of multiple insert_text for a single Box
+further progress (yea no shi)

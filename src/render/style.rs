@@ -1,4 +1,11 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Style {
+    pub fg: Color,
+    pub bg: Color,
+    pub md: Modifier,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Color {
     None,
     Black,
@@ -20,7 +27,7 @@ pub enum Color {
     Rgb(u8, u8, u8),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Modifier {
     None,
     Bold,
@@ -30,6 +37,34 @@ pub enum Modifier {
     Reverse,
     Hidden,
     Strikethrough,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Border {
+    None,
+    Light,
+    Heavy,
+    Double,
+    Rounded,
+}
+
+pub struct BorderChars {
+    pub tl: char,
+    pub tr: char,
+    pub bl: char,
+    pub br: char,
+    pub h: char,
+    pub v: char,
+}
+
+impl Default for Style {
+    fn default() -> Self {
+        Self {
+            fg: Color::None,
+            bg: Color::None,
+            md: Modifier::None,
+        }
+    }
 }
 
 impl Color {
@@ -91,6 +126,46 @@ impl Modifier {
             Modifier::Reverse => "\x1b[7m",
             Modifier::Hidden => "\x1b[8m",
             Modifier::Strikethrough => "\x1b[9m",
+        }
+    }
+}
+
+impl Border {
+    pub fn chars(&self) -> Option<BorderChars> {
+        match self {
+            Border::None => None,
+            Border::Light => Some(BorderChars {
+                tl: '┌',
+                tr: '┐',
+                bl: '└',
+                br: '┘',
+                h: '─',
+                v: '│',
+            }),
+            Border::Heavy => Some(BorderChars {
+                tl: '┏',
+                tr: '┓',
+                bl: '┗',
+                br: '┛',
+                h: '━',
+                v: '┃',
+            }),
+            Border::Double => Some(BorderChars {
+                tl: '╔',
+                tr: '╗',
+                bl: '╚',
+                br: '╝',
+                h: '═',
+                v: '║',
+            }),
+            Border::Rounded => Some(BorderChars {
+                tl: '╭',
+                tr: '╮',
+                bl: '╰',
+                br: '╯',
+                h: '─',
+                v: '│',
+            }),
         }
     }
 }

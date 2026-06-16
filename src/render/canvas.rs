@@ -1,12 +1,10 @@
-use super::style::{Color, Modifier};
+use super::style::{Border, Color, Modifier, Style};
 use std::io::{self, Write};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cell {
-    pub s: char,
-    pub fg: Color,
-    pub bg: Color,
-    pub md: Modifier,
+    pub c: char,
+    pub s: Style,
 }
 
 #[derive(Debug)]
@@ -14,7 +12,7 @@ pub struct Box {
     pub width: u16,
     pub height: u16,
     pub padding: u16,
-    // border and sth here
+    pub border: Border,
     pub grid: Vec<Cell>,
 }
 
@@ -30,23 +28,66 @@ pub struct Canvas {
 impl Default for Cell {
     fn default() -> Self {
         Self {
-            s: ' ',
-            fg: Color::None,
-            bg: Color::None,
-            md: Modifier::None,
+            c: ' ',
+            s: Style::default(),
         }
     }
 }
 
 impl Box {
-    pub fn new(width: u16, height: u16, padding: u16) -> Self {
+    pub fn new(width: u16, height: u16, padding: u16, border: Border, style: Style) -> Self {
         let size = (width as usize) * (height as usize);
+        let mut grid = vec![Cell::default(); size];
+
+        if let Some(chars) = border.chars() {
+            if width >= 2 && height >= 2 {
+                let w = width as usize;
+                let h = height as usize;
+
+                let h_cell = Cell {
+                    c: chars.h,
+                    s: style,
+                };
+                let v_cell = Cell {
+                    c: chars.v,
+                    s: style,
+                };
+
+                for x in 1..(w - 1) {
+                    grid[x] = h_cell;
+                    grid[(h - 1) * w + x] = h_cell;
+                }
+
+                for y in 1..(h - 1) {
+                    grid[y * w] = v_cell;
+                    grid[y * w + (w - 1)] = v_cell;
+                }
+
+                grid[0] = Cell {
+                    c: chars.tl,
+                    s: style,
+                };
+                grid[w - 1] = Cell {
+                    c: chars.tr,
+                    s: style,
+                };
+                grid[(h - 1) * w] = Cell {
+                    c: chars.bl,
+                    s: style,
+                };
+                grid[(h - 1) * w + (w - 1)] = Cell {
+                    c: chars.br,
+                    s: style,
+                };
+            }
+        }
+
         Self {
             width,
             height,
             padding,
-            // border and sth here
-            grid: vec![Cell::default(); size],
+            border,
+            grid,
         }
     }
 
@@ -75,7 +116,7 @@ impl Box {
         offset_x: i16,
         offset_y: i16,
         word_wrap: bool,
-        style: Cell,
+        style: Style,
     ) {
         let pad = self.padding as i16;
 
@@ -107,8 +148,8 @@ impl Box {
             }
 
             if !word_wrap {
-                let mut cell = style;
-                cell.s = c;
+                let mut cell = Cell { c: '\0', s: style };
+                cell.c = c;
                 self.put_cell(cell, cx, cy);
 
                 cx += 1;
@@ -120,8 +161,8 @@ impl Box {
             } else {
                 if c.is_whitespace() {
                     if cx > eff_left && cx < max_x {
-                        let mut cell = style;
-                        cell.s = c;
+                        let mut cell = Cell { c: '\0', s: style };
+                        cell.c = c;
                         self.put_cell(cell, cx, cy);
                         cx += 1;
                     }
@@ -151,8 +192,8 @@ impl Box {
                     if cy >= max_y {
                         break;
                     }
-                    let mut cell = style;
-                    cell.s = chars.next().unwrap();
+                    let mut cell = Cell { c: '\0', s: style };
+                    cell.c = chars.next().unwrap();
                     self.put_cell(cell, cx, cy);
                     cx += 1;
                     if cx >= max_x {
@@ -170,10 +211,8 @@ impl Canvas {
         let size = (width as usize) * (height as usize);
 
         let imp_cell = Cell {
-            s: '\0',
-            fg: Color::None,
-            bg: Color::None,
-            md: Modifier::None,
+            c: '\0',
+            s: Style::default(),
         };
 
         Self {
@@ -212,38 +251,38 @@ impl Canvas {
                     write!(&mut self.buffer, "\x1b[{};{}H", y + 1, x + 1).unwrap();
                 }
 
-                if new_cell.md != cur_md {
+                if new_cell.s.md != cur_md {
                     if cur_md != Modifier::None {
                         write!(&mut self.buffer, "\x1b[0m").unwrap();
                         cur_fg = Color::None;
                         cur_bg = Color::None;
                     }
 
-                    if new_cell.md != Modifier::None {
-                        write!(&mut self.buffer, "{}", new_cell.md.to_ansi()).unwrap();
+                    if new_cell.s.md != Modifier::None {
+                        write!(&mut self.buffer, "{}", new_cell.s.md.to_ansi()).unwrap();
                     }
-                    cur_md = new_cell.md;
+                    cur_md = new_cell.s.md;
                 }
 
-                if new_cell.fg != cur_fg {
-                    if new_cell.fg == Color::None {
+                if new_cell.s.fg != cur_fg {
+                    if new_cell.s.fg == Color::None {
                         write!(&mut self.buffer, "\x1b[39m").unwrap();
                     } else {
-                        write!(&mut self.buffer, "{}", new_cell.fg.fg_ansi()).unwrap();
+                        write!(&mut self.buffer, "{}", new_cell.s.fg.fg_ansi()).unwrap();
                     }
-                    cur_fg = new_cell.fg;
+                    cur_fg = new_cell.s.fg;
                 }
 
-                if new_cell.bg != cur_bg {
-                    if new_cell.bg == Color::None {
+                if new_cell.s.bg != cur_bg {
+                    if new_cell.s.bg == Color::None {
                         write!(&mut self.buffer, "\x1b[49m").unwrap();
                     } else {
-                        write!(&mut self.buffer, "{}", new_cell.bg.bg_ansi()).unwrap();
+                        write!(&mut self.buffer, "{}", new_cell.s.bg.bg_ansi()).unwrap();
                     }
-                    cur_bg = new_cell.bg;
+                    cur_bg = new_cell.s.bg;
                 }
 
-                write!(&mut self.buffer, "{}", new_cell.s).unwrap();
+                write!(&mut self.buffer, "{}", new_cell.c).unwrap();
 
                 cursor_x = x + 1;
                 cursor_y = y;
