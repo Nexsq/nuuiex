@@ -366,20 +366,184 @@ pub trait DrawTarget {
             .skip(dest_y)
             .take(render_h);
 
-        for (b_row, s_row) in buffer_rows.zip(self_rows) {
+        #[inline(always)]
+        fn process_cell(src_cell: &Cell, dest_cell: &mut Cell, ignore_spaces: bool) {
+            if ignore_spaces && *src_cell == Cell::default() {
+                return;
+            }
+
+            let src_info = get_border_info(src_cell.c);
+            let dest_info = get_border_info(dest_cell.c);
+
+            let src_mask = src_info & 0x0F;
+            let dest_mask = dest_info & 0x0F;
+
+            if src_mask > 0 && dest_mask > 0 {
+                let combined_mask = src_mask | dest_mask;
+                let dominant_fam = (src_info & 0xF0).max(dest_info & 0xF0);
+
+                if let Some(merged_char) = mask_to_char(combined_mask, dominant_fam) {
+                    dest_cell.c = merged_char;
+                    dest_cell.s = src_cell.s;
+                    return;
+                }
+            }
+            *dest_cell = *src_cell;
+        }
+
+        let mut row_iter = buffer_rows.zip(self_rows);
+
+        if src_y == 0 {
+            if let Some((b_row, s_row)) = row_iter.next() {
+                let src_slice = &b_row[src_x..src_x + render_w];
+                let dest_slice = &mut s_row[dest_x..dest_x + render_w];
+                for (src_cell, dest_cell) in src_slice.iter().zip(dest_slice.iter_mut()) {
+                    process_cell(src_cell, dest_cell, ignore_spaces);
+                }
+            }
+        }
+
+        let mut bottom_row = None;
+        if (src_y + render_h) == (bh as usize) && render_h > (if src_y == 0 { 1 } else { 0 }) {
+            bottom_row = row_iter.next_back();
+        }
+
+        for (b_row, s_row) in row_iter {
             let src_slice = &b_row[src_x..src_x + render_w];
             let dest_slice = &mut s_row[dest_x..dest_x + render_w];
 
-            if ignore_spaces {
-                for (src_cell, dest_cell) in src_slice.iter().zip(dest_slice.iter_mut()) {
-                    if *src_cell != Cell::default() {
-                        *dest_cell = *src_cell;
+            let mut start_idx = 0;
+            let mut end_idx = render_w;
+
+            if src_x == 0 && render_w > 0 {
+                process_cell(&src_slice[0], &mut dest_slice[0], ignore_spaces);
+                start_idx += 1;
+            }
+
+            if src_x + render_w == (bw as usize) && render_w > start_idx {
+                process_cell(
+                    &src_slice[render_w - 1],
+                    &mut dest_slice[render_w - 1],
+                    ignore_spaces,
+                );
+                end_idx -= 1;
+            }
+
+            if start_idx < end_idx {
+                let src_interior = &src_slice[start_idx..end_idx];
+                let dest_interior = &mut dest_slice[start_idx..end_idx];
+
+                if ignore_spaces {
+                    for (src_cell, dest_cell) in src_interior.iter().zip(dest_interior.iter_mut()) {
+                        if *src_cell != Cell::default() {
+                            *dest_cell = *src_cell;
+                        }
                     }
+                } else {
+                    dest_interior.copy_from_slice(src_interior);
                 }
-            } else {
-                dest_slice.copy_from_slice(src_slice);
             }
         }
+
+        if let Some((b_row, s_row)) = bottom_row {
+            let src_slice = &b_row[src_x..src_x + render_w];
+            let dest_slice = &mut s_row[dest_x..dest_x + render_w];
+            for (src_cell, dest_cell) in src_slice.iter().zip(dest_slice.iter_mut()) {
+                process_cell(src_cell, dest_cell, ignore_spaces);
+            }
+        }
+    }
+}
+
+#[inline(always)]
+fn get_border_info(c: char) -> u8 {
+    match c {
+        '─' => 0x00 | (2 | 8),
+        '│' => 0x00 | (1 | 4),
+        '┌' | '╭' => 0x00 | (4 | 2),
+        '┐' | '╮' => 0x00 | (4 | 8),
+        '└' | '╰' => 0x00 | (1 | 2),
+        '┘' | '╯' => 0x00 | (1 | 8),
+        '├' => 0x00 | (1 | 4 | 2),
+        '┤' => 0x00 | (1 | 4 | 8),
+        '┬' => 0x00 | (4 | 2 | 8),
+        '┴' => 0x00 | (1 | 2 | 8),
+        '┼' => 0x00 | (1 | 2 | 4 | 8),
+
+        '═' => 0x10 | (2 | 8),
+        '║' => 0x10 | (1 | 4),
+        '╔' => 0x10 | (4 | 2),
+        '╗' => 0x10 | (4 | 8),
+        '╚' => 0x10 | (1 | 2),
+        '╝' => 0x10 | (1 | 8),
+        '╠' => 0x10 | (1 | 4 | 2),
+        '╣' => 0x10 | (1 | 4 | 8),
+        '╦' => 0x10 | (4 | 2 | 8),
+        '╩' => 0x10 | (1 | 2 | 8),
+        '╬' => 0x10 | (1 | 2 | 4 | 8),
+
+        '━' => 0x20 | (2 | 8),
+        '┃' => 0x20 | (1 | 4),
+        '┏' => 0x20 | (4 | 2),
+        '┓' => 0x20 | (4 | 8),
+        '┗' => 0x20 | (1 | 2),
+        '┛' => 0x20 | (1 | 8),
+        '┣' => 0x20 | (1 | 4 | 2),
+        '┫' => 0x20 | (1 | 4 | 8),
+        '┳' => 0x20 | (4 | 2 | 8),
+        '┻' => 0x20 | (1 | 2 | 8),
+        '╋' => 0x20 | (1 | 2 | 4 | 8),
+
+        _ => 0,
+    }
+}
+
+#[inline(always)]
+fn mask_to_char(mask: u8, family_score: u8) -> Option<char> {
+    match family_score {
+        0x00 => match mask {
+            3 => Some('└'),
+            5 => Some('│'),
+            6 => Some('┌'),
+            7 => Some('├'),
+            9 => Some('┘'),
+            10 => Some('─'),
+            11 => Some('┴'),
+            12 => Some('┐'),
+            13 => Some('┤'),
+            14 => Some('┬'),
+            15 => Some('┼'),
+            _ => None,
+        },
+        0x10 => match mask {
+            3 => Some('╚'),
+            5 => Some('║'),
+            6 => Some('╔'),
+            7 => Some('╠'),
+            9 => Some('╝'),
+            10 => Some('═'),
+            11 => Some('╩'),
+            12 => Some('╗'),
+            13 => Some('╣'),
+            14 => Some('╦'),
+            15 => Some('╬'),
+            _ => None,
+        },
+        0x20 => match mask {
+            3 => Some('┗'),
+            5 => Some('┃'),
+            6 => Some('┏'),
+            7 => Some('┣'),
+            9 => Some('┛'),
+            10 => Some('━'),
+            11 => Some('┻'),
+            12 => Some('┓'),
+            13 => Some('┫'),
+            14 => Some('┳'),
+            15 => Some('╋'),
+            _ => None,
+        },
+        _ => None,
     }
 }
 
