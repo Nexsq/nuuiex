@@ -1,2 +1,2 @@
-pub mod main;
+pub mod configerr;
 pub mod toosmall;

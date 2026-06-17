@@ -2,7 +2,7 @@ use std::thread;
 use std::time::Duration;
 
 use nuui::conf::{self, ConfigError, ConfigVar};
-use nuui::toosmall;
+use nuui::{toosmall, configerr};
 use nuui::{Border, Color, Modifier, Style};
 use nuui::{Box, Canvas};
 use nuui::{Key, Terminal};
@@ -11,29 +11,31 @@ fn main() {
     let terminal = Terminal::init();
     let (mut term_w, mut term_h) = Terminal::size();
 
-    let mut config = match conf::init(term_w, term_h) {
-        Ok(cfg) => cfg,
-        Err(e) => match e {
-            ConfigError::Io(io_err) => panic!("Could not read/write config file: {}", io_err),
-            ConfigError::SystemPathNotFound => panic!("Could not locate system config directory."),
-            // add popups on missing config things
-            ConfigError::SyntaxError(msg) => {
-                eprintln!("ERR (Syntax): {}", msg);
-                return;
+    let mut config = loop {
+        match conf::init(term_w, term_h) {
+            Ok(cfg) => break cfg,
+            Err(e) => {
+                let display_msg = match &e {
+                    ConfigError::Io(io_err) => panic!("Could not read/write config file: {}", io_err),
+                    ConfigError::SystemPathNotFound => panic!("Could not locate system config directory."),
+                    ConfigError::SyntaxError(msg) => format!("Syntax Error:\n{}", msg),
+                    ConfigError::MissingBox(b)    => format!("Missing layout component:\nRequired block '{}' not found.", b),
+                    ConfigError::MissingVar(v)    => format!("Missing setup variable:\nRequired global key '{}' is absent.", v),
+                    ConfigError::TypeError(m)     => format!("Data Type mismatch:\n{}", m),
+                };
+
+                match configerr::render_and_handle(&terminal, &display_msg) {
+                    configerr::Choice::Regenerate => {
+                        if let Err(regen_err) = conf::force_regenerate() {
+                            panic!("Fatal: Failed to execute backup generation: {:?}", regen_err);
+                        }
+                    }
+                    configerr::Choice::Exit => {
+                        return;
+                    }
+                }
             }
-            ConfigError::MissingBox(block) => {
-                eprintln!("ERR: Missing required '{}' block.", block);
-                return;
-            }
-            ConfigError::MissingVar(var) => {
-                eprintln!("ERR: Missing required global variable '{}'.", var);
-                return;
-            }
-            ConfigError::TypeError(msg) => {
-                eprintln!("ERR (Type): {}", msg);
-                return;
-            }
-        },
+        }
     };
 
     let mut min_w = match config.vars.get("min_w").unwrap() {
@@ -91,8 +93,8 @@ fn main() {
     );
 
     let mut text_box = Box::new(
-        main_cfg.width - 2,
-        title_cfg.height - 2,
+        main_cfg.width,
+        title_cfg.height,
         0,
         Border::None,
         Style::default(),
@@ -175,14 +177,14 @@ fn main() {
                     );
 
                     text_box = Box::new(
-                        main_cfg.width - 2,
-                        title_cfg.height - 2,
+                        main_cfg.width,
+                        title_cfg.height,
                         0,
                         Border::None,
                         Style::default(),
                     );
                     text_box.insert_text(&title_text, 1, 0, true, text_style);
-                    main.insert_box(&text_box, main_cfg.padding as i16, main_cfg.padding as i16);
+                    title.insert_box(&text_box, main_cfg.padding as i16, main_cfg.padding as i16);
                 }
             }
         }

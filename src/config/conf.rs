@@ -65,6 +65,20 @@ pub fn init(term_w: u16, term_h: u16) -> Result<NuuiConfig, ConfigError> {
     parse_and_validate(&content, term_w, term_h)
 }
 
+pub fn force_regenerate() -> Result<(), ConfigError> {
+    let proj_dirs =
+        ProjectDirs::from("com", "Nexsq", "nuui").ok_or(ConfigError::SystemPathNotFound)?;
+    let config_dir = proj_dirs.config_dir();
+    let config_file = config_dir.join("config.conf");
+
+    if !config_dir.exists() {
+        fs::create_dir_all(config_dir)?;
+    }
+
+    fs::write(&config_file, DEFAULT_CONFIG)?;
+    Ok(())
+}
+
 fn parse_and_validate(
     content: &str,
     term_w: u16,
