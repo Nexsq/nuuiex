@@ -1,5 +1,3 @@
-get out of main.rs
-
-generally do the config rendering, yeah Im on it
+check for efficiency and speed cus I did NOT care about it when writing conf and tabs
 
 test config io and file handling on windows

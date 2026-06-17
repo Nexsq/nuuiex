@@ -8,4 +8,4 @@ pub use render::terminal::{Key, Terminal};
 
 pub use config::conf::{self, ConfigError};
 
-pub use tabs::{toosmall, configerr};
+pub use tabs::{configerr, main, toosmall};

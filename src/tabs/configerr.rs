@@ -1,4 +1,4 @@
-use crate::{Border, Box, Canvas, Color, Modifier, Style, Terminal, Key};
+use crate::{Border, Box, Canvas, Color, Key, Modifier, Style, Terminal};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Choice {
@@ -73,15 +73,31 @@ pub fn render_and_handle(terminal: &Terminal, err_msg: &str) -> Choice {
         let btn_y = height.saturating_sub(3) as i16;
 
         let reg_style = if choice == Choice::Regenerate {
-            Style { fg: Color::Black, bg: Color::Yellow, md: Modifier::Bold }
+            Style {
+                fg: Color::Black,
+                bg: Color::Yellow,
+                md: Modifier::Bold,
+            }
         } else {
-            Style { fg: Color::Yellow, bg: Color::None, md: Modifier::None }
+            Style {
+                fg: Color::Yellow,
+                bg: Color::None,
+                md: Modifier::None,
+            }
         };
 
         let exit_style = if choice == Choice::Exit {
-            Style { fg: Color::Black, bg: Color::Red, md: Modifier::Bold }
+            Style {
+                fg: Color::Black,
+                bg: Color::Red,
+                md: Modifier::Bold,
+            }
         } else {
-            Style { fg: Color::Red, bg: Color::None, md: Modifier::None }
+            Style {
+                fg: Color::Red,
+                bg: Color::None,
+                md: Modifier::None,
+            }
         };
 
         let start_x = (width.saturating_sub(26) / 2) as i16;
