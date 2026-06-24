@@ -1,3 +1,8 @@
 check for efficiency and speed cus I did NOT care about it when writing conf and tabs
 
 test config io and file handling on windows
+
+as for the configs - I have a new plan:
+to make it so dev can add options and matches for that option in config (something most apps do actually)
+cause right now the config is very flexible but also very confusing.
+(wish me luck)
