@@ -3,3 +3,5 @@ check for efficiency and speed cus I did NOT care about it when writing conf and
 custom error messages
 
 when user removes an entry from config, it should add that line
+
+comments on the same line as an actual value in config
