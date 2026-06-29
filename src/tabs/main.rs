@@ -1,4 +1,3 @@
-use crate::conf::{Config, ConfigVar};
 use crate::{Border, Box, Canvas, Color, Modifier, Style};
 
 pub struct MainView {
@@ -16,79 +15,66 @@ pub struct MainView {
 }
 
 impl MainView {
-    pub fn new(config: &Config) -> Self {
-        let min_w = match config.vars.get("min_w").unwrap() {
-            ConfigVar::Int(w) => *w as u16,
-            _ => unreachable!(),
-        };
-        let min_h = match config.vars.get("min_h").unwrap() {
-            ConfigVar::Int(h) => *h as u16,
-            _ => unreachable!(),
-        };
-        let title_text = match config.vars.get("title_s").unwrap() {
-            ConfigVar::Text(s) => s.clone(),
-            _ => unreachable!(),
-        };
-
-        let main_cfg = config.boxes.iter().find(|b| b.name == "main").unwrap();
-        let tabs_cfg = config.boxes.iter().find(|b| b.name == "tabs").unwrap();
-        let title_cfg = config.boxes.iter().find(|b| b.name == "title").unwrap();
+    pub fn new(term_w: u16, term_h: u16) -> Self {
+        let min_w = 40;
+        let min_h = 15;
+        let title_text = String::from("NUUI");
 
         let main_box = Box::new(
-            main_cfg.width,
-            main_cfg.height,
-            main_cfg.padding,
-            main_cfg.border,
-            main_cfg.style,
-        );
-        let tabs_box = Box::new(
-            tabs_cfg.width,
-            tabs_cfg.height,
-            tabs_cfg.padding,
-            tabs_cfg.border,
-            tabs_cfg.style,
-        );
-        let mut title_box = Box::new(
-            title_cfg.width,
-            title_cfg.height,
-            title_cfg.padding,
-            title_cfg.border,
-            title_cfg.style,
+            term_w,
+            term_h.saturating_sub(6),
+            0,
+            Border::Light,
+            Style {
+                fg: Color::White,
+                bg: Color::None,
+                md: Modifier::None,
+            },
         );
 
-        let mut text_box = Box::new(
-            title_cfg.width,
-            title_cfg.height,
+        let tabs_box = Box::new(
+            term_w,
+            3,
             0,
-            Border::None,
-            Style::default(),
+            Border::Rounded,
+            Style {
+                fg: Color::Cyan,
+                bg: Color::None,
+                md: Modifier::None,
+            },
         );
-        let text_style = Style {
+
+        let mut title_box = Box::new(
+            16,
+            3,
+            1,
+            Border::Double,
+            Style {
+                fg: Color::Green,
+                bg: Color::None,
+                md: Modifier::Bold,
+            },
+        );
+        let title_style = Style {
             fg: Color::Red,
             bg: Color::None,
             md: Modifier::Bold,
         };
 
-        text_box.insert_text(&title_text, 0, 0, false, text_style);
-
-        title_box.insert_box(
-            &text_box,
-            title_cfg.padding as i16,
-            title_cfg.padding as i16,
-        );
+        title_box.insert_text(&title_text, 0, 0, false, title_style);
 
         Self {
             min_w,
             min_h,
             main_box,
-            main_x: main_cfg.x,
-            main_y: main_cfg.y,
+            main_x: 0,
+            main_y: 6,
             tabs_box,
-            tabs_x: tabs_cfg.x,
-            tabs_y: tabs_cfg.y,
+            tabs_x: 0,
+            tabs_y: 3,
             title_box,
-            title_x: title_cfg.x,
-            title_y: title_cfg.y,
+            title_x: 0,
+            title_y: 0,
         }
     }
 
