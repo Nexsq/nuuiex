@@ -3,7 +3,24 @@ use std::fs;
 
 const DEFAULT_CONFIG: &str = include_str!("template.conf");
 
-pub fn init() {
+#[derive(Debug, Clone)]
+pub struct Config {
+    pub test: bool,
+    pub border_test: String,
+    pub something: i32,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            test: false,
+            border_test: String::from("light"),
+            something: 0,
+        }
+    }
+}
+
+pub fn init() -> Config {
     let proj_dirs = ProjectDirs::from("com", "Nexsq", "nuui")
         .expect("Failed to locate the system configuration directory.");
 
@@ -22,9 +39,51 @@ pub fn init() {
     if !config_file.exists() {
         if let Err(e) = fs::write(&config_file, DEFAULT_CONFIG) {
             panic!(
-                "Failed to write config file at {:?}\nDetails: {}",
+                "Failed to write default config file at {:?}\nDetails: {}",
                 config_file, e
             );
         }
     }
+
+    let contents = match fs::read_to_string(&config_file) {
+        Ok(c) => c,
+        Err(e) => {
+            panic!(
+                "Failed to read config file at {:?}\nDetails: {}",
+                config_file, e
+            );
+        }
+    };
+
+    parse_config(&contents)
+}
+
+fn parse_config(contents: &str) -> Config {
+    let mut config = Config::default();
+
+    for line in contents.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        if let Some((key, val)) = trimmed.split_once('=') {
+            let key = key.trim();
+            let mut val = val.trim();
+
+            if val.starts_with('"') && val.ends_with('"') && val.len() >= 2 {
+                val = &val[1..val.len() - 1];
+            }
+
+            match key {
+                "test" => config.test = val.parse().unwrap_or(config.test),
+                "border_test" => config.border_test = val.to_string(),
+                "something" => config.something = val.parse().unwrap_or(config.something),
+                _ => {}
+            }
+        }
+    }
+
+    config
 }

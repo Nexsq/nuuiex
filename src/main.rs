@@ -7,7 +7,11 @@ use nuui::{Key, Terminal};
 use nuui::{main, toosmall};
 
 fn main() {
-    conf::init();
+    let _config = conf::init();
+
+    // println!("Test: {}", _config.test);
+    // println!("Border test: {}", _config.border_test);
+    // println!("Something: {}", _config.something);
 
     let terminal = Terminal::init();
     let (mut term_w, mut term_h) = Terminal::size();
