@@ -72,9 +72,7 @@ fn parse_config(contents: &str) -> Config {
             let key = key.trim();
             let mut val = val.trim();
 
-            if val.starts_with('"') && val.ends_with('"') && val.len() >= 2 {
-                val = &val[1..val.len() - 1];
-            }
+            val = val.split_once('#').map_or(val, |(v, _)| v).trim();
 
             match key {
                 "test" => config.test = val.parse().unwrap_or(config.test),
