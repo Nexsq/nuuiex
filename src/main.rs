@@ -53,12 +53,12 @@ fn main() {
         }
 
         match terminal.read_key() {
-            Key::Char('q') | Key::Esc | Key::Char('\x03') => break,
-            Key::Char('e') => main_view.toggle_focus(),
-            Key::Char('f') => main_view.insert_test_text(),
+            Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => break,
+            Key::Char('e' | 'E') => main_view.toggle_focus(),
+            Key::Char('f'| 'F') => main_view.insert_test_text(),
             _ => {}
         }
 
-        thread::sleep(Duration::from_millis(16));
+        thread::sleep(Duration::from_millis(2));
     }
 }

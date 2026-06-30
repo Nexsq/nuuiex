@@ -1,5 +1,1 @@
-check for efficiency and speed cus I did NOT care about it when writing conf and tabs
-
 custom error messages
-
-when user removes an entry from config, it should add that line

@@ -40,12 +40,12 @@ impl Terminal {
 
         let (tx, key_rx) = mpsc::channel();
         thread::spawn(move || {
-            let mut buf = [0u8; 1];
+            let mut buf = [0u8; 32];
             let mut stdin = io::stdin();
 
-            while let Ok(1) = stdin.read(&mut buf) {
-                if tx.send(buf[0]).is_err() {
-                    break;
+            while let Ok(n) = stdin.read(&mut buf) {
+                for &byte in &buf[..n] {
+                    if tx.send(byte).is_err() { break; }
                 }
             }
         });
@@ -60,17 +60,20 @@ impl Terminal {
 
         match b {
             27 => {
-                if let Ok(b'[') = self.key_rx.try_recv() {
-                    loop {
-                        match self.key_rx.recv_timeout(Duration::from_millis(16)) {
-                            Ok(b'A') => return Key::Up,
-                            Ok(b'B') => return Key::Down,
-                            Ok(b'C') => return Key::Right,
-                            Ok(b'D') => return Key::Left,
-                            Ok(b'0'..=b'9') | Ok(b';') => continue,
-                            _ => break,
+                match self.key_rx.recv_timeout(Duration::from_millis(2)) {
+                    Ok(b'[') => {
+                        loop {
+                            match self.key_rx.recv_timeout(Duration::from_millis(2)) {
+                                Ok(b'A') => return Key::Up,
+                                Ok(b'B') => return Key::Down,
+                                Ok(b'C') => return Key::Right,
+                                Ok(b'D') => return Key::Left,
+                                Ok(b'0'..=b'9') | Ok(b';') => continue,
+                                _ => break,
+                            }
                         }
                     }
+                    _ => {}
                 }
                 Key::Esc
             }
