@@ -10,6 +10,8 @@ pub fn error_box<F>(
     options: &[&str],
     width: u16,
     height: u16,
+    min_w: u16,
+    min_h: u16,
     mut draw_background: F,
 ) -> usize
 where
@@ -28,13 +30,13 @@ where
     let unselected_opts: Vec<String> = options.iter().map(|o| format!("  {}  ", o)).collect();
 
     let selected_style = Style {
-        fg: Color::Yellow,
-        bg: Color::None,
+        fg: Color::Black,
+        bg: Color::White,
         md: Modifier::Bold,
     };
     let unselected_style = Style {
         fg: Color::White,
-        bg: Color::None,
+        bg: Color::Red,
         md: Modifier::None,
     };
     let msg_style = Style {
@@ -50,16 +52,27 @@ where
 
     let mut selected_idx: usize = 0;
 
-    apply_dim(canvas);
-
     loop {
         let (current_w, current_h) = Terminal::size();
 
         if current_w != canvas.width || current_h != canvas.height {
             canvas.resize(current_w, current_h);
-            draw_background(canvas, current_w, current_h);
-            apply_dim(canvas);
         }
+
+        canvas.clean();
+        draw_background(canvas, current_w, current_h);
+
+        if current_w < min_w || current_h < min_h {
+            canvas.render();
+            match terminal.read_key() {
+                Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
+                _ => {}
+            }
+            thread::sleep(Duration::from_millis(16));
+            continue;
+        }
+
+        apply_dim(canvas);
 
         let term_w = canvas.width;
         let term_h = canvas.height;
@@ -146,6 +159,8 @@ pub fn error_screen(
     canvas: &mut Canvas,
     msg: &str,
     options: &[&str],
+    min_w: u16,
+    min_h: u16,
 ) -> usize {
     let total_opts_len = options
         .iter()
@@ -157,13 +172,13 @@ pub fn error_screen(
     let unselected_opts: Vec<String> = options.iter().map(|o| format!("  {}  ", o)).collect();
 
     let selected_style = Style {
-        fg: Color::Yellow,
-        bg: Color::None,
+        fg: Color::Black,
+        bg: Color::White,
         md: Modifier::Bold,
     };
     let unselected_style = Style {
         fg: Color::White,
-        bg: Color::None,
+        bg: Color::Red,
         md: Modifier::None,
     };
     let msg_style = Style {
@@ -187,24 +202,34 @@ pub fn error_screen(
 
         canvas.clean();
 
+        if current_w < min_w || current_h < min_h {
+            crate::toosmall::render(canvas, current_w, current_h);
+            canvas.render();
+            match terminal.read_key() {
+                Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
+                _ => {}
+            }
+            thread::sleep(Duration::from_millis(16));
+            continue;
+        }
+
         let term_w = canvas.width;
         let term_h = canvas.height;
 
-        let pad: u16 = 1;
+        let pad: u16 = 2;
         let mut err_box = Box::new(term_w, term_h, pad, Border::Heavy, border_style);
 
         let inner_w = term_w.saturating_sub(pad * 2);
         let inner_h = term_h.saturating_sub(pad * 2);
 
-        let msg_x = 0;
+        let msg_x = 2;
         let msg_y = 0;
 
         err_box.insert_text(msg, msg_x, msg_y, true, msg_style);
 
         if !options.is_empty() {
             let options_y = inner_h.saturating_sub(1) as i16;
-
-            let mut current_x = inner_w.saturating_sub(total_opts_len as u16) as i16;
+            let mut current_x = (inner_w.saturating_sub(total_opts_len as u16 + 2)) as i16;
 
             for i in 0..options.len() {
                 let is_selected = i == selected_idx;

@@ -23,7 +23,7 @@ fn main() {
     loop {
         let (current_w, current_h) = Terminal::size();
 
-        if current_w != canvas.width || current_h != canvas.height {
+        if current_w != term_w || current_h != term_h {
             canvas.resize(current_w, current_h);
             term_w = current_w;
             term_h = current_h;
@@ -55,28 +55,31 @@ fn main() {
                 error::error_box(
                     &terminal,
                     &mut canvas,
-                    "This is a test warning\n\nDo you want to proceed?",
+                    "This is a test warning\n\nDo you want to proceed",
                     &["CANCEL", "CONFIRM"],
                     0,
                     0,
+                    main_view.min_w,
+                    main_view.min_h,
                     |cvs, w, h| {
-                        term_w = w;
-                        term_h = h;
+                        if w != term_w || h != term_h {
+                            term_w = w;
+                            term_h = h;
 
-                        if term_w >= main_view.min_w && term_h >= main_view.min_h {
-                            main_view = main::MainView::new(
-                                term_w,
-                                term_h,
-                                main_view.active,
-                                main_view.main_buffer.clone(),
-                                main_view.list_buffer.clone(),
-                            );
+                            if term_w >= main_view.min_w && term_h >= main_view.min_h {
+                                main_view = main::MainView::new(
+                                    term_w,
+                                    term_h,
+                                    main_view.active,
+                                    main_view.main_buffer.clone(),
+                                    main_view.list_buffer.clone(),
+                                );
+                            }
                         }
 
                         if term_w < main_view.min_w || term_h < main_view.min_h {
                             toosmall::render(cvs, term_w, term_h);
                         } else {
-                            cvs.clean();
                             main_view.render(cvs);
                         }
                     },
@@ -86,8 +89,10 @@ fn main() {
                 error::error_screen(
                     &terminal,
                     &mut canvas,
-                    "This is a test warning\n\nDo you want to proceed?",
+                    "This is a test warning\n\nDo you want to proceed",
                     &["CANCEL", "CONFIRM"],
+                    main_view.min_w,
+                    main_view.min_h,
                 );
             }
             _ => {}
