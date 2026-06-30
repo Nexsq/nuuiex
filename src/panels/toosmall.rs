@@ -7,7 +7,7 @@ pub fn render(canvas: &mut Canvas, width: u16, height: u16) {
         width,
         height,
         0,
-        Border::Light,
+        Border::Heavy,
         Style {
             fg: Color::Red,
             bg: Color::None,
@@ -16,9 +16,9 @@ pub fn render(canvas: &mut Canvas, width: u16, height: u16) {
     );
 
     let text_style = Style {
-        fg: Color::Yellow,
+        fg: Color::White,
         bg: Color::None,
-        md: Modifier::None,
+        md: Modifier::Bold,
     };
 
     let msg = "WINDOW TOO SMALL\n\nExpand your terminal";
