@@ -4,15 +4,10 @@ use std::time::Duration;
 use nuui::Canvas;
 use nuui::conf;
 use nuui::{Key, Terminal};
-use nuui::{main, toosmall};
+use nuui::{error, main, toosmall};
 
 fn main() {
     let _config = conf::init();
-
-    // println!("Test: {}", _config.test);
-    // println!("Border test: {}", _config.border_test);
-    // println!("Something: {}", _config.something);
-
     let terminal = Terminal::init();
     let (mut term_w, mut term_h) = Terminal::size();
 
@@ -55,7 +50,46 @@ fn main() {
         match terminal.read_key() {
             Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => break,
             Key::Char('e' | 'E') => main_view.toggle_focus(),
-            Key::Char('f'| 'F') => main_view.insert_test_text(),
+            Key::Char('f' | 'F') => main_view.insert_test_text(),
+            Key::Char('t') => {
+                error::error_box(
+                    &terminal,
+                    &mut canvas,
+                    "This is a test warning\n\nDo you want to proceed?",
+                    &["CANCEL", "CONFIRM"],
+                    0,
+                    0,
+                    |cvs, w, h| {
+                        term_w = w;
+                        term_h = h;
+
+                        if term_w >= main_view.min_w && term_h >= main_view.min_h {
+                            main_view = main::MainView::new(
+                                term_w,
+                                term_h,
+                                main_view.active,
+                                main_view.main_buffer.clone(),
+                                main_view.list_buffer.clone(),
+                            );
+                        }
+
+                        if term_w < main_view.min_w || term_h < main_view.min_h {
+                            toosmall::render(cvs, term_w, term_h);
+                        } else {
+                            cvs.clean();
+                            main_view.render(cvs);
+                        }
+                    },
+                );
+            }
+            Key::Char('T') => {
+                error::error_screen(
+                    &terminal,
+                    &mut canvas,
+                    "This is a test warning\n\nDo you want to proceed?",
+                    &["CANCEL", "CONFIRM"],
+                );
+            }
             _ => {}
         }
 

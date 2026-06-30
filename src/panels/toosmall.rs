@@ -21,7 +21,7 @@ pub fn render(canvas: &mut Canvas, width: u16, height: u16) {
         md: Modifier::None,
     };
 
-    let msg = "WINDOW TOO SMALL\n\nExpand your terminal\nto restore the interface.";
+    let msg = "WINDOW TOO SMALL\n\nExpand your terminal";
 
     let offset_x = (width.saturating_sub(26) / 2) as i16;
     let offset_y = (height.saturating_sub(3) / 2) as i16;

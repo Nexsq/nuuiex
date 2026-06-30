@@ -45,7 +45,9 @@ impl Terminal {
 
             while let Ok(n) = stdin.read(&mut buf) {
                 for &byte in &buf[..n] {
-                    if tx.send(byte).is_err() { break; }
+                    if tx.send(byte).is_err() {
+                        break;
+                    }
                 }
             }
         });
@@ -61,18 +63,16 @@ impl Terminal {
         match b {
             27 => {
                 match self.key_rx.recv_timeout(Duration::from_millis(2)) {
-                    Ok(b'[') => {
-                        loop {
-                            match self.key_rx.recv_timeout(Duration::from_millis(2)) {
-                                Ok(b'A') => return Key::Up,
-                                Ok(b'B') => return Key::Down,
-                                Ok(b'C') => return Key::Right,
-                                Ok(b'D') => return Key::Left,
-                                Ok(b'0'..=b'9') | Ok(b';') => continue,
-                                _ => break,
-                            }
+                    Ok(b'[') => loop {
+                        match self.key_rx.recv_timeout(Duration::from_millis(2)) {
+                            Ok(b'A') => return Key::Up,
+                            Ok(b'B') => return Key::Down,
+                            Ok(b'C') => return Key::Right,
+                            Ok(b'D') => return Key::Left,
+                            Ok(b'0'..=b'9') | Ok(b';') => continue,
+                            _ => break,
                         }
-                    }
+                    },
                     _ => {}
                 }
                 Key::Esc
