@@ -8,15 +8,16 @@ use nuui::{main, toosmall};
 
 fn main() {
     let _config = conf::init();
-
-    // println!("Test: {}", _config.test);
-    // println!("Border test: {}", _config.border_test);
-    // println!("Something: {}", _config.something);
-
     let terminal = Terminal::init();
     let (mut term_w, mut term_h) = Terminal::size();
 
-    let mut main_view = main::MainView::new(term_w, term_h);
+    let mut main_view = main::MainView::new(
+        term_w,
+        term_h,
+        main::ActivePanel::Main,
+        String::new(),
+        String::new(),
+    );
     let mut canvas = Canvas::new(term_w, term_h);
 
     loop {
@@ -28,7 +29,13 @@ fn main() {
             term_h = current_h;
 
             if term_w >= main_view.min_w && term_h >= main_view.min_h {
-                main_view = main::MainView::new(term_w, term_h);
+                main_view = main::MainView::new(
+                    term_w,
+                    term_h,
+                    main_view.active,
+                    main_view.main_buffer.clone(),
+                    main_view.list_buffer.clone(),
+                );
             }
         }
 
@@ -42,6 +49,8 @@ fn main() {
 
         match terminal.read_key() {
             Key::Char('q') | Key::Esc | Key::Char('\x03') => break,
+            Key::Char('e') => main_view.toggle_focus(),
+            Key::Char('f') => main_view.insert_test_text(),
             _ => {}
         }
 

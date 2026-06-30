@@ -210,6 +210,58 @@ impl Box {
             }
         }
     }
+
+    pub fn set_border_color(&mut self, color: Color) {
+        if self.width < 2 || self.height < 2 {
+            return;
+        }
+
+        let w = self.width as usize;
+        let h = self.height as usize;
+
+        for x in 0..w {
+            self.grid[x].s.fg = color;
+            self.grid[(h - 1) * w + x].s.fg = color;
+        }
+        for y in 0..h {
+            self.grid[y * w].s.fg = color;
+            self.grid[y * w + (w - 1)].s.fg = color;
+        }
+    }
+
+    pub fn set_border_style(&mut self, border: Border) {
+        self.border = border;
+
+        if self.width < 2 || self.height < 2 {
+            return;
+        }
+
+        if let Some(chars) = border.chars() {
+            let w = self.width as usize;
+            let h = self.height as usize;
+
+            self.grid[0].c = chars.tl;
+            self.grid[w - 1].c = chars.tr;
+            self.grid[(h - 1) * w].c = chars.bl;
+            self.grid[(h - 1) * w + (w - 1)].c = chars.br;
+
+            for x in 1..(w - 1) {
+                self.grid[x].c = chars.h;
+                self.grid[(h - 1) * w + x].c = chars.h;
+            }
+
+            for y in 1..(h - 1) {
+                self.grid[y * w].c = chars.v;
+                self.grid[y * w + (w - 1)].c = chars.v;
+            }
+        }
+    }
+
+    pub fn set_style(&mut self, style: Style) {
+        for cell in self.grid.iter_mut() {
+            cell.s = style;
+        }
+    }
 }
 
 impl Canvas {
