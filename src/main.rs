@@ -49,11 +49,16 @@ fn main() {
 
             Key::Up => main_view.selection_up(),
             Key::Down => main_view.selection_down(),
-            Key::Right | Key::Enter => main_view.trigger_selected(),
+            Key::Right => main_view.handle_right_arrow(),
+            Key::Left => main_view.handle_left_arrow(),
+            Key::Enter => main_view.trigger_selected(),
 
             Key::Char('r' | 'R') => {
                 library = lib::init();
                 main_view.library_tree = library.tree.clone();
+                main_view.expanded_path.clear();
+                main_view.list_selected = 0;
+                main_view.list_scroll = 0;
                 main_view.refresh_list();
             }
 

@@ -1,1 +1,5 @@
 add custom sorting for library (later later)
+
+make it so when the folder is empty in list, it doesnt exit the parent folder so theres 2 indents on ...
+
+MAYBE make the indent items in list have a longer indicator

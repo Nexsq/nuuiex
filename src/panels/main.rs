@@ -24,6 +24,7 @@ pub struct MainView {
     pub list_x: i16,
     pub list_y: i16,
     pub library_tree: Vec<MacroNode>,
+    pub expanded_path: Vec<usize>,
 
     pub tabs_box: Box,
     pub tabs_x: i16,
@@ -53,7 +54,7 @@ impl MainView {
                 1,
                 Border::None,
                 Style {
-                    fg: Color::White,
+                    fg: Color::None,
                     bg: Color::None,
                     md: Modifier::None,
                 },
@@ -69,6 +70,7 @@ impl MainView {
             list_selected: 0,
             list_scroll: 0,
             library_tree,
+            expanded_path: Vec::new(),
             main_buffer,
             main_box: dummy(),
             main_x: 0,
@@ -190,52 +192,190 @@ impl MainView {
             },
         );
 
+        let mut parent_nodes = &self.library_tree;
+        if !self.expanded_path.is_empty() {
+            for &idx in &self.expanded_path[..self.expanded_path.len() - 1] {
+                if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
+                    parent_nodes = children;
+                }
+            }
+        }
+
+        struct RenderItem<'a> {
+            node: Option<&'a MacroNode>,
+            custom_text: Option<&'static str>,
+            indent_spaces: usize,
+            use_branch_prefix: bool,
+            is_selectable: bool,
+            selectable_idx: Option<usize>,
+            is_active_parent: bool,
+        }
+
+        let mut render_items: Vec<RenderItem> = Vec::new();
+
+        if self.expanded_path.is_empty() {
+            for (i, node) in parent_nodes.iter().enumerate() {
+                render_items.push(RenderItem {
+                    node: Some(node),
+                    custom_text: None,
+                    indent_spaces: 0,
+                    use_branch_prefix: false,
+                    is_selectable: true,
+                    selectable_idx: Some(i),
+                    is_active_parent: false,
+                });
+            }
+        } else {
+            let active_folder_idx = *self.expanded_path.last().unwrap();
+
+            for (idx, node) in parent_nodes.iter().enumerate() {
+                if idx != active_folder_idx {
+                    render_items.push(RenderItem {
+                        node: Some(node),
+                        custom_text: None,
+                        indent_spaces: 0,
+                        use_branch_prefix: false,
+                        is_selectable: false,
+                        selectable_idx: None,
+                        is_active_parent: false,
+                    });
+                } else {
+                    render_items.push(RenderItem {
+                        node: Some(node),
+                        custom_text: None,
+                        indent_spaces: 0,
+                        use_branch_prefix: false,
+                        is_selectable: false,
+                        selectable_idx: None,
+                        is_active_parent: true,
+                    });
+
+                    if let MacroNode::Folder { children, .. } = node {
+                        if children.is_empty() {
+                            render_items.push(RenderItem {
+                                node: None,
+                                custom_text: Some("..."),
+                                indent_spaces: 1,
+                                use_branch_prefix: true,
+                                is_selectable: false,
+                                selectable_idx: None,
+                                is_active_parent: false,
+                            });
+                        } else {
+                            for (child_idx, child_node) in children.iter().enumerate() {
+                                render_items.push(RenderItem {
+                                    node: Some(child_node),
+                                    custom_text: None,
+                                    indent_spaces: 2,
+                                    use_branch_prefix: child_idx == 0,
+                                    is_selectable: true,
+                                    selectable_idx: Some(child_idx),
+                                    is_active_parent: false,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let max_selectable_idx = if self.expanded_path.is_empty() {
+            parent_nodes.len().saturating_sub(1)
+        } else {
+            let active_folder_idx = *self.expanded_path.last().unwrap();
+            if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(active_folder_idx) {
+                children.len().saturating_sub(1)
+            } else {
+                0
+            }
+        };
+        self.list_selected = self.list_selected.min(max_selectable_idx);
+
+        let mut target_render_idx = 0;
+        for (r_idx, item) in render_items.iter().enumerate() {
+            if item.is_selectable && item.selectable_idx == Some(self.list_selected) {
+                target_render_idx = r_idx;
+                break;
+            }
+        }
+
         let visible_items = list_h.saturating_sub(2) as usize;
-
-        let max_idx = self.library_tree.len().saturating_sub(1);
-        self.list_selected = self.list_selected.min(max_idx);
-
-        if self.list_selected < self.list_scroll {
-            self.list_scroll = self.list_selected;
-        } else if self.list_selected >= self.list_scroll + visible_items && visible_items > 0 {
-            self.list_scroll = self.list_selected.saturating_sub(visible_items - 1);
+        if target_render_idx < self.list_scroll {
+            self.list_scroll = target_render_idx;
+        } else if target_render_idx >= self.list_scroll + visible_items && visible_items > 0 {
+            self.list_scroll = target_render_idx.saturating_sub(visible_items - 1);
         }
 
         let max_text_len = list_w.saturating_sub(2) as usize;
 
-        for (i, node) in self
-            .library_tree
+        for (display_line, item) in render_items
             .iter()
             .enumerate()
             .skip(self.list_scroll)
             .take(visible_items)
         {
-            let (prefix, normal_color) = match node {
-                MacroNode::Folder { .. } => ("▪", Color::Blue),
-                MacroNode::Script { .. } => ("▫", Color::Magenta),
+            let (node_symbol, normal_color) = if let Some(n) = item.node {
+                match n {
+                    MacroNode::Folder { .. } => ("▪", Color::Blue),
+                    MacroNode::Script { .. } => ("▫", Color::Magenta),
+                }
+            } else {
+                ("", Color::DarkGray)
             };
 
-            let mut text = format!("{} {}", prefix, node.name());
+            let is_selected = item.is_selectable
+                && (item.selectable_idx == Some(self.list_selected))
+                && (self.active == ActivePanel::List);
+
+            let (fg_color, bg_color) = if item.is_active_parent {
+                (normal_color, Color::None)
+            } else if !item.is_selectable {
+                (Color::DarkGray, Color::None)
+            } else if is_selected {
+                (Color::Black, normal_color)
+            } else {
+                (normal_color, Color::None)
+            };
+
+            let indent_prefix = match (item.indent_spaces, item.use_branch_prefix) {
+                (1, true) => "┗".to_string(),
+                (1, false) => " ".to_string(),
+                (n, true) => format!("┗ {}", " ".repeat(n - 2)),
+                (n, false) => " ".repeat(n),
+            };
+
+            let mut text = if node_symbol.is_empty() {
+                indent_prefix.clone()
+            } else {
+                format!("{}{}", indent_prefix, node_symbol)
+            };
+
+            let base_name = if let Some(n) = item.node {
+                n.name()
+            } else if let Some(custom) = item.custom_text {
+                custom
+            } else {
+                ""
+            };
+
+            if !base_name.is_empty() {
+                if !node_symbol.is_empty() || !indent_prefix.is_empty() {
+                    text.push(' ');
+                }
+                text.push_str(base_name);
+            }
 
             let char_count = text.chars().count();
             if char_count > max_text_len {
                 text = text.chars().take(max_text_len).collect();
             } else {
-                let spaces = " ".repeat(max_text_len - char_count - 2);
-                text.push_str(&spaces);
+                text.push_str(&" ".repeat((max_text_len - char_count).saturating_sub(2)));
             }
-
-            let is_selected = (i == self.list_selected) && (self.active == ActivePanel::List);
-            let (fg_color, bg_color) = if is_selected {
-                (Color::White, normal_color)
-            } else {
-                (normal_color, Color::None)
-            };
 
             list_box.insert_text(
                 &text,
                 1,
-                (i - self.list_scroll) as i16,
+                (display_line - self.list_scroll) as i16,
                 false,
                 Style {
                     fg: fg_color,
@@ -338,7 +478,7 @@ impl MainView {
     }
 
     pub fn selection_up(&mut self) {
-        if self.active != ActivePanel::List || self.library_tree.is_empty() {
+        if self.active != ActivePanel::List {
             return;
         }
         self.list_selected = self.list_selected.saturating_sub(1);
@@ -346,29 +486,76 @@ impl MainView {
     }
 
     pub fn selection_down(&mut self) {
-        if self.active != ActivePanel::List || self.library_tree.is_empty() {
+        if self.active != ActivePanel::List {
             return;
         }
-        let max_idx = self.library_tree.len().saturating_sub(1);
+
+        let mut parent_nodes = &self.library_tree;
+        for &idx in &self.expanded_path {
+            if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
+                parent_nodes = children;
+            }
+        }
+
+        let max_idx = parent_nodes.len().saturating_sub(1);
         if self.list_selected < max_idx {
             self.list_selected += 1;
         }
         self.refresh_list();
     }
 
-    pub fn trigger_selected(&mut self) {
-        if self.active != ActivePanel::List || self.library_tree.is_empty() {
+    pub fn handle_right_arrow(&mut self) {
+        if self.active != ActivePanel::List {
             return;
         }
 
-        let node_name = self.library_tree[self.list_selected].name().to_string();
-
-        if !self.main_buffer.is_empty() {
-            self.main_buffer.push('\n');
+        let mut parent_nodes = &self.library_tree;
+        for &idx in &self.expanded_path {
+            if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
+                parent_nodes = children;
+            }
         }
-        self.main_buffer.push_str(&node_name);
 
-        self.refresh_main();
+        if let Some(MacroNode::Folder { .. }) = parent_nodes.get(self.list_selected) {
+            self.expanded_path.push(self.list_selected);
+            self.list_selected = 0;
+            self.list_scroll = 0;
+            self.refresh_list();
+        }
+    }
+
+    pub fn handle_left_arrow(&mut self) {
+        if self.active != ActivePanel::List {
+            return;
+        }
+
+        if let Some(previous_parent_idx) = self.expanded_path.pop() {
+            self.list_selected = previous_parent_idx;
+            self.list_scroll = 0;
+            self.refresh_list();
+        }
+    }
+
+    pub fn trigger_selected(&mut self) {
+        if self.active != ActivePanel::List {
+            return;
+        }
+
+        let mut parent_nodes = &self.library_tree;
+        for &idx in &self.expanded_path {
+            if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
+                parent_nodes = children;
+            }
+        }
+
+        if let Some(node) = parent_nodes.get(self.list_selected) {
+            let node_name = node.name().to_string();
+            if !self.main_buffer.is_empty() {
+                self.main_buffer.push('\n');
+            }
+            self.main_buffer.push_str(&node_name);
+            self.refresh_main();
+        }
     }
 
     pub fn render(&self, canvas: &mut Canvas) {
