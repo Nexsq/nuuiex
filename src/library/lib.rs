@@ -60,12 +60,14 @@ fn scan_lib(path: &Path) -> Vec<MacroNode> {
     if let Ok(entries) = fs::read_dir(path) {
         for entry in entries.filter_map(Result::ok) {
             if let Ok(file_type) = entry.file_type() {
-                let entry_path = entry.path();
-                let raw_name = entry.file_name().to_string_lossy().into_owned();
-
-                if raw_name.starts_with('.') {
+                let file_name = entry.file_name();
+                let name_str = file_name.to_string_lossy();
+                if name_str.starts_with('.') {
                     continue;
                 }
+
+                let raw_name = name_str.into_owned();
+                let entry_path = entry.path();
 
                 if file_type.is_dir() {
                     nodes.push(MacroNode::Folder {

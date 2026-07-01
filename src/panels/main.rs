@@ -164,6 +164,23 @@ impl MainView {
         self.main_box = main_box;
     }
 
+    fn resolve_view(&self) -> (Vec<usize>, Option<usize>) {
+        let mut view_path = self.expanded_path.clone();
+        let mut current_nodes = &self.library_tree;
+        for &idx in &view_path {
+            if let Some(MacroNode::Folder { children, .. }) = current_nodes.get(idx) {
+                current_nodes = children;
+            }
+        }
+
+        if !view_path.is_empty() && current_nodes.is_empty() {
+            let empty_idx = view_path.pop();
+            (view_path, empty_idx)
+        } else {
+            (view_path, None)
+        }
+    }
+
     pub fn refresh_list(&mut self) {
         let title_h = 3;
         let list_w = 24;
@@ -192,9 +209,11 @@ impl MainView {
             },
         );
 
+        let (view_path, empty_child_idx) = self.resolve_view();
+
         let mut parent_nodes = &self.library_tree;
-        if !self.expanded_path.is_empty() {
-            for &idx in &self.expanded_path[..self.expanded_path.len() - 1] {
+        if !view_path.is_empty() {
+            for &idx in &view_path[..view_path.len() - 1] {
                 if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
                     parent_nodes = children;
                 }
@@ -213,7 +232,19 @@ impl MainView {
 
         let mut render_items: Vec<RenderItem> = Vec::new();
 
-        if self.expanded_path.is_empty() {
+        let push_empty_indicator = |items: &mut Vec<RenderItem>, indent: usize| {
+            items.push(RenderItem {
+                node: None,
+                custom_text: Some("..."),
+                indent_spaces: indent,
+                use_branch_prefix: true,
+                is_selectable: false,
+                selectable_idx: None,
+                is_active_parent: false,
+            });
+        };
+
+        if view_path.is_empty() {
             for (i, node) in parent_nodes.iter().enumerate() {
                 render_items.push(RenderItem {
                     node: Some(node),
@@ -224,9 +255,13 @@ impl MainView {
                     selectable_idx: Some(i),
                     is_active_parent: false,
                 });
+
+                if empty_child_idx == Some(i) {
+                    push_empty_indicator(&mut render_items, 1);
+                }
             }
         } else {
-            let active_folder_idx = *self.expanded_path.last().unwrap();
+            let active_folder_idx = *view_path.last().unwrap();
 
             for (idx, node) in parent_nodes.iter().enumerate() {
                 if idx != active_folder_idx {
@@ -252,15 +287,7 @@ impl MainView {
 
                     if let MacroNode::Folder { children, .. } = node {
                         if children.is_empty() {
-                            render_items.push(RenderItem {
-                                node: None,
-                                custom_text: Some("..."),
-                                indent_spaces: 1,
-                                use_branch_prefix: true,
-                                is_selectable: false,
-                                selectable_idx: None,
-                                is_active_parent: false,
-                            });
+                            push_empty_indicator(&mut render_items, 1);
                         } else {
                             for (child_idx, child_node) in children.iter().enumerate() {
                                 render_items.push(RenderItem {
@@ -272,6 +299,10 @@ impl MainView {
                                     selectable_idx: Some(child_idx),
                                     is_active_parent: false,
                                 });
+
+                                if empty_child_idx == Some(child_idx) {
+                                    push_empty_indicator(&mut render_items, 3);
+                                }
                             }
                         }
                     }
@@ -279,10 +310,10 @@ impl MainView {
             }
         }
 
-        let max_selectable_idx = if self.expanded_path.is_empty() {
+        let max_selectable_idx = if view_path.is_empty() {
             parent_nodes.len().saturating_sub(1)
         } else {
-            let active_folder_idx = *self.expanded_path.last().unwrap();
+            let active_folder_idx = *view_path.last().unwrap();
             if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(active_folder_idx) {
                 children.len().saturating_sub(1)
             } else {
@@ -291,13 +322,10 @@ impl MainView {
         };
         self.list_selected = self.list_selected.min(max_selectable_idx);
 
-        let mut target_render_idx = 0;
-        for (r_idx, item) in render_items.iter().enumerate() {
-            if item.is_selectable && item.selectable_idx == Some(self.list_selected) {
-                target_render_idx = r_idx;
-                break;
-            }
-        }
+        let target_render_idx = render_items
+            .iter()
+            .position(|item| item.is_selectable && item.selectable_idx == Some(self.list_selected))
+            .unwrap_or(0);
 
         let visible_items = list_h.saturating_sub(2) as usize;
         if target_render_idx < self.list_scroll {
@@ -339,16 +367,13 @@ impl MainView {
 
             let indent_prefix = match (item.indent_spaces, item.use_branch_prefix) {
                 (1, true) => "┗".to_string(),
-                (1, false) => " ".to_string(),
-                (n, true) => format!("┗ {}", " ".repeat(n - 2)),
+                (2, true) => "┗ ".to_string(),
+                (n, true) => format!("{}┗", " ".repeat(n.saturating_sub(1))),
                 (n, false) => " ".repeat(n),
             };
 
-            let mut text = if node_symbol.is_empty() {
-                indent_prefix.clone()
-            } else {
-                format!("{}{}", indent_prefix, node_symbol)
-            };
+            let mut text = indent_prefix;
+            text.push_str(node_symbol);
 
             let base_name = if let Some(n) = item.node {
                 n.name()
@@ -359,7 +384,7 @@ impl MainView {
             };
 
             if !base_name.is_empty() {
-                if !node_symbol.is_empty() || !indent_prefix.is_empty() {
+                if !text.is_empty() {
                     text.push(' ');
                 }
                 text.push_str(base_name);
@@ -481,7 +506,15 @@ impl MainView {
         if self.active != ActivePanel::List {
             return;
         }
-        self.list_selected = self.list_selected.saturating_sub(1);
+
+        let (_, empty_idx) = self.resolve_view();
+
+        if self.list_selected > 0 {
+            self.list_selected -= 1;
+            if empty_idx.is_some() {
+                self.expanded_path.pop();
+            }
+        }
         self.refresh_list();
     }
 
@@ -490,8 +523,10 @@ impl MainView {
             return;
         }
 
+        let (view_path, empty_idx) = self.resolve_view();
+
         let mut parent_nodes = &self.library_tree;
-        for &idx in &self.expanded_path {
+        for &idx in &view_path {
             if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
                 parent_nodes = children;
             }
@@ -500,6 +535,9 @@ impl MainView {
         let max_idx = parent_nodes.len().saturating_sub(1);
         if self.list_selected < max_idx {
             self.list_selected += 1;
+            if empty_idx.is_some() {
+                self.expanded_path.pop();
+            }
         }
         self.refresh_list();
     }
@@ -509,17 +547,25 @@ impl MainView {
             return;
         }
 
-        let mut parent_nodes = &self.library_tree;
-        for &idx in &self.expanded_path {
-            if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
-                parent_nodes = children;
+        let (view_path, empty_idx) = self.resolve_view();
+
+        if empty_idx.is_some() {
+            return;
+        }
+
+        let mut current_nodes = &self.library_tree;
+        for &idx in &view_path {
+            if let Some(MacroNode::Folder { children, .. }) = current_nodes.get(idx) {
+                current_nodes = children;
             }
         }
 
-        if let Some(MacroNode::Folder { .. }) = parent_nodes.get(self.list_selected) {
+        if let Some(MacroNode::Folder { children, .. }) = current_nodes.get(self.list_selected) {
             self.expanded_path.push(self.list_selected);
-            self.list_selected = 0;
-            self.list_scroll = 0;
+            if !children.is_empty() {
+                self.list_selected = 0;
+                self.list_scroll = 0;
+            }
             self.refresh_list();
         }
     }
@@ -541,8 +587,9 @@ impl MainView {
             return;
         }
 
+        let (view_path, _) = self.resolve_view();
         let mut parent_nodes = &self.library_tree;
-        for &idx in &self.expanded_path {
+        for &idx in &view_path {
             if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
                 parent_nodes = children;
             }

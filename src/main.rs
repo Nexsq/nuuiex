@@ -101,6 +101,6 @@ fn main() {
             _ => {}
         }
 
-        thread::sleep(Duration::from_millis(2));
+        thread::sleep(Duration::from_millis(4));
     }
 }

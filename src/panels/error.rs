@@ -68,7 +68,7 @@ where
                 Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
                 _ => {}
             }
-            thread::sleep(Duration::from_millis(2));
+            thread::sleep(Duration::from_millis(4));
             continue;
         }
 
@@ -150,7 +150,7 @@ where
             _ => {}
         }
 
-        thread::sleep(Duration::from_millis(2));
+        thread::sleep(Duration::from_millis(4));
     }
 }
 
@@ -209,7 +209,7 @@ pub fn error_screen(
                 Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
                 _ => {}
             }
-            thread::sleep(Duration::from_millis(2));
+            thread::sleep(Duration::from_millis(4));
             continue;
         }
 
@@ -272,7 +272,7 @@ pub fn error_screen(
             _ => {}
         }
 
-        thread::sleep(Duration::from_millis(2));
+        thread::sleep(Duration::from_millis(4));
     }
 }
 

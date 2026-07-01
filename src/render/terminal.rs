@@ -62,9 +62,9 @@ impl Terminal {
 
         match b {
             27 => {
-                match self.key_rx.recv_timeout(Duration::from_millis(2)) {
+                match self.key_rx.recv_timeout(Duration::from_millis(4)) {
                     Ok(b'[') => loop {
-                        match self.key_rx.recv_timeout(Duration::from_millis(2)) {
+                        match self.key_rx.recv_timeout(Duration::from_millis(4)) {
                             Ok(b'A') => return Key::Up,
                             Ok(b'B') => return Key::Down,
                             Ok(b'C') => return Key::Right,
