@@ -2,12 +2,16 @@ use std::thread;
 use std::time::Duration;
 
 use nuui::Canvas;
-use nuui::conf;
 use nuui::{Key, Terminal};
+use nuui::{conf, lib};
 use nuui::{error, main, toosmall};
 
 fn main() {
     let _config = conf::init();
+    let _library = lib::init();
+
+    println!("{:?}", _library);
+
     let terminal = Terminal::init();
     let (mut term_w, mut term_h) = Terminal::size();
 
