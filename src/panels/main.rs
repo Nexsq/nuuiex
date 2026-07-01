@@ -1,4 +1,4 @@
-use crate::{Border, Box, Canvas, Color, Modifier, Style};
+use crate::{Border, Box, Canvas, Color, Modifier, Style, lib::MacroNode};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ActivePanel {
@@ -17,7 +17,7 @@ pub struct MainView {
     pub list_box: Box,
     pub list_x: i16,
     pub list_y: i16,
-    pub list_buffer: String,
+    pub library_tree: Vec<MacroNode>,
     pub tabs_box: Box,
     pub tabs_x: i16,
     pub tabs_y: i16,
@@ -35,7 +35,7 @@ impl MainView {
         term_h: u16,
         active: ActivePanel,
         main_buffer: String,
-        list_buffer: String,
+        library_tree: Vec<MacroNode>,
     ) -> Self {
         let min_w = 64;
         let min_h = 16;
@@ -154,9 +154,34 @@ impl MainView {
             bg: Color::None,
             md: Modifier::None,
         };
+
         main_box.insert_text(&main_buffer, 0, 0, true, text_style);
-        list_box.insert_text(&list_buffer, 0, 0, true, text_style);
         tabs_box.insert_text("t a b s", 0, 0, false, text_style);
+
+        for (i, node) in library_tree.iter().enumerate() {
+            if i as u16 >= list_box.height.saturating_sub(2) {
+                break;
+            }
+
+            let (prefix, color) = match node {
+                MacroNode::Folder { .. } => ("▪", Color::Blue),
+                MacroNode::Script { .. } => ("▫", Color::Magenta),
+            };
+
+            let text = format!("{} {}", prefix, node.name());
+
+            list_box.insert_text(
+                &text,
+                1,
+                i as i16,
+                false,
+                Style {
+                    fg: color,
+                    bg: Color::None,
+                    md: Modifier::None,
+                },
+            );
+        }
 
         Self {
             min_w,
@@ -169,7 +194,7 @@ impl MainView {
             list_box,
             list_x: tabs_w as i16,
             list_y: title_h as i16,
-            list_buffer,
+            library_tree,
             tabs_box,
             tabs_x: 0,
             tabs_y: title_h as i16,
@@ -197,31 +222,6 @@ impl MainView {
                 self.list_box.set_border_style(Border::Light);
                 self.main_box.set_border_color(Color::White);
                 self.main_box.set_border_style(Border::Heavy);
-            }
-        }
-    }
-
-    // test function
-    pub fn insert_test_text(&mut self) {
-        let text_style = Style {
-            fg: Color::White,
-            bg: Color::None,
-            md: Modifier::None,
-        };
-
-        match self.active {
-            ActivePanel::Main => {
-                self.main_buffer.push_str("main ");
-                self.main_box
-                    .insert_text(&self.main_buffer, 0, 0, true, text_style);
-            }
-            ActivePanel::List => {
-                if !self.list_buffer.is_empty() {
-                    self.list_buffer.push('\n');
-                }
-                self.list_buffer.push_str("list");
-                self.list_box
-                    .insert_text(&self.list_buffer, 0, 0, true, text_style);
             }
         }
     }

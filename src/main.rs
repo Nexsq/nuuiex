@@ -8,9 +8,7 @@ use nuui::{error, main, toosmall};
 
 fn main() {
     let _config = conf::init();
-    let _library = lib::init();
-
-    println!("{:?}", _library);
+    let mut library = lib::init();
 
     let terminal = Terminal::init();
     let (mut term_w, mut term_h) = Terminal::size();
@@ -20,7 +18,7 @@ fn main() {
         term_h,
         main::ActivePanel::Main,
         String::new(),
-        String::new(),
+        library.tree.clone(),
     );
     let mut canvas = Canvas::new(term_w, term_h);
 
@@ -38,7 +36,7 @@ fn main() {
                     term_h,
                     main_view.active,
                     main_view.main_buffer.clone(),
-                    main_view.list_buffer.clone(),
+                    main_view.library_tree.clone(),
                 );
             }
         }
@@ -54,7 +52,16 @@ fn main() {
         match terminal.read_key() {
             Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => break,
             Key::Char('e' | 'E') => main_view.toggle_focus(),
-            Key::Char('f' | 'F') => main_view.insert_test_text(),
+            Key::Char('r' | 'R') => {
+                library = lib::init();
+                main_view = main::MainView::new(
+                    term_w,
+                    term_h,
+                    main_view.active,
+                    main_view.main_buffer.clone(),
+                    library.tree.clone(),
+                );
+            }
             Key::Char('t') => {
                 error::error_box(
                     &terminal,
@@ -76,7 +83,7 @@ fn main() {
                                     term_h,
                                     main_view.active,
                                     main_view.main_buffer.clone(),
-                                    main_view.list_buffer.clone(),
+                                    main_view.library_tree.clone(),
                                 );
                             }
                         }
