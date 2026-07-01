@@ -31,13 +31,7 @@ fn main() {
             term_h = current_h;
 
             if term_w >= main_view.min_w && term_h >= main_view.min_h {
-                main_view = main::MainView::new(
-                    term_w,
-                    term_h,
-                    main_view.active,
-                    main_view.main_buffer.clone(),
-                    main_view.library_tree.clone(),
-                );
+                main_view.resize(term_w, term_h);
             }
         }
 
@@ -52,16 +46,17 @@ fn main() {
         match terminal.read_key() {
             Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => break,
             Key::Char('e' | 'E') => main_view.toggle_focus(),
+
+            Key::Up => main_view.selection_up(),
+            Key::Down => main_view.selection_down(),
+            Key::Right | Key::Enter => main_view.trigger_selected(),
+
             Key::Char('r' | 'R') => {
                 library = lib::init();
-                main_view = main::MainView::new(
-                    term_w,
-                    term_h,
-                    main_view.active,
-                    main_view.main_buffer.clone(),
-                    library.tree.clone(),
-                );
+                main_view.library_tree = library.tree.clone();
+                main_view.refresh_list();
             }
+
             Key::Char('t') => {
                 error::error_box(
                     &terminal,
@@ -76,18 +71,10 @@ fn main() {
                         if w != term_w || h != term_h {
                             term_w = w;
                             term_h = h;
-
                             if term_w >= main_view.min_w && term_h >= main_view.min_h {
-                                main_view = main::MainView::new(
-                                    term_w,
-                                    term_h,
-                                    main_view.active,
-                                    main_view.main_buffer.clone(),
-                                    main_view.library_tree.clone(),
-                                );
+                                main_view.resize(term_w, term_h);
                             }
                         }
-
                         if term_w < main_view.min_w || term_h < main_view.min_h {
                             toosmall::render(cvs, term_w, term_h);
                         } else {
