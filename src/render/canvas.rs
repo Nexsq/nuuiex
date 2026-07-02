@@ -153,6 +153,29 @@ impl Box {
                 continue;
             }
 
+            if c == '\t' {
+                let tab_spaces = 4 - ((cx - eff_left) % 4);
+                for _ in 0..tab_spaces {
+                    if cx < max_x {
+                        let mut cell = Cell { c: '\0', s: style };
+                        cell.c = ' ';
+                        self.put_cell(cell, cx, cy);
+                        cx += 1;
+                    }
+                }
+                if cx >= max_x {
+                    cx = eff_left;
+                    cy += 1;
+                }
+                chars.next();
+                continue;
+            }
+
+            if c.is_control() {
+                chars.next();
+                continue;
+            }
+
             if !word_wrap {
                 let mut cell = Cell { c: '\0', s: style };
                 cell.c = c;
@@ -179,7 +202,7 @@ impl Box {
                 let mut lookahead = chars.clone();
                 let mut word_len = 0;
                 while let Some(&lc) = lookahead.peek() {
-                    if lc.is_whitespace() || lc == '\n' {
+                    if lc.is_whitespace() || lc.is_control() {
                         break;
                     }
                     word_len += 1;

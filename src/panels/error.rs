@@ -279,6 +279,8 @@ pub fn error_screen(
 #[inline(always)]
 fn apply_dim(canvas: &mut Canvas) {
     for cell in canvas.new.iter_mut() {
-        cell.s.md = Modifier::Dim;
+        if cell.c != ' ' || cell.s.bg != Color::None {
+            cell.s.md = Modifier::Dim;
+        }
     }
 }

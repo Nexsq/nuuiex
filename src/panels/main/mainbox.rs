@@ -30,7 +30,7 @@ pub fn refresh(term_w: u16, term_h: u16, active: ActivePanel, main_buffer: &str)
         main_buffer,
         0,
         0,
-        true,
+        false,
         Style {
             fg: Color::White,
             bg: Color::None,
