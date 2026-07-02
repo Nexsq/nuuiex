@@ -23,6 +23,13 @@ impl MacroNode {
             Self::Folder { name, .. } => name,
         }
     }
+
+    pub fn path(&self) -> &Path {
+        match self {
+            Self::Script { path, .. } => path,
+            Self::Folder { path, .. } => path,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
