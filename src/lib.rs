@@ -9,4 +9,4 @@ pub use render::terminal::{Key, Terminal};
 
 pub use config::conf;
 pub use library::lib;
-pub use panels::{error, main, toosmall};
+pub use panels::{error, main, settings, toosmall};

@@ -3,7 +3,7 @@ use std::time::Duration;
 use nuui::Canvas;
 use nuui::{Key, Terminal};
 use nuui::{conf, lib};
-use nuui::{error, main, toosmall};
+use nuui::{error, main, settings, toosmall};
 
 fn main() {
     let _config = conf::init();
@@ -52,7 +52,35 @@ fn main() {
             Key::None => continue,
             key => {
                 match key {
-                    Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => break,
+                    Key::Char('q' | 'Q') | Key::Char('\x03') => break,
+
+                    Key::Esc => {
+                        let should_quit = settings::settings_modal(
+                            &terminal,
+                            &mut canvas,
+                            main_view.min_w,
+                            main_view.min_h,
+                            |cvs, w, h| {
+                                if w != term_w || h != term_h {
+                                    term_w = w;
+                                    term_h = h;
+                                    if term_w >= main_view.min_w && term_h >= main_view.min_h {
+                                        main_view.resize(term_w, term_h);
+                                    }
+                                }
+                                if term_w < main_view.min_w || term_h < main_view.min_h {
+                                    toosmall::render(cvs, term_w, term_h);
+                                } else {
+                                    main_view.render(cvs);
+                                }
+                            },
+                        );
+
+                        if should_quit {
+                            break;
+                        }
+                    }
+
                     Key::Char('e' | 'E') => main_view.toggle_focus(),
 
                     Key::Up => main_view.selection_up(),

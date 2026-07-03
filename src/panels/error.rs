@@ -68,7 +68,7 @@ where
             if current_w < min_w || current_h < min_h {
                 canvas.render();
             } else {
-                apply_dim(canvas);
+                canvas.apply_dim();
 
                 let term_w = canvas.width;
                 let term_h = canvas.height;
@@ -120,7 +120,7 @@ where
                     }
                 }
 
-                canvas.put_box(&err_box, box_x, box_y);
+                canvas.put_box_opaque(&err_box, box_x, box_y);
                 canvas.render();
             }
             dirty = false;
@@ -209,7 +209,6 @@ pub fn error_screen(
             if current_w < min_w || current_h < min_h {
                 crate::toosmall::render(canvas, current_w, current_h);
                 canvas.render();
-                dirty = false;
             } else {
                 let term_w = canvas.width;
                 let term_h = canvas.height;
@@ -249,8 +248,8 @@ pub fn error_screen(
 
                 canvas.put_box(&err_box, 0, 0);
                 canvas.render();
-                dirty = false;
             }
+            dirty = false;
         }
 
         match terminal.read_key(Duration::from_millis(16)) {
@@ -277,15 +276,6 @@ pub fn error_screen(
                 }
                 dirty = true;
             }
-        }
-    }
-}
-
-#[inline(always)]
-fn apply_dim(canvas: &mut Canvas) {
-    for cell in canvas.new.iter_mut() {
-        if cell.c != ' ' || cell.s.bg != Color::None {
-            cell.s.md = Modifier::Dim;
         }
     }
 }

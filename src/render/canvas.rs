@@ -110,11 +110,11 @@ impl Box {
     }
 
     pub fn insert_box(&mut self, buffer: &Box, x: i16, y: i16) {
-        self.draw_box(buffer, x, y, false);
+        self.draw_box(buffer, x, y, false, true);
     }
 
     pub fn insert_box_overlap(&mut self, buffer: &Box, x: i16, y: i16) {
-        self.draw_box(buffer, x, y, true);
+        self.draw_box(buffer, x, y, true, true);
     }
 
     pub fn insert_text(
@@ -402,12 +402,24 @@ impl Canvas {
         self.needs_clear = true;
     }
 
+    pub fn apply_dim(&mut self) {
+        for cell in self.new.iter_mut() {
+            if cell.c != ' ' || cell.s.bg != Color::None {
+                cell.s.md = Modifier::Dim;
+            }
+        }
+    }
+
     pub fn put_box(&mut self, buffer: &Box, x: i16, y: i16) {
-        self.draw_box(buffer, x, y, false);
+        self.draw_box(buffer, x, y, false, true);
     }
 
     pub fn put_box_overlap(&mut self, buffer: &Box, x: i16, y: i16) {
-        self.draw_box(buffer, x, y, true);
+        self.draw_box(buffer, x, y, true, true);
+    }
+
+    pub fn put_box_opaque(&mut self, buffer: &Box, x: i16, y: i16) {
+        self.draw_box(buffer, x, y, false, false);
     }
 }
 
@@ -416,7 +428,7 @@ pub trait DrawTarget {
     fn height(&self) -> u16;
     fn buffer_mut(&mut self) -> &mut [Cell];
 
-    fn draw_box(&mut self, buffer: &Box, x: i16, y: i16, ignore_spaces: bool) {
+    fn draw_box(&mut self, buffer: &Box, x: i16, y: i16, ignore_spaces: bool, merge_borders: bool) {
         let cw = self.width() as i16;
         let ch = self.height() as i16;
         let bw = buffer.width as i16;
@@ -448,25 +460,32 @@ pub trait DrawTarget {
             .take(render_h);
 
         #[inline(always)]
-        fn process_cell(src_cell: &Cell, dest_cell: &mut Cell, ignore_spaces: bool) {
+        fn process_cell(
+            src_cell: &Cell,
+            dest_cell: &mut Cell,
+            ignore_spaces: bool,
+            merge_borders: bool,
+        ) {
             if ignore_spaces && *src_cell == Cell::default() {
                 return;
             }
 
-            let src_info = get_border_info(src_cell.c);
-            let dest_info = get_border_info(dest_cell.c);
+            if merge_borders {
+                let src_info = get_border_info(src_cell.c);
+                let dest_info = get_border_info(dest_cell.c);
 
-            let src_mask = src_info & 0x0F;
-            let dest_mask = dest_info & 0x0F;
+                let src_mask = src_info & 0x0F;
+                let dest_mask = dest_info & 0x0F;
 
-            if src_mask > 0 && dest_mask > 0 {
-                let combined_mask = src_mask | dest_mask;
-                let dominant_fam = (src_info & 0xF0).max(dest_info & 0xF0);
+                if src_mask > 0 && dest_mask > 0 {
+                    let combined_mask = src_mask | dest_mask;
+                    let dominant_fam = (src_info & 0xF0).max(dest_info & 0xF0);
 
-                if let Some(merged_char) = mask_to_char(combined_mask, dominant_fam) {
-                    dest_cell.c = merged_char;
-                    dest_cell.s = src_cell.s;
-                    return;
+                    if let Some(merged_char) = mask_to_char(combined_mask, dominant_fam) {
+                        dest_cell.c = merged_char;
+                        dest_cell.s = src_cell.s;
+                        return;
+                    }
                 }
             }
             *dest_cell = *src_cell;
@@ -479,7 +498,7 @@ pub trait DrawTarget {
                 let src_slice = &b_row[src_x..src_x + render_w];
                 let dest_slice = &mut s_row[dest_x..dest_x + render_w];
                 for (src_cell, dest_cell) in src_slice.iter().zip(dest_slice.iter_mut()) {
-                    process_cell(src_cell, dest_cell, ignore_spaces);
+                    process_cell(src_cell, dest_cell, ignore_spaces, merge_borders);
                 }
             }
         }
@@ -497,7 +516,12 @@ pub trait DrawTarget {
             let mut end_idx = render_w;
 
             if src_x == 0 && render_w > 0 {
-                process_cell(&src_slice[0], &mut dest_slice[0], ignore_spaces);
+                process_cell(
+                    &src_slice[0],
+                    &mut dest_slice[0],
+                    ignore_spaces,
+                    merge_borders,
+                );
                 start_idx += 1;
             }
 
@@ -506,6 +530,7 @@ pub trait DrawTarget {
                     &src_slice[render_w - 1],
                     &mut dest_slice[render_w - 1],
                     ignore_spaces,
+                    merge_borders,
                 );
                 end_idx -= 1;
             }
@@ -530,7 +555,7 @@ pub trait DrawTarget {
             let src_slice = &b_row[src_x..src_x + render_w];
             let dest_slice = &mut s_row[dest_x..dest_x + render_w];
             for (src_cell, dest_cell) in src_slice.iter().zip(dest_slice.iter_mut()) {
-                process_cell(src_cell, dest_cell, ignore_spaces);
+                process_cell(src_cell, dest_cell, ignore_spaces, merge_borders);
             }
         }
     }
