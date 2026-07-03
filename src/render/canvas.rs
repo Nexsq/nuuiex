@@ -362,7 +362,7 @@ impl Canvas {
                     cur_bg = new_cell.s.bg;
                 }
 
-                write!(&mut self.buffer, "{}", new_cell.c).unwrap();
+                self.buffer.push(new_cell.c);
 
                 cursor_x = x + 1;
                 cursor_y = y;

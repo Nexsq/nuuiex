@@ -51,101 +51,105 @@ where
 
     let mut selected_idx: usize = 0;
 
+    let mut dirty = true;
+
     loop {
         let (current_w, current_h) = Terminal::size();
 
         if current_w != canvas.width || current_h != canvas.height {
             canvas.resize(current_w, current_h);
+            dirty = true;
         }
 
-        canvas.clean();
-        draw_background(canvas, current_w, current_h);
+        if dirty {
+            canvas.clean();
+            draw_background(canvas, current_w, current_h);
 
-        if current_w < min_w || current_h < min_h {
-            canvas.render();
-            match terminal.read_key(Duration::from_millis(16)) {
-                Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
-                _ => {}
-            }
-            continue;
-        }
+            if current_w < min_w || current_h < min_h {
+                canvas.render();
+            } else {
+                apply_dim(canvas);
 
-        apply_dim(canvas);
+                let term_w = canvas.width;
+                let term_h = canvas.height;
+                let pad: u16 = 1;
 
-        let term_w = canvas.width;
-        let term_h = canvas.height;
-        let pad: u16 = 1;
-
-        let box_w = if width == 0 {
-            (max_msg_len.max(total_opts_len) + (pad as usize * 2) + 4).max(24) as u16
-        } else {
-            width
-        }
-        .min(term_w);
-
-        let box_h = if height == 0 {
-            (msg_height + (pad as usize * 2) + 3).max(7) as u16
-        } else {
-            height
-        }
-        .min(term_h);
-
-        let box_x = (term_w.saturating_sub(box_w) / 2) as i16;
-        let box_y = (term_h.saturating_sub(box_h) / 2) as i16;
-
-        let mut err_box = Box::new(box_w, box_h, pad, Border::Heavy, border_style);
-
-        let inner_w = box_w.saturating_sub(pad * 2);
-        let inner_h = box_h.saturating_sub(pad * 2);
-
-        let msg_x = (inner_w.saturating_sub(max_msg_len as u16) / 2) as i16;
-        let msg_y = 0;
-
-        err_box.insert_text(msg, msg_x, msg_y, true, msg_style);
-
-        if !options.is_empty() {
-            let options_y = inner_h.saturating_sub(1) as i16;
-            let mut current_x = (inner_w.saturating_sub(total_opts_len as u16) / 2) as i16;
-
-            for i in 0..options.len() {
-                let is_selected = i == selected_idx;
-                let text = if is_selected {
-                    &selected_opts[i]
+                let box_w = if width == 0 {
+                    (max_msg_len.max(total_opts_len) + (pad as usize * 2) + 4).max(24) as u16
                 } else {
-                    &unselected_opts[i]
-                };
-                let style = if is_selected {
-                    selected_style
+                    width
+                }
+                .min(term_w);
+
+                let box_h = if height == 0 {
+                    (msg_height + (pad as usize * 2) + 3).max(7) as u16
                 } else {
-                    unselected_style
-                };
+                    height
+                }
+                .min(term_h);
 
-                err_box.insert_text(text, current_x, options_y, false, style);
-                current_x += (text.chars().count() + 1) as i16;
+                let box_x = (term_w.saturating_sub(box_w) / 2) as i16;
+                let box_y = (term_h.saturating_sub(box_h) / 2) as i16;
+
+                let mut err_box = Box::new(box_w, box_h, pad, Border::Heavy, border_style);
+                let inner_w = box_w.saturating_sub(pad * 2);
+                let inner_h = box_h.saturating_sub(pad * 2);
+                let msg_x = (inner_w.saturating_sub(max_msg_len as u16) / 2) as i16;
+
+                err_box.insert_text(msg, msg_x, 0, true, msg_style);
+
+                if !options.is_empty() {
+                    let options_y = inner_h.saturating_sub(1) as i16;
+                    let mut current_x = (inner_w.saturating_sub(total_opts_len as u16) / 2) as i16;
+
+                    for i in 0..options.len() {
+                        let is_selected = i == selected_idx;
+                        let text = if is_selected {
+                            &selected_opts[i]
+                        } else {
+                            &unselected_opts[i]
+                        };
+                        let style = if is_selected {
+                            selected_style
+                        } else {
+                            unselected_style
+                        };
+
+                        err_box.insert_text(text, current_x, options_y, false, style);
+                        current_x += (text.chars().count() + 1) as i16;
+                    }
+                }
+
+                canvas.put_box(&err_box, box_x, box_y);
+                canvas.render();
             }
+            dirty = false;
         }
-
-        canvas.put_box(&err_box, box_x, box_y);
-        canvas.render();
 
         match terminal.read_key(Duration::from_millis(16)) {
-            Key::Left | Key::Up => {
-                if selected_idx > 0 {
-                    selected_idx -= 1;
-                } else if !options.is_empty() {
-                    selected_idx = options.len() - 1;
+            Key::None => continue,
+            key => {
+                match key {
+                    Key::Left | Key::Up => {
+                        if selected_idx > 0 {
+                            selected_idx -= 1;
+                        } else if !options.is_empty() {
+                            selected_idx = options.len() - 1;
+                        }
+                    }
+                    Key::Right | Key::Down => {
+                        if selected_idx < options.len().saturating_sub(1) {
+                            selected_idx += 1;
+                        } else {
+                            selected_idx = 0;
+                        }
+                    }
+                    Key::Enter => return selected_idx,
+                    Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
+                    _ => continue,
                 }
+                dirty = true;
             }
-            Key::Right | Key::Down => {
-                if selected_idx < options.len().saturating_sub(1) {
-                    selected_idx += 1;
-                } else {
-                    selected_idx = 0;
-                }
-            }
-            Key::Enter => return selected_idx,
-            Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
-            _ => {}
         }
     }
 }
@@ -190,7 +194,7 @@ pub fn error_screen(
 
     let mut selected_idx: usize = 0;
 
-    let mut dirty = false;
+    let mut dirty = true;
 
     loop {
         let (current_w, current_h) = Terminal::size();
@@ -199,59 +203,55 @@ pub fn error_screen(
             dirty = true;
         }
 
-        canvas.clean();
-
         if dirty {
+            canvas.clean();
+
             if current_w < min_w || current_h < min_h {
                 crate::toosmall::render(canvas, current_w, current_h);
                 canvas.render();
-                match terminal.read_key(Duration::from_millis(16)) {
-                    Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
-                    _ => {}
-                }
                 dirty = false;
-                continue;
+            } else {
+                let term_w = canvas.width;
+                let term_h = canvas.height;
+
+                let pad: u16 = 2;
+                let mut err_box = Box::new(term_w, term_h, pad, Border::Heavy, border_style);
+
+                let inner_w = term_w.saturating_sub(pad * 2);
+                let inner_h = term_h.saturating_sub(pad * 2);
+
+                let msg_x = 2;
+                let msg_y = 0;
+
+                err_box.insert_text(msg, msg_x, msg_y, true, msg_style);
+
+                if !options.is_empty() {
+                    let options_y = inner_h.saturating_sub(1) as i16;
+                    let mut current_x = (inner_w.saturating_sub(total_opts_len as u16 + 2)) as i16;
+
+                    for i in 0..options.len() {
+                        let is_selected = i == selected_idx;
+                        let text = if is_selected {
+                            &selected_opts[i]
+                        } else {
+                            &unselected_opts[i]
+                        };
+                        let style = if is_selected {
+                            selected_style
+                        } else {
+                            unselected_style
+                        };
+
+                        err_box.insert_text(text, current_x, options_y, false, style);
+                        current_x += (text.chars().count() + 1) as i16;
+                    }
+                }
+
+                canvas.put_box(&err_box, 0, 0);
+                canvas.render();
+                dirty = false;
             }
         }
-
-        let term_w = canvas.width;
-        let term_h = canvas.height;
-
-        let pad: u16 = 2;
-        let mut err_box = Box::new(term_w, term_h, pad, Border::Heavy, border_style);
-
-        let inner_w = term_w.saturating_sub(pad * 2);
-        let inner_h = term_h.saturating_sub(pad * 2);
-
-        let msg_x = 2;
-        let msg_y = 0;
-
-        err_box.insert_text(msg, msg_x, msg_y, true, msg_style);
-
-        if !options.is_empty() {
-            let options_y = inner_h.saturating_sub(1) as i16;
-            let mut current_x = (inner_w.saturating_sub(total_opts_len as u16 + 2)) as i16;
-
-            for i in 0..options.len() {
-                let is_selected = i == selected_idx;
-                let text = if is_selected {
-                    &selected_opts[i]
-                } else {
-                    &unselected_opts[i]
-                };
-                let style = if is_selected {
-                    selected_style
-                } else {
-                    unselected_style
-                };
-
-                err_box.insert_text(text, current_x, options_y, false, style);
-                current_x += (text.chars().count() + 1) as i16;
-            }
-        }
-
-        canvas.put_box(&err_box, 0, 0);
-        canvas.render();
 
         match terminal.read_key(Duration::from_millis(16)) {
             Key::None => continue,
@@ -273,7 +273,7 @@ pub fn error_screen(
                     }
                     Key::Enter => return selected_idx,
                     Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
-                    _ => {}
+                    _ => continue,
                 }
                 dirty = true;
             }

@@ -106,7 +106,7 @@ fn main() {
                             main_view.min_h,
                         );
                     }
-                    _ => {}
+                    _ => continue,
                 }
 
                 dirty = true;
