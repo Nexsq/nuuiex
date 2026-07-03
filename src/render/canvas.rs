@@ -23,6 +23,7 @@ pub struct Canvas {
     pub old: Vec<Cell>,
     pub new: Vec<Cell>,
     pub buffer: String,
+    pub needs_clear: bool
 }
 
 impl Cell {
@@ -302,6 +303,7 @@ impl Canvas {
             old: vec![imp_cell; size],
             new: vec![Cell::default(); size],
             buffer: String::with_capacity(size * 4),
+            needs_clear: false,
         }
     }
 
@@ -313,6 +315,11 @@ impl Canvas {
         use std::fmt::Write;
 
         self.buffer.clear();
+
+        if self.needs_clear {
+            self.buffer.push_str("\x1b[2J\x1b[H");
+            self.needs_clear = false;
+        }
 
         let mut cur_fg = Color::None;
         let mut cur_bg = Color::None;
@@ -392,8 +399,7 @@ impl Canvas {
         self.old.resize(size, Cell::default());
         self.new.resize(size, Cell::default());
 
-        print!("\x1b[2J\x1b[H");
-        io::stdout().flush().unwrap();
+        self.needs_clear = true;
     }
 
     pub fn put_box(&mut self, buffer: &Box, x: i16, y: i16) {
