@@ -55,16 +55,17 @@ impl Terminal {
         Self { _raw_guard, key_rx }
     }
 
-    pub fn read_key(&self) -> Key {
-        let Ok(b) = self.key_rx.try_recv() else {
-            return Key::None;
+    pub fn read_key(&self, timeout: Duration) -> Key {
+        let b = match self.key_rx.recv_timeout(timeout) {
+            Ok(b) => b,
+            Err(_) => return Key::None,
         };
 
         match b {
             27 => {
-                match self.key_rx.recv_timeout(Duration::from_millis(4)) {
+                match self.key_rx.recv_timeout(Duration::from_millis(16)) {
                     Ok(b'[') => loop {
-                        match self.key_rx.recv_timeout(Duration::from_millis(4)) {
+                        match self.key_rx.recv_timeout(Duration::from_millis(16)) {
                             Ok(b'A') => return Key::Up,
                             Ok(b'B') => return Key::Down,
                             Ok(b'C') => return Key::Right,

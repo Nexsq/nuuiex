@@ -1,4 +1,3 @@
-use std::thread;
 use std::time::Duration;
 
 use crate::{Border, Box, Canvas, Color, Key, Modifier, Style, Terminal};
@@ -64,11 +63,10 @@ where
 
         if current_w < min_w || current_h < min_h {
             canvas.render();
-            match terminal.read_key() {
+            match terminal.read_key(Duration::from_millis(16)) {
                 Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
                 _ => {}
             }
-            thread::sleep(Duration::from_millis(4));
             continue;
         }
 
@@ -130,7 +128,7 @@ where
         canvas.put_box(&err_box, box_x, box_y);
         canvas.render();
 
-        match terminal.read_key() {
+        match terminal.read_key(Duration::from_millis(16)) {
             Key::Left | Key::Up => {
                 if selected_idx > 0 {
                     selected_idx -= 1;
@@ -149,8 +147,6 @@ where
             Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
             _ => {}
         }
-
-        thread::sleep(Duration::from_millis(4));
     }
 }
 
@@ -194,23 +190,28 @@ pub fn error_screen(
 
     let mut selected_idx: usize = 0;
 
+    let mut dirty = false;
+
     loop {
         let (current_w, current_h) = Terminal::size();
         if current_w != canvas.width || current_h != canvas.height {
             canvas.resize(current_w, current_h);
+            dirty = true;
         }
 
         canvas.clean();
 
-        if current_w < min_w || current_h < min_h {
-            crate::toosmall::render(canvas, current_w, current_h);
-            canvas.render();
-            match terminal.read_key() {
-                Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
-                _ => {}
+        if dirty {
+            if current_w < min_w || current_h < min_h {
+                crate::toosmall::render(canvas, current_w, current_h);
+                canvas.render();
+                match terminal.read_key(Duration::from_millis(16)) {
+                    Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
+                    _ => {}
+                }
+                dirty = false;
+                continue;
             }
-            thread::sleep(Duration::from_millis(4));
-            continue;
         }
 
         let term_w = canvas.width;
@@ -252,27 +253,31 @@ pub fn error_screen(
         canvas.put_box(&err_box, 0, 0);
         canvas.render();
 
-        match terminal.read_key() {
-            Key::Left | Key::Up => {
-                if selected_idx > 0 {
-                    selected_idx -= 1;
-                } else if !options.is_empty() {
-                    selected_idx = options.len() - 1;
+        match terminal.read_key(Duration::from_millis(16)) {
+            Key::None => continue,
+            key => {
+                match key {
+                    Key::Left | Key::Up => {
+                        if selected_idx > 0 {
+                            selected_idx -= 1;
+                        } else if !options.is_empty() {
+                            selected_idx = options.len() - 1;
+                        }
+                    }
+                    Key::Right | Key::Down => {
+                        if selected_idx < options.len().saturating_sub(1) {
+                            selected_idx += 1;
+                        } else {
+                            selected_idx = 0;
+                        }
+                    }
+                    Key::Enter => return selected_idx,
+                    Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
+                    _ => {}
                 }
+                dirty = true;
             }
-            Key::Right | Key::Down => {
-                if selected_idx < options.len().saturating_sub(1) {
-                    selected_idx += 1;
-                } else {
-                    selected_idx = 0;
-                }
-            }
-            Key::Enter => return selected_idx,
-            Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
-            _ => {}
         }
-
-        thread::sleep(Duration::from_millis(4));
     }
 }
 

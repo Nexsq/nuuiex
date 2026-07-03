@@ -23,7 +23,7 @@ pub struct Canvas {
     pub old: Vec<Cell>,
     pub new: Vec<Cell>,
     pub buffer: String,
-    pub needs_clear: bool
+    pub needs_clear: bool,
 }
 
 impl Cell {

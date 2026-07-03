@@ -1,4 +1,3 @@
-use std::thread;
 use std::time::Duration;
 
 use nuui::Canvas;
@@ -22,6 +21,8 @@ fn main() {
     );
     let mut canvas = Canvas::new(term_w, term_h);
 
+    let mut dirty = true;
+
     loop {
         let (current_w, current_h) = Terminal::size();
 
@@ -33,74 +34,83 @@ fn main() {
             if term_w >= main_view.min_w && term_h >= main_view.min_h {
                 main_view.resize(term_w, term_h);
             }
+            dirty = true;
         }
 
-        if term_w < main_view.min_w || term_h < main_view.min_h {
-            toosmall::render(&mut canvas, term_w, term_h);
-        } else {
-            canvas.clean();
-            main_view.render(&mut canvas);
-            canvas.render();
+        if dirty {
+            if term_w < main_view.min_w || term_h < main_view.min_h {
+                toosmall::render(&mut canvas, term_w, term_h);
+            } else {
+                canvas.clean();
+                main_view.render(&mut canvas);
+                canvas.render();
+            }
+            dirty = false;
         }
 
-        match terminal.read_key() {
-            Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => break,
-            Key::Char('e' | 'E') => main_view.toggle_focus(),
+        match terminal.read_key(Duration::from_millis(16)) {
+            Key::None => continue,
+            key => {
+                match key {
+                    Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => break,
+                    Key::Char('e' | 'E') => main_view.toggle_focus(),
 
-            Key::Up => main_view.selection_up(),
-            Key::Down => main_view.selection_down(),
-            Key::Right => main_view.handle_right_arrow(),
-            Key::Left => main_view.handle_left_arrow(),
-            Key::Enter => main_view.trigger_selected(),
+                    Key::Up => main_view.selection_up(),
+                    Key::Down => main_view.selection_down(),
+                    Key::Right => main_view.handle_right_arrow(),
+                    Key::Left => main_view.handle_left_arrow(),
+                    Key::Enter => main_view.trigger_selected(),
 
-            Key::Char('r' | 'R') => {
-                library = lib::init();
-                main_view.library_tree = library.tree.clone();
-                main_view.expanded_path.clear();
-                main_view.list_selected = 0;
-                main_view.list_scroll = 0;
-                main_view.refresh_list();
-            }
+                    Key::Char('r' | 'R') => {
+                        library = lib::init();
+                        main_view.library_tree = library.tree.clone();
+                        main_view.expanded_path.clear();
+                        main_view.list_selected = 0;
+                        main_view.list_scroll = 0;
+                        main_view.refresh_list();
+                    }
 
-            Key::Char('t') => {
-                error::error_box(
-                    &terminal,
-                    &mut canvas,
-                    "This is a test warning\n\nDo you want to proceed",
-                    &["CANCEL", "CONFIRM"],
-                    0,
-                    0,
-                    main_view.min_w,
-                    main_view.min_h,
-                    |cvs, w, h| {
-                        if w != term_w || h != term_h {
-                            term_w = w;
-                            term_h = h;
-                            if term_w >= main_view.min_w && term_h >= main_view.min_h {
-                                main_view.resize(term_w, term_h);
-                            }
-                        }
-                        if term_w < main_view.min_w || term_h < main_view.min_h {
-                            toosmall::render(cvs, term_w, term_h);
-                        } else {
-                            main_view.render(cvs);
-                        }
-                    },
-                );
+                    Key::Char('t') => {
+                        error::error_box(
+                            &terminal,
+                            &mut canvas,
+                            "This is a test warning\n\nDo you want to proceed",
+                            &["CANCEL", "CONFIRM"],
+                            0,
+                            0,
+                            main_view.min_w,
+                            main_view.min_h,
+                            |cvs, w, h| {
+                                if w != term_w || h != term_h {
+                                    term_w = w;
+                                    term_h = h;
+                                    if term_w >= main_view.min_w && term_h >= main_view.min_h {
+                                        main_view.resize(term_w, term_h);
+                                    }
+                                }
+                                if term_w < main_view.min_w || term_h < main_view.min_h {
+                                    toosmall::render(cvs, term_w, term_h);
+                                } else {
+                                    main_view.render(cvs);
+                                }
+                            },
+                        );
+                    }
+                    Key::Char('T') => {
+                        error::error_screen(
+                            &terminal,
+                            &mut canvas,
+                            "This is a test warning\n\nDo you want to proceed",
+                            &["CANCEL", "CONFIRM"],
+                            main_view.min_w,
+                            main_view.min_h,
+                        );
+                    }
+                    _ => {}
+                }
+
+                dirty = true;
             }
-            Key::Char('T') => {
-                error::error_screen(
-                    &terminal,
-                    &mut canvas,
-                    "This is a test warning\n\nDo you want to proceed",
-                    &["CANCEL", "CONFIRM"],
-                    main_view.min_w,
-                    main_view.min_h,
-                );
-            }
-            _ => {}
         }
-
-        thread::sleep(Duration::from_millis(4));
     }
 }
