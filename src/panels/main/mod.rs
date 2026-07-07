@@ -3,6 +3,8 @@ pub mod list;
 pub mod mainbox;
 pub mod r#static;
 
+use std::path::PathBuf;
+
 use crate::{Border, Box, Canvas, Color, Modifier, Style, editor::Editor, lib::MacroNode};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -29,6 +31,7 @@ pub struct MainView {
     pub list_x: i16,
     pub list_y: i16,
     pub library_tree: Vec<MacroNode>,
+    pub library_root: PathBuf,
     pub expanded_path: Vec<usize>,
 
     pub tabs_box: Box,
@@ -50,6 +53,7 @@ impl MainView {
         term_h: u16,
         active: ActivePanel,
         library_tree: Vec<MacroNode>,
+        library_root: PathBuf,
     ) -> Self {
         let dummy = || {
             Box::new(
@@ -74,6 +78,7 @@ impl MainView {
             list_selected: 0,
             list_scroll: 0,
             library_tree,
+            library_root,
             expanded_path: Vec::new(),
             editor: Editor::new(),
             main_box: dummy(),
@@ -140,6 +145,7 @@ impl MainView {
             &self.expanded_path,
             &mut self.list_selected,
             &mut self.list_scroll,
+            self.editor.file_path.as_deref(),
         );
     }
 
@@ -159,6 +165,36 @@ impl MainView {
         self.refresh_list();
     }
 
+    pub fn check_editing_selection(&mut self) {
+        if !self.editor.is_editing {
+            return;
+        }
+
+        let (view_path, _) = list::resolve_view(&self.expanded_path, &self.library_tree);
+        let mut parent_nodes = &self.library_tree;
+
+        for &idx in &view_path {
+            if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
+                parent_nodes = children;
+            }
+        }
+
+        let is_still_selected = if let Some(node) = parent_nodes.get(self.list_selected) {
+            Some(node.path()) == self.editor.file_path.as_deref()
+        } else {
+            false
+        };
+
+        if !is_still_selected {
+            self.editor.save();
+            self.editor.is_editing = false;
+            self.editor.file_path = None;
+            self.editor.rel_path.clear();
+            self.editor.state.lines = vec![String::new()];
+            self.refresh_main();
+        }
+    }
+
     pub fn selection_up(&mut self) {
         if self.active != ActivePanel::List {
             return;
@@ -172,6 +208,7 @@ impl MainView {
                 self.expanded_path.pop();
             }
         }
+        self.check_editing_selection();
         self.refresh_list();
     }
 
@@ -196,6 +233,7 @@ impl MainView {
                 self.expanded_path.pop();
             }
         }
+        self.check_editing_selection();
         self.refresh_list();
     }
 
@@ -223,6 +261,7 @@ impl MainView {
                 self.list_selected = 0;
                 self.list_scroll = 0;
             }
+            self.check_editing_selection();
             self.refresh_list();
         }
     }
@@ -235,6 +274,7 @@ impl MainView {
         if let Some(previous_parent_idx) = self.expanded_path.pop() {
             self.list_selected = previous_parent_idx;
             self.list_scroll = 0;
+            self.check_editing_selection();
             self.refresh_list();
         }
     }
@@ -256,8 +296,14 @@ impl MainView {
         if let Some(node) = parent_nodes.get(self.list_selected) {
             match node {
                 MacroNode::Script { path, .. } => {
-                    self.editor.load_file(path.clone(), false);
+                    let rp = path
+                        .strip_prefix(&self.library_root)
+                        .unwrap_or(path)
+                        .to_string_lossy()
+                        .into_owned();
+                    self.editor.load_file(path.clone(), false, rp);
                     self.refresh_main();
+                    self.refresh_list();
                 }
                 _ => {}
             }
@@ -280,8 +326,14 @@ impl MainView {
 
         if let Some(node) = parent_nodes.get(self.list_selected) {
             if let MacroNode::Script { path, .. } = node {
-                self.editor.load_file(path.clone(), true);
+                let rp = path
+                    .strip_prefix(&self.library_root)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .into_owned();
+                self.editor.load_file(path.clone(), true, rp);
                 self.refresh_main();
+                self.refresh_list();
             }
         }
     }

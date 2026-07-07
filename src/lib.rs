@@ -1,5 +1,5 @@
 mod config;
-mod editor;
+pub mod editor;
 mod library;
 mod panels;
 mod render;

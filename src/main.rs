@@ -17,6 +17,7 @@ fn main() {
         term_h,
         main::ActivePanel::Main,
         library.tree.clone(),
+        library.root_path.clone(),
     );
     let mut canvas = Canvas::new(term_w, term_h);
 
@@ -54,9 +55,22 @@ fn main() {
                     if key == Key::Char('\x03') {
                         break;
                     }
-                    if key == Key::Tab {
+                    if main_view.editor.mode == nuui::editor::Mode::Command
+                        && (key == Key::Char('q') || key == Key::Char('Q'))
+                    {
+                        break;
+                    }
+                    if main_view.editor.mode == nuui::editor::Mode::Command
+                        && (key == Key::Tab || key == Key::Esc)
+                    {
                         main_view.editor.save();
                         main_view.toggle_focus();
+                        dirty = true;
+                        continue;
+                    }
+                    if main_view.editor.mode == nuui::editor::Mode::Insert && key == Key::Tab {
+                        main_view.editor.handle_key(key);
+                        main_view.refresh_main();
                         dirty = true;
                         continue;
                     }
@@ -90,7 +104,6 @@ fn main() {
                                 if term_w < main_view.min_w || term_h < main_view.min_h {
                                     toosmall::render(cvs, term_w, term_h);
                                 } else {
-                                    // appel settiongs here later ig
                                     main_view.render(cvs);
                                 }
                             },
@@ -112,9 +125,11 @@ fn main() {
                     Key::Char('r' | 'R') => {
                         library = lib::init();
                         main_view.library_tree = library.tree.clone();
+                        main_view.library_root = library.root_path.clone();
                         main_view.expanded_path.clear();
                         main_view.list_selected = 0;
                         main_view.list_scroll = 0;
+                        main_view.check_editing_selection();
                         main_view.refresh_list();
                     }
 

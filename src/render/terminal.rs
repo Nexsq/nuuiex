@@ -9,6 +9,11 @@ pub enum Key {
     Down,
     Left,
     Right,
+    ShiftUp,
+    ShiftDown,
+    ShiftLeft,
+    ShiftRight,
+    Delete,
     Char(char),
     Ctrl(char),
     Esc,
@@ -70,16 +75,32 @@ impl Terminal {
             8 | 127 => Key::Backspace,
             27 => {
                 match self.key_rx.recv_timeout(Duration::from_millis(16)) {
-                    Ok(b'[') => loop {
-                        match self.key_rx.recv_timeout(Duration::from_millis(16)) {
-                            Ok(b'A') => return Key::Up,
-                            Ok(b'B') => return Key::Down,
-                            Ok(b'C') => return Key::Right,
-                            Ok(b'D') => return Key::Left,
-                            Ok(b'0'..=b'9') | Ok(b';') => continue,
-                            _ => break,
+                    Ok(b'[') => {
+                        let mut seq = Vec::new();
+                        loop {
+                            match self.key_rx.recv_timeout(Duration::from_millis(16)) {
+                                Ok(b) => {
+                                    seq.push(b);
+                                    if b.is_ascii_alphabetic() || b == b'~' {
+                                        break;
+                                    }
+                                }
+                                Err(_) => break,
+                            }
                         }
-                    },
+                        return match seq.as_slice() {
+                            b"A" => Key::Up,
+                            b"B" => Key::Down,
+                            b"C" => Key::Right,
+                            b"D" => Key::Left,
+                            b"1;2A" => Key::ShiftUp,
+                            b"1;2B" => Key::ShiftDown,
+                            b"1;2C" => Key::ShiftRight,
+                            b"1;2D" => Key::ShiftLeft,
+                            b"3~" => Key::Delete,
+                            _ => Key::Esc,
+                        };
+                    }
                     _ => {}
                 }
                 Key::Esc

@@ -29,6 +29,7 @@ pub fn refresh(
     expanded_path: &[usize],
     list_selected: &mut usize,
     list_scroll: &mut usize,
+    editing_path: Option<&std::path::Path>,
 ) -> Box {
     let list_h = term_h.saturating_sub(TITLE_H);
 
@@ -229,6 +230,12 @@ pub fn refresh(
             ""
         };
 
+        let is_editing_this = if let Some(n) = item.node {
+            Some(n.path()) == editing_path
+        } else {
+            false
+        };
+
         if !base_name.is_empty() {
             if !text.is_empty() {
                 text.push(' ');
@@ -237,10 +244,18 @@ pub fn refresh(
         }
 
         let char_count = text.chars().count();
-        if char_count > max_text_len {
-            text = text.chars().take(max_text_len).collect();
+        let target_len = max_text_len.saturating_sub(2);
+        let e_len = if is_editing_this { 2 } else { 0 };
+        let allowed_len = target_len.saturating_sub(e_len);
+
+        if char_count > allowed_len {
+            text = text.chars().take(allowed_len).collect();
         } else {
-            text.push_str(&" ".repeat((max_text_len - char_count).saturating_sub(2)));
+            text.push_str(&" ".repeat(allowed_len - char_count));
+        }
+
+        if is_editing_this {
+            text.push_str(" •");
         }
 
         list_box.insert_text(
