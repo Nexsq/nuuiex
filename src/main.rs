@@ -9,10 +9,10 @@ fn main() {
     let mut config = conf::init();
     let mut library = lib::init();
 
-    println!("Test: {}", config.test);
-    println!("Border test: {}", config.border_test);
-    println!("Something: {}", config.something);
-    println!("Primary color: {}", config.primary_color);
+    // println!("Test: {}", config.test);
+    // println!("Border test: {}", config.border_test);
+    // println!("Something: {}", config.something);
+    // println!("Primary color: {}", config.primary_color);
 
     let terminal = Terminal::init();
     let (mut term_w, mut term_h) = Terminal::size();
