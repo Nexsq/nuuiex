@@ -72,7 +72,10 @@ impl Editor {
                 let lines: Vec<String> = if content.is_empty() {
                     vec![String::new()]
                 } else {
-                    content.lines().map(|s| s.to_string()).collect()
+                    content
+                        .split('\n')
+                        .map(|s| s.strip_suffix('\r').unwrap_or(s).to_string())
+                        .collect()
                 };
                 self.state = EditorState {
                     lines,
@@ -257,6 +260,10 @@ impl Editor {
                 self.push_undo();
                 self.delete_char_before();
             }
+            Key::CtrlBackspace | Key::Ctrl('w') | Key::Ctrl('h') => {
+                self.push_undo();
+                self.delete_word_before();
+            }
             Key::Delete => {
                 self.push_undo();
                 self.delete_char_after();
@@ -327,6 +334,68 @@ impl Editor {
         self.state.lines.insert(self.state.cursor_y + 1, new_line);
         self.state.cursor_y += 1;
         self.state.cursor_x = 0;
+    }
+
+    fn delete_word_before(&mut self) {
+        if self.state.cursor_x == 0 {
+            if self.state.cursor_y > 0 {
+                self.delete_char_before();
+            }
+            return;
+        }
+
+        let line = &self.state.lines[self.state.cursor_y];
+        let byte_idx = line
+            .char_indices()
+            .nth(self.state.cursor_x)
+            .map(|(i, _)| i)
+            .unwrap_or(line.len());
+
+        let (before, after) = line.split_at(byte_idx);
+
+        let mut rev_chars = before.chars().rev().peekable();
+        let mut deleted_count = 0;
+
+        while let Some(&c) = rev_chars.peek() {
+            if c.is_whitespace() {
+                deleted_count += 1;
+                rev_chars.next();
+            } else {
+                break;
+            }
+        }
+
+        if let Some(&c) = rev_chars.peek() {
+            let is_word = c.is_alphanumeric() || c == '_';
+            while let Some(&next_c) = rev_chars.peek() {
+                if next_c.is_whitespace() {
+                    break;
+                }
+                let next_is_word = next_c.is_alphanumeric() || next_c == '_';
+                if next_is_word == is_word {
+                    deleted_count += 1;
+                    rev_chars.next();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if deleted_count > 0 {
+            let new_cursor_x = self.state.cursor_x - deleted_count;
+            let new_byte_idx = line
+                .char_indices()
+                .nth(new_cursor_x)
+                .map(|(i, _)| i)
+                .unwrap_or(line.len());
+
+            let mut new_line = String::new();
+            new_line.push_str(&line[..new_byte_idx]);
+            new_line.push_str(after);
+
+            self.state.lines[self.state.cursor_y] = new_line;
+            self.state.cursor_x = new_cursor_x;
+        }
     }
 
     fn delete_char_before(&mut self) {

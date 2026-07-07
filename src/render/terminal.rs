@@ -20,6 +20,7 @@ pub enum Key {
     Enter,
     Tab,
     Backspace,
+    CtrlBackspace,
     None,
 }
 
@@ -72,7 +73,8 @@ impl Terminal {
         match b {
             9 => Key::Tab,
             10 | 13 => Key::Enter,
-            8 | 127 => Key::Backspace,
+            8 => Key::CtrlBackspace,
+            127 => Key::Backspace,
             27 => {
                 match self.key_rx.recv_timeout(Duration::from_millis(16)) {
                     Ok(b'[') => {
