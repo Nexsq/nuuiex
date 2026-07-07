@@ -6,8 +6,13 @@ use nuui::{conf, lib};
 use nuui::{error, main, settings, toosmall};
 
 fn main() {
-    let _config = conf::init();
+    let mut config = conf::init();
     let mut library = lib::init();
+
+    println!("Test: {}", config.test);
+    println!("Border test: {}", config.border_test);
+    println!("Something: {}", config.something);
+    println!("Primary color: {}", config.primary_color);
 
     let terminal = Terminal::init();
     let (mut term_w, mut term_h) = Terminal::size();
@@ -58,6 +63,7 @@ fn main() {
                         let should_quit = settings::settings_modal(
                             &terminal,
                             &mut canvas,
+                            &mut config,
                             main_view.min_w,
                             main_view.min_h,
                             |cvs, w, h| {
