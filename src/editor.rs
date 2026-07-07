@@ -636,7 +636,11 @@ impl Editor {
         let show_line_numbers = self.file_path.is_some();
         let line_count = self.state.lines.len();
         let max_num_width = line_count.to_string().len();
-        let prefix_width = if show_line_numbers { max_num_width + 3 } else { 0 };
+        let prefix_width = if show_line_numbers {
+            max_num_width + 3
+        } else {
+            0
+        };
 
         let text_inner_w = inner_w.saturating_sub(prefix_width);
 
@@ -669,7 +673,7 @@ impl Editor {
                     bg: Color::None,
                     md: Modifier::Dim,
                 };
-                
+
                 for (idx, c) in prefix_str.chars().enumerate() {
                     if idx < inner_w {
                         b.put_cell(
@@ -683,7 +687,12 @@ impl Editor {
 
             let chars: Vec<char> = line.chars().collect();
 
-            for (j, &c) in chars.iter().enumerate().skip(self.scroll_x).take(text_inner_w) {
+            for (j, &c) in chars
+                .iter()
+                .enumerate()
+                .skip(self.scroll_x)
+                .take(text_inner_w)
+            {
                 let display_x = (j - self.scroll_x + prefix_width) as i16;
 
                 let is_selected = if let Some((start, end)) = self.get_selection_bounds() {
