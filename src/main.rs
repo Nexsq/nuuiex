@@ -9,11 +9,6 @@ fn main() {
     let mut config = conf::init();
     let mut library = lib::init();
 
-    // println!("Test: {}", config.test);
-    // println!("Border test: {}", config.border_test);
-    // println!("Something: {}", config.something);
-    // println!("Primary color: {}", config.primary_color);
-
     let terminal = Terminal::init();
     let (mut term_w, mut term_h) = Terminal::size();
 
@@ -66,7 +61,7 @@ fn main() {
                             &mut config,
                             main_view.min_w,
                             main_view.min_h,
-                            |cvs, w, h| {
+                            |cvs, cfg, w, h| {
                                 if w != term_w || h != term_h {
                                     term_w = w;
                                     term_h = h;
@@ -77,6 +72,7 @@ fn main() {
                                 if term_w < main_view.min_w || term_h < main_view.min_h {
                                     toosmall::render(cvs, term_w, term_h);
                                 } else {
+                                    // appel settiongs here later ig
                                     main_view.render(cvs);
                                 }
                             },

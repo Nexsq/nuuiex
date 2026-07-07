@@ -48,7 +48,7 @@ pub fn settings_modal<F>(
     mut draw_background: F,
 ) -> bool
 where
-    F: FnMut(&mut Canvas, u16, u16),
+    F: FnMut(&mut Canvas, &Config, u16, u16),
 {
     let mut active_panel = ActiveSettingsPanel::Categories;
 
@@ -180,7 +180,7 @@ where
                 crate::toosmall::render(canvas, current_w, current_h);
                 canvas.render();
             } else {
-                draw_background(canvas, current_w, current_h);
+                draw_background(canvas, config, current_w, current_h);
                 canvas.apply_dim();
 
                 let term_w = canvas.width;
@@ -411,13 +411,13 @@ where
                                     *value = edit_buffer.clone();
                                 }
                             }
+                            apply_settings(&categories, config);
                             edit_mode = false;
                         }
                         Key::Esc => {
                             edit_mode = false;
                         }
                         Key::Char('\x03') => {
-                            apply_settings(&categories, config);
                             config.save();
                             return true;
                         }
@@ -436,12 +436,10 @@ where
 
                 match key {
                     Key::Esc => {
-                        apply_settings(&categories, config);
                         config.save();
                         return false;
                     }
                     Key::Char('q' | 'Q') | Key::Char('\x03') => {
-                        apply_settings(&categories, config);
                         config.save();
                         return true;
                     }
@@ -464,6 +462,7 @@ where
                                         } else {
                                             *idx = opts.len() - 1;
                                         }
+                                        apply_settings(&categories, config);
                                     }
                                     SettingType::Custom { .. } => {}
                                 }
@@ -484,6 +483,7 @@ where
                                         } else {
                                             *idx = 0;
                                         }
+                                        apply_settings(&categories, config);
                                     }
                                     SettingType::Custom { .. } => {}
                                 }
