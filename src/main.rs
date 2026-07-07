@@ -15,7 +15,7 @@ fn main() {
     let mut main_view = main::MainView::new(
         term_w,
         term_h,
-        main::ActivePanel::Main,
+        main::ActivePanel::List,
         library.tree.clone(),
         library.root_path.clone(),
     );
@@ -63,7 +63,6 @@ fn main() {
                     if main_view.editor.mode == nuui::editor::Mode::Command
                         && (key == Key::Tab || key == Key::Esc)
                     {
-                        main_view.editor.save();
                         main_view.toggle_focus();
                         dirty = true;
                         continue;
@@ -114,8 +113,6 @@ fn main() {
                         }
                     }
 
-                    Key::Char('e') => main_view.edit_selected(),
-
                     Key::Up => main_view.selection_up(),
                     Key::Down => main_view.selection_down(),
                     Key::Right => main_view.handle_right_arrow(),
@@ -129,7 +126,8 @@ fn main() {
                         main_view.expanded_path.clear();
                         main_view.list_selected = 0;
                         main_view.list_scroll = 0;
-                        main_view.check_editing_selection();
+                        main_view.auto_load();
+                        main_view.refresh_main();
                         main_view.refresh_list();
                     }
 

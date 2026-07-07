@@ -98,8 +98,52 @@ impl MainView {
             deck_y: 0,
         };
 
+        view.auto_load();
         view.resize(term_w, term_h);
         view
+    }
+
+    pub fn auto_load(&mut self) {
+        let (view_path, _) = list::resolve_view(&self.expanded_path, &self.library_tree);
+        let mut parent_nodes = &self.library_tree;
+
+        for &idx in &view_path {
+            if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
+                parent_nodes = children;
+            }
+        }
+
+        let mut to_load = None;
+        let mut is_folder = false;
+
+        if let Some(node) = parent_nodes.get(self.list_selected) {
+            match node {
+                MacroNode::Script { path, .. } => {
+                    let rp = path
+                        .strip_prefix(&self.library_root)
+                        .unwrap_or(path)
+                        .to_string_lossy()
+                        .into_owned();
+                    to_load = Some((path.clone(), rp));
+                }
+                MacroNode::Folder { .. } => {
+                    is_folder = true;
+                }
+            }
+        } else {
+            is_folder = true;
+        }
+
+        if let Some((path, rp)) = to_load {
+            if self.editor.file_path.as_deref() != Some(path.as_path()) {
+                self.editor.load_file(path, false, rp);
+            }
+        } else if is_folder {
+            self.editor.file_path = None;
+            self.editor.rel_path.clear();
+            self.editor.state.lines = vec![String::new()];
+            self.editor.is_editing = false;
+        }
     }
 
     pub fn resize(&mut self, term_w: u16, term_h: u16) {
@@ -156,43 +200,21 @@ impl MainView {
     }
 
     pub fn toggle_focus(&mut self) {
-        self.active = if self.active == ActivePanel::Main {
-            ActivePanel::List
+        if self.active == ActivePanel::Main {
+            self.active = ActivePanel::List;
+            if self.editor.is_editing {
+                self.editor.save();
+                self.editor.is_editing = false;
+            }
+            self.auto_load();
         } else {
-            ActivePanel::Main
-        };
-        self.refresh_main();
-        self.refresh_list();
-    }
-
-    pub fn check_editing_selection(&mut self) {
-        if !self.editor.is_editing {
-            return;
-        }
-
-        let (view_path, _) = list::resolve_view(&self.expanded_path, &self.library_tree);
-        let mut parent_nodes = &self.library_tree;
-
-        for &idx in &view_path {
-            if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
-                parent_nodes = children;
+            self.active = ActivePanel::Main;
+            if self.editor.file_path.is_some() {
+                self.editor.is_editing = true;
             }
         }
-
-        let is_still_selected = if let Some(node) = parent_nodes.get(self.list_selected) {
-            Some(node.path()) == self.editor.file_path.as_deref()
-        } else {
-            false
-        };
-
-        if !is_still_selected {
-            self.editor.save();
-            self.editor.is_editing = false;
-            self.editor.file_path = None;
-            self.editor.rel_path.clear();
-            self.editor.state.lines = vec![String::new()];
-            self.refresh_main();
-        }
+        self.refresh_main();
+        self.refresh_list();
     }
 
     pub fn selection_up(&mut self) {
@@ -208,7 +230,8 @@ impl MainView {
                 self.expanded_path.pop();
             }
         }
-        self.check_editing_selection();
+        self.auto_load();
+        self.refresh_main();
         self.refresh_list();
     }
 
@@ -233,7 +256,8 @@ impl MainView {
                 self.expanded_path.pop();
             }
         }
-        self.check_editing_selection();
+        self.auto_load();
+        self.refresh_main();
         self.refresh_list();
     }
 
@@ -255,13 +279,22 @@ impl MainView {
             }
         }
 
+        let mut do_expand = false;
+        let mut reset_scroll = false;
+
         if let Some(MacroNode::Folder { children, .. }) = current_nodes.get(self.list_selected) {
+            do_expand = true;
+            reset_scroll = !children.is_empty();
+        }
+
+        if do_expand {
             self.expanded_path.push(self.list_selected);
-            if !children.is_empty() {
+            if reset_scroll {
                 self.list_selected = 0;
                 self.list_scroll = 0;
             }
-            self.check_editing_selection();
+            self.auto_load();
+            self.refresh_main();
             self.refresh_list();
         }
     }
@@ -274,7 +307,8 @@ impl MainView {
         if let Some(previous_parent_idx) = self.expanded_path.pop() {
             self.list_selected = previous_parent_idx;
             self.list_scroll = 0;
-            self.check_editing_selection();
+            self.auto_load();
+            self.refresh_main();
             self.refresh_list();
         }
     }
@@ -293,48 +327,21 @@ impl MainView {
             }
         }
 
+        let mut should_switch = false;
         if let Some(node) = parent_nodes.get(self.list_selected) {
-            match node {
-                MacroNode::Script { path, .. } => {
-                    let rp = path
-                        .strip_prefix(&self.library_root)
-                        .unwrap_or(path)
-                        .to_string_lossy()
-                        .into_owned();
-                    self.editor.load_file(path.clone(), false, rp);
-                    self.refresh_main();
-                    self.refresh_list();
-                }
-                _ => {}
-            }
-        }
-    }
+            if let MacroNode::Script { name, .. } = node {
+                self.editor.state.lines = vec![name.clone()];
 
-    pub fn edit_selected(&mut self) {
-        if self.active != ActivePanel::List {
-            return;
-        }
-
-        let (view_path, _) = list::resolve_view(&self.expanded_path, &self.library_tree);
-        let mut parent_nodes = &self.library_tree;
-
-        for &idx in &view_path {
-            if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
-                parent_nodes = children;
+                self.editor.file_path = None;
+                should_switch = true;
             }
         }
 
-        if let Some(node) = parent_nodes.get(self.list_selected) {
-            if let MacroNode::Script { path, .. } = node {
-                let rp = path
-                    .strip_prefix(&self.library_root)
-                    .unwrap_or(path)
-                    .to_string_lossy()
-                    .into_owned();
-                self.editor.load_file(path.clone(), true, rp);
-                self.refresh_main();
-                self.refresh_list();
-            }
+        if should_switch {
+            self.active = ActivePanel::Main;
+            self.editor.is_editing = false;
+            self.refresh_main();
+            self.refresh_list();
         }
     }
 

@@ -230,8 +230,9 @@ pub fn refresh(
             ""
         };
 
+        let is_active_main = active == ActivePanel::Main;
         let is_editing_this = if let Some(n) = item.node {
-            Some(n.path()) == editing_path
+            is_active_main && Some(n.path()) == editing_path
         } else {
             false
         };
