@@ -105,7 +105,7 @@ fn main() {
                     }
 
                     Key::Char('t') => {
-                        error::error_box(
+                        let result = error::error_box(
                             &terminal,
                             &mut canvas,
                             "This is a test warning\n\nDo you want to proceed",
@@ -129,9 +129,13 @@ fn main() {
                                 }
                             },
                         );
+
+                        if result == nuui::PanelResult::Quit {
+                            break;
+                        }
                     }
                     Key::Char('T') => {
-                        error::error_screen(
+                        let result = error::error_screen(
                             &terminal,
                             &mut canvas,
                             "This is a test warning\n\nDo you want to proceed",
@@ -139,6 +143,10 @@ fn main() {
                             main_view.min_w,
                             main_view.min_h,
                         );
+
+                        if result == nuui::PanelResult::Quit {
+                            break;
+                        }
                     }
                     _ => continue,
                 }

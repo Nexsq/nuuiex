@@ -416,6 +416,11 @@ where
                         Key::Esc => {
                             edit_mode = false;
                         }
+                        Key::Char('\x03') => {
+                            apply_settings(&categories, config);
+                            config.save();
+                            return true;
+                        }
                         Key::Char(c) => {
                             if c == '\x08' || c == '\x7F' {
                                 edit_buffer.pop();
@@ -430,16 +435,12 @@ where
                 }
 
                 match key {
-                    Key::Esc | Key::Char('q' | 'Q') => {
-                        if active_panel == ActiveSettingsPanel::Details {
-                            active_panel = ActiveSettingsPanel::Categories;
-                        } else {
-                            apply_settings(&categories, config);
-                            config.save();
-                            return false;
-                        }
+                    Key::Esc => {
+                        apply_settings(&categories, config);
+                        config.save();
+                        return false;
                     }
-                    Key::Char('\x03') => {
+                    Key::Char('q' | 'Q') | Key::Char('\x03') => {
                         apply_settings(&categories, config);
                         config.save();
                         return true;

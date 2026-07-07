@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::{Border, Box, Canvas, Color, Key, Modifier, Style, Terminal};
+use crate::{Border, Box, Canvas, Color, Key, Modifier, PanelResult, Style, Terminal};
 
 pub fn error_box<F>(
     terminal: &Terminal,
@@ -12,7 +12,7 @@ pub fn error_box<F>(
     min_w: u16,
     min_h: u16,
     mut draw_background: F,
-) -> usize
+) -> PanelResult
 where
     F: FnMut(&mut Canvas, u16, u16),
 {
@@ -144,8 +144,9 @@ where
                             selected_idx = 0;
                         }
                     }
-                    Key::Enter => return selected_idx,
-                    Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
+                    Key::Enter => return PanelResult::Ok(selected_idx),
+                    Key::Esc => return PanelResult::Cancel,
+                    Key::Char('q' | 'Q') | Key::Char('\x03') => return PanelResult::Quit,
                     _ => continue,
                 }
                 dirty = true;
@@ -161,7 +162,7 @@ pub fn error_screen(
     options: &[&str],
     min_w: u16,
     min_h: u16,
-) -> usize {
+) -> PanelResult {
     let total_opts_len = options
         .iter()
         .map(|opt| opt.chars().count() + 4)
@@ -270,8 +271,9 @@ pub fn error_screen(
                             selected_idx = 0;
                         }
                     }
-                    Key::Enter => return selected_idx,
-                    Key::Char('q' | 'Q') | Key::Esc | Key::Char('\x03') => return 0,
+                    Key::Enter => return PanelResult::Ok(selected_idx),
+                    Key::Esc => return PanelResult::Cancel,
+                    Key::Char('q' | 'Q') | Key::Char('\x03') => return PanelResult::Quit,
                     _ => continue,
                 }
                 dirty = true;
