@@ -153,8 +153,12 @@ impl Editor {
             }
             Key::Char('0') => {
                 self.state.selection_start = None;
-                let len = self.state.lines[self.state.cursor_y].chars().count();
-                self.state.cursor_x = len.saturating_sub(1);
+                self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
+            }
+            Key::Char('a') => {
+                self.state.selection_start = Some((0, 0));
+                self.state.cursor_y = self.state.lines.len().saturating_sub(1);
+                self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
             }
             Key::Char('w') => self.jump_word_forward(),
             Key::Char('b') => self.jump_word_backward(),
@@ -171,8 +175,7 @@ impl Editor {
             Key::Char('G') => {
                 self.state.selection_start = None;
                 self.state.cursor_y = self.state.lines.len().saturating_sub(1);
-                let len = self.state.lines[self.state.cursor_y].chars().count();
-                self.state.cursor_x = len.saturating_sub(1);
+                self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
             }
             Key::Char('d') => {
                 if self.state.selection_start.is_some() {
@@ -290,12 +293,7 @@ impl Editor {
 
         let x = self.state.cursor_x as isize + dx;
         let max_x = self.state.lines[y].chars().count();
-        let limit = if self.mode == Mode::Insert || shift {
-            max_x
-        } else {
-            max_x.saturating_sub(1)
-        };
-        let x = x.clamp(0, limit as isize) as usize;
+        let x = x.clamp(0, max_x as isize) as usize;
         self.state.cursor_x = x;
     }
 
@@ -305,13 +303,8 @@ impl Editor {
             self.state.cursor_y = max_y;
         }
         let max_x = self.state.lines[self.state.cursor_y].chars().count();
-        let limit = if self.mode == Mode::Insert || self.state.selection_start.is_some() {
-            max_x
-        } else {
-            max_x.saturating_sub(1)
-        };
-        if self.state.cursor_x > limit {
-            self.state.cursor_x = limit;
+        if self.state.cursor_x > max_x {
+            self.state.cursor_x = max_x;
         }
     }
 
@@ -536,7 +529,7 @@ impl Editor {
     fn jump_word_forward(&mut self) {
         self.state.selection_start = None;
         let line = &self.state.lines[self.state.cursor_y];
-        if self.state.cursor_x >= line.chars().count().saturating_sub(1) {
+        if self.state.cursor_x >= line.chars().count() {
             if self.state.cursor_y < self.state.lines.len() - 1 {
                 self.state.cursor_y += 1;
                 self.state.cursor_x = 0;
@@ -568,10 +561,7 @@ impl Editor {
         if self.state.cursor_x == 0 {
             if self.state.cursor_y > 0 {
                 self.state.cursor_y -= 1;
-                self.state.cursor_x = self.state.lines[self.state.cursor_y]
-                    .chars()
-                    .count()
-                    .saturating_sub(1);
+                self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
             }
             return;
         }
@@ -643,6 +633,13 @@ impl Editor {
         let inner_w = width.saturating_sub(2) as usize;
         let inner_h = height.saturating_sub(2) as usize;
 
+        let show_line_numbers = self.file_path.is_some();
+        let line_count = self.state.lines.len();
+        let max_num_width = line_count.to_string().len();
+        let prefix_width = if show_line_numbers { max_num_width + 3 } else { 0 };
+
+        let text_inner_w = inner_w.saturating_sub(prefix_width);
+
         if self.state.cursor_y < self.scroll_y {
             self.scroll_y = self.state.cursor_y;
         } else if self.state.cursor_y >= self.scroll_y + inner_h && inner_h > 0 {
@@ -651,8 +648,8 @@ impl Editor {
 
         if self.state.cursor_x < self.scroll_x {
             self.scroll_x = self.state.cursor_x;
-        } else if self.state.cursor_x >= self.scroll_x + inner_w && inner_w > 0 {
-            self.scroll_x = self.state.cursor_x - inner_w + 1;
+        } else if self.state.cursor_x >= self.scroll_x + text_inner_w && text_inner_w > 0 {
+            self.scroll_x = self.state.cursor_x - text_inner_w + 1;
         }
 
         for (i, line) in self
@@ -664,10 +661,30 @@ impl Editor {
             .take(inner_h)
         {
             let display_y = (i - self.scroll_y) as i16;
+
+            if show_line_numbers {
+                let prefix_str = format!("{:<w$} | ", i + 1, w = max_num_width);
+                let prefix_style = Style {
+                    fg: Color::DarkGray,
+                    bg: Color::None,
+                    md: Modifier::Dim,
+                };
+                
+                for (idx, c) in prefix_str.chars().enumerate() {
+                    if idx < inner_w {
+                        b.put_cell(
+                            crate::Cell { c, s: prefix_style },
+                            idx as u16 + 1,
+                            display_y as u16 + 1,
+                        );
+                    }
+                }
+            }
+
             let chars: Vec<char> = line.chars().collect();
 
-            for (j, &c) in chars.iter().enumerate().skip(self.scroll_x).take(inner_w) {
-                let display_x = (j - self.scroll_x) as i16;
+            for (j, &c) in chars.iter().enumerate().skip(self.scroll_x).take(text_inner_w) {
+                let display_x = (j - self.scroll_x + prefix_width) as i16;
 
                 let is_selected = if let Some((start, end)) = self.get_selection_bounds() {
                     let p_start = (start.0, start.1);
@@ -698,16 +715,18 @@ impl Editor {
                     style.fg = Color::Black;
                 }
 
-                b.put_cell(
-                    crate::Cell { c, s: style },
-                    display_x as u16 + 1,
-                    display_y as u16 + 1,
-                );
+                if (display_x as usize) < inner_w {
+                    b.put_cell(
+                        crate::Cell { c, s: style },
+                        display_x as u16 + 1,
+                        display_y as u16 + 1,
+                    );
+                }
             }
 
             if self.is_editing && i == self.state.cursor_y && self.state.cursor_x == chars.len() {
                 if self.state.cursor_x >= self.scroll_x {
-                    let display_x = self.state.cursor_x - self.scroll_x;
+                    let display_x = self.state.cursor_x - self.scroll_x + prefix_width;
                     if display_x < inner_w {
                         b.put_cell(
                             crate::Cell {
