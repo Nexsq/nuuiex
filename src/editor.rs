@@ -242,9 +242,6 @@ impl Editor {
         match key {
             Key::Esc => {
                 self.mode = Mode::Command;
-                if self.state.cursor_x > 0 {
-                    self.state.cursor_x -= 1;
-                }
                 self.state.selection_start = None;
                 self.clamp_cursor();
             }
