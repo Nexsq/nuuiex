@@ -10,8 +10,11 @@ pub enum Key {
     Left,
     Right,
     Char(char),
+    Ctrl(char),
     Esc,
     Enter,
+    Tab,
+    Backspace,
     None,
 }
 
@@ -62,6 +65,9 @@ impl Terminal {
         };
 
         match b {
+            9 => Key::Tab,
+            10 | 13 => Key::Enter,
+            8 | 127 => Key::Backspace,
             27 => {
                 match self.key_rx.recv_timeout(Duration::from_millis(16)) {
                     Ok(b'[') => loop {
@@ -78,7 +84,13 @@ impl Terminal {
                 }
                 Key::Esc
             }
-            10 | 13 => Key::Enter,
+            b if b < 32 => {
+                if b >= 1 && b <= 26 {
+                    Key::Ctrl((b + 96) as char)
+                } else {
+                    Key::Char(b as char)
+                }
+            }
             b => Key::Char(b as char),
         }
     }

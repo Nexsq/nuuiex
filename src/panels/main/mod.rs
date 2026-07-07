@@ -3,7 +3,7 @@ pub mod list;
 pub mod mainbox;
 pub mod r#static;
 
-use crate::{Border, Box, Canvas, Color, Modifier, Style, lib::MacroNode};
+use crate::{Border, Box, Canvas, Color, Modifier, Style, editor::Editor, lib::MacroNode};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ActivePanel {
@@ -20,10 +20,10 @@ pub struct MainView {
     pub list_selected: usize,
     pub list_scroll: usize,
 
+    pub editor: Editor,
     pub main_box: Box,
     pub main_x: i16,
     pub main_y: i16,
-    pub main_buffer: String,
 
     pub list_box: Box,
     pub list_x: i16,
@@ -49,7 +49,6 @@ impl MainView {
         term_w: u16,
         term_h: u16,
         active: ActivePanel,
-        main_buffer: String,
         library_tree: Vec<MacroNode>,
     ) -> Self {
         let dummy = || {
@@ -76,7 +75,7 @@ impl MainView {
             list_scroll: 0,
             library_tree,
             expanded_path: Vec::new(),
-            main_buffer,
+            editor: Editor::new(),
             main_box: dummy(),
             main_x: 0,
             main_y: 0,
@@ -126,7 +125,11 @@ impl MainView {
     }
 
     pub fn refresh_main(&mut self) {
-        self.main_box = mainbox::refresh(self.term_w, self.term_h, self.active, &self.main_buffer);
+        self.main_box = self.editor.render(
+            self.term_w.saturating_sub(layout::TABS_W + layout::LIST_W),
+            self.term_h.saturating_sub(layout::DECK_H),
+            self.active == ActivePanel::Main,
+        );
     }
 
     pub fn refresh_list(&mut self) {
@@ -253,20 +256,32 @@ impl MainView {
         if let Some(node) = parent_nodes.get(self.list_selected) {
             match node {
                 MacroNode::Script { path, .. } => {
-                    self.main_buffer.clear();
-
-                    match std::fs::read_to_string(path) {
-                        Ok(contents) => {
-                            self.main_buffer = contents;
-                        }
-                        Err(e) => {
-                            self.main_buffer = format!("Error reading macro file:\n{}", e);
-                        }
-                    }
-
+                    self.editor.load_file(path.clone(), false);
                     self.refresh_main();
                 }
                 _ => {}
+            }
+        }
+    }
+
+    pub fn edit_selected(&mut self) {
+        if self.active != ActivePanel::List {
+            return;
+        }
+
+        let (view_path, _) = list::resolve_view(&self.expanded_path, &self.library_tree);
+        let mut parent_nodes = &self.library_tree;
+
+        for &idx in &view_path {
+            if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
+                parent_nodes = children;
+            }
+        }
+
+        if let Some(node) = parent_nodes.get(self.list_selected) {
+            if let MacroNode::Script { path, .. } = node {
+                self.editor.load_file(path.clone(), true);
+                self.refresh_main();
             }
         }
     }

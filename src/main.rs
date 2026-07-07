@@ -16,7 +16,6 @@ fn main() {
         term_w,
         term_h,
         main::ActivePanel::Main,
-        String::new(),
         library.tree.clone(),
     );
     let mut canvas = Canvas::new(term_w, term_h);
@@ -51,8 +50,27 @@ fn main() {
         match terminal.read_key(Duration::from_millis(16)) {
             Key::None => continue,
             key => {
+                if main_view.active == main::ActivePanel::Main && main_view.editor.is_editing {
+                    if key == Key::Char('\x03') {
+                        break;
+                    }
+                    if key == Key::Tab {
+                        main_view.editor.save();
+                        main_view.toggle_focus();
+                        dirty = true;
+                        continue;
+                    }
+
+                    main_view.editor.handle_key(key);
+                    main_view.refresh_main();
+                    dirty = true;
+                    continue;
+                }
+
                 match key {
                     Key::Char('q' | 'Q') | Key::Char('\x03') => break,
+
+                    Key::Tab => main_view.toggle_focus(),
 
                     Key::Esc => {
                         let should_quit = settings::settings_modal(
@@ -83,7 +101,7 @@ fn main() {
                         }
                     }
 
-                    Key::Char('e' | 'E') => main_view.toggle_focus(),
+                    Key::Char('e') => main_view.edit_selected(),
 
                     Key::Up => main_view.selection_up(),
                     Key::Down => main_view.selection_down(),

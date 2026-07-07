@@ -443,7 +443,7 @@ where
                         config.save();
                         return true;
                     }
-                    Key::Char('e' | 'E') => {
+                    Key::Tab => {
                         active_panel = if active_panel == ActiveSettingsPanel::Categories {
                             ActiveSettingsPanel::Details
                         } else {
