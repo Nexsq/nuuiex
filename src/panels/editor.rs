@@ -21,6 +21,7 @@ pub struct EditorState {
 pub struct Editor {
     pub is_editing: bool,
     pub mode: Mode,
+    pub visual_mode: bool,
     pub state: EditorState,
     pub scroll_x: usize,
     pub scroll_y: usize,
@@ -48,6 +49,7 @@ impl Editor {
         Self {
             is_editing: false,
             mode: Mode::Command,
+            visual_mode: false,
             state: EditorState {
                 lines: vec![String::new()],
                 cursor_x: 0,
@@ -104,6 +106,7 @@ impl Editor {
         self.scroll_x = 0;
         self.scroll_y = 0;
         self.mode = Mode::Command;
+        self.visual_mode = false;
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.reset_keys();
@@ -143,28 +146,49 @@ impl Editor {
 
         match key {
             Key::Char('i') | Key::Esc => {
+                self.visual_mode = false;
                 self.state.selection_start = None;
                 self.mode = Mode::Insert;
             }
-            Key::Left | Key::Char('h') => self.move_cursor(-1, 0, false),
-            Key::Right | Key::Char('l') => self.move_cursor(1, 0, false),
-            Key::Up | Key::Char('k') => self.move_cursor(0, -1, false),
-            Key::Down | Key::Char('j') => self.move_cursor(0, 1, false),
-            Key::ShiftLeft | Key::Shift('h') => self.move_cursor(-1, 0, true),
-            Key::ShiftRight | Key::Shift('l') => self.move_cursor(1, 0, true),
-            Key::ShiftUp | Key::Shift('k') => self.move_cursor(0, -1, true),
-            Key::ShiftDown | Key::Shift('j') => self.move_cursor(0, 1, true),
+            Key::Char('v') => {
+                if self.visual_mode {
+                    self.visual_mode = false;
+                    self.state.selection_start = None;
+                } else {
+                    self.visual_mode = true;
+                    self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
+                }
+            }
+            Key::Left | Key::Char('h') => self.move_cursor(-1, 0, self.visual_mode),
+            Key::Right | Key::Char('l') => self.move_cursor(1, 0, self.visual_mode),
+            Key::Up | Key::Char('k') => self.move_cursor(0, -1, self.visual_mode),
+            Key::Down | Key::Char('j') => self.move_cursor(0, 1, self.visual_mode),
+            Key::CtrlLeft | Key::Ctrl('h') | Key::Char('b') => {
+                self.jump_word_backward(self.visual_mode)
+            }
+            Key::CtrlRight | Key::Ctrl('l') | Key::Char('w') => {
+                self.jump_word_forward(self.visual_mode)
+            }
+            Key::CtrlUp | Key::Ctrl('k') => self.jump_block_backward(self.visual_mode),
+            Key::CtrlDown | Key::Ctrl('j') => self.jump_block_forward(self.visual_mode),
+
             Key::Char('1') => {
-                self.state.selection_start = None;
+                if !self.visual_mode {
+                    self.state.selection_start = None;
+                }
                 self.state.cursor_x = 0;
             }
             Key::Char('0') => {
-                self.state.selection_start = None;
+                if !self.visual_mode {
+                    self.state.selection_start = None;
+                }
                 self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
             }
             Key::Char('a') => {
                 if self.last_key_a {
-                    self.state.selection_start = Some((0, 0));
+                    if !self.visual_mode {
+                        self.state.selection_start = None;
+                    }
                     self.state.cursor_y = self.state.lines.len().saturating_sub(1);
                     self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
                 } else {
@@ -172,14 +196,6 @@ impl Editor {
                     self.last_key_a = true;
                 }
             }
-            Key::CtrlLeft | Key::Ctrl('h') | Key::Char('b') => self.jump_word_backward(false),
-            Key::CtrlRight | Key::Ctrl('l') | Key::Char('w') => self.jump_word_forward(false),
-            Key::CtrlUp | Key::Ctrl('k') => self.jump_block_backward(false),
-            Key::CtrlDown | Key::Ctrl('j') => self.jump_block_forward(false),
-            Key::CtrlShiftLeft => self.jump_word_backward(true),
-            Key::CtrlShiftRight => self.jump_word_forward(true),
-            Key::CtrlShiftUp => self.jump_block_backward(true),
-            Key::CtrlShiftDown => self.jump_block_forward(true),
             Key::Delete => {
                 self.push_undo();
                 if self.state.selection_start.is_some() {
@@ -188,20 +204,10 @@ impl Editor {
                     self.delete_char_after();
                 }
             }
-            Key::Char('!') => {
-                if self.state.selection_start.is_none() {
-                    self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
-                }
-                self.state.cursor_x = 0;
-            }
-            Key::Char(')') => {
-                if self.state.selection_start.is_none() {
-                    self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
-                }
-                self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
-            }
             Key::Char('g') => {
-                self.state.selection_start = None;
+                if !self.visual_mode {
+                    self.state.selection_start = None;
+                }
                 if self.last_key_g {
                     self.state.cursor_y = 0;
                     self.state.cursor_x = 0;
@@ -211,7 +217,9 @@ impl Editor {
                 }
             }
             Key::Shift('g') => {
-                self.state.selection_start = None;
+                if !self.visual_mode {
+                    self.state.selection_start = None;
+                }
                 self.state.cursor_y = self.state.lines.len().saturating_sub(1);
                 self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
             }
@@ -279,6 +287,7 @@ impl Editor {
         match key {
             Key::Esc => {
                 self.mode = Mode::Command;
+                self.visual_mode = false;
                 self.state.selection_start = None;
                 self.clamp_cursor();
             }
@@ -296,6 +305,10 @@ impl Editor {
                 }
                 self.insert_newline();
             }
+            Key::CtrlLeft => self.jump_word_backward(false),
+            Key::CtrlRight => self.jump_word_forward(false),
+            Key::CtrlUp => self.jump_block_backward(false),
+            Key::CtrlDown => self.jump_block_forward(false),
             Key::Backspace => {
                 self.push_undo();
                 if self.state.selection_start.is_some() {
@@ -304,14 +317,14 @@ impl Editor {
                     self.delete_char_before();
                 }
             }
-            Key::CtrlLeft => self.jump_word_backward(false),
-            Key::CtrlRight => self.jump_word_forward(false),
-            Key::CtrlUp => self.jump_block_backward(false),
-            Key::CtrlDown => self.jump_block_forward(false),
-            Key::CtrlShiftLeft => self.jump_word_backward(true),
-            Key::CtrlShiftRight => self.jump_word_forward(true),
-            Key::CtrlShiftUp => self.jump_block_backward(true),
-            Key::CtrlShiftDown => self.jump_block_forward(true),
+            Key::Delete => {
+                self.push_undo();
+                if self.state.selection_start.is_some() {
+                    self.delete_selection();
+                } else {
+                    self.delete_char_after();
+                }
+            }
             Key::CtrlBackspace => {
                 self.push_undo();
                 if self.state.selection_start.is_some() {
@@ -326,14 +339,6 @@ impl Editor {
                     self.delete_selection();
                 } else {
                     self.delete_word_after();
-                }
-            }
-            Key::Delete => {
-                self.push_undo();
-                if self.state.selection_start.is_some() {
-                    self.delete_selection();
-                } else {
-                    self.delete_char_after();
                 }
             }
             Key::Tab => {
@@ -357,8 +362,8 @@ impl Editor {
         }
     }
 
-    fn move_cursor(&mut self, dx: isize, dy: isize, shift: bool) {
-        if shift {
+    fn move_cursor(&mut self, dx: isize, dy: isize, select: bool) {
+        if select {
             if self.state.selection_start.is_none() {
                 self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
             }
@@ -594,12 +599,44 @@ impl Editor {
     fn paste_from_clipboard(&mut self) {
         if let Some(cb) = &mut self.clipboard {
             if let Ok(text) = cb.get_text() {
-                for c in text.chars() {
-                    if c == '\n' {
-                        self.insert_newline();
-                    } else if c != '\r' {
-                        self.insert_char(c);
+                let lines_to_insert: Vec<&str> = text.split('\n').collect();
+                if lines_to_insert.is_empty() {
+                    return;
+                }
+
+                let line = &mut self.state.lines[self.state.cursor_y];
+                let byte_idx = line
+                    .char_indices()
+                    .nth(self.state.cursor_x)
+                    .map(|(i, _)| i)
+                    .unwrap_or(line.len());
+                let after = line.split_off(byte_idx);
+
+                if lines_to_insert.len() == 1 {
+                    let cleaned = lines_to_insert[0].replace('\r', "");
+                    self.state.lines[self.state.cursor_y].push_str(&cleaned);
+                    self.state.cursor_x += cleaned.chars().count();
+                    self.state.lines[self.state.cursor_y].push_str(&after);
+                } else {
+                    let first_cleaned = lines_to_insert[0].replace('\r', "");
+                    self.state.lines[self.state.cursor_y].push_str(&first_cleaned);
+
+                    let mut new_lines = Vec::new();
+                    for i in 1..lines_to_insert.len() - 1 {
+                        new_lines.push(lines_to_insert[i].replace('\r', ""));
                     }
+
+                    let last_cleaned = lines_to_insert.last().unwrap().replace('\r', "");
+                    self.state.cursor_x = last_cleaned.chars().count();
+
+                    let mut final_line = String::new();
+                    final_line.push_str(&last_cleaned);
+                    final_line.push_str(&after);
+                    new_lines.push(final_line);
+
+                    let insert_idx = self.state.cursor_y + 1;
+                    self.state.lines.splice(insert_idx..insert_idx, new_lines);
+                    self.state.cursor_y += lines_to_insert.len() - 1;
                 }
             }
         }
@@ -629,57 +666,58 @@ impl Editor {
     fn delete_selection(&mut self) {
         if let Some((start, end)) = self.get_selection_bounds() {
             let mut text = String::new();
-            let mut new_lines = Vec::new();
 
-            for (i, line) in self.state.lines.iter().enumerate() {
-                if i < start.1 || i > end.1 {
-                    new_lines.push(line.clone());
-                } else if start.1 == end.1 {
-                    let mut new_line = String::new();
-                    for (j, c) in line.chars().enumerate() {
-                        if j < start.0 || j >= end.0 {
-                            new_line.push(c);
-                        } else {
-                            text.push(c);
-                        }
-                    }
-                    new_lines.push(new_line);
-                } else {
-                    if i == start.1 {
-                        let mut new_line = String::new();
-                        for (j, c) in line.chars().enumerate() {
-                            if j < start.0 {
-                                new_line.push(c);
-                            } else {
-                                text.push(c);
-                            }
-                        }
-                        text.push('\n');
-                        new_lines.push(new_line);
-                    } else if i == end.1 {
-                        let mut new_line = String::new();
-                        for (j, c) in line.chars().enumerate() {
-                            if j >= end.0 {
-                                new_line.push(c);
-                            } else {
-                                text.push(c);
-                            }
-                        }
-                        let last = new_lines.pop().unwrap();
-                        new_lines.push(last + &new_line);
+            if start.1 == end.1 {
+                let line = &self.state.lines[start.1];
+                let mut new_line = String::with_capacity(line.len());
+                for (j, c) in line.chars().enumerate() {
+                    if j < start.0 || j >= end.0 {
+                        new_line.push(c);
                     } else {
-                        for c in line.chars() {
-                            text.push(c);
-                        }
-                        text.push('\n');
+                        text.push(c);
                     }
                 }
+                self.state.lines[start.1] = new_line;
+            } else {
+                let start_line = &self.state.lines[start.1];
+                let mut new_start_line = String::new();
+                for (j, c) in start_line.chars().enumerate() {
+                    if j < start.0 {
+                        new_start_line.push(c);
+                    } else {
+                        text.push(c);
+                    }
+                }
+                text.push('\n');
+
+                for i in (start.1 + 1)..end.1 {
+                    text.push_str(&self.state.lines[i]);
+                    text.push('\n');
+                }
+
+                let end_line = &self.state.lines[end.1];
+                let mut new_end_line = String::new();
+                for (j, c) in end_line.chars().enumerate() {
+                    if j >= end.0 {
+                        new_end_line.push(c);
+                    } else {
+                        text.push(c);
+                    }
+                }
+
+                new_start_line.push_str(&new_end_line);
+
+                if end.1 > start.1 {
+                    self.state.lines.drain((start.1 + 1)..=end.1);
+                }
+
+                self.state.lines[start.1] = new_start_line;
             }
 
-            self.state.lines = new_lines;
             self.state.cursor_x = start.0;
             self.state.cursor_y = start.1;
             self.state.selection_start = None;
+            self.visual_mode = false;
 
             if let Some(cb) = &mut self.clipboard {
                 let _ = cb.set_text(text);
@@ -726,11 +764,12 @@ impl Editor {
                 let _ = cb.set_text(text);
             }
             self.state.selection_start = None;
+            self.visual_mode = false;
         }
     }
 
-    fn jump_word_forward(&mut self, shift: bool) {
-        if shift {
+    fn jump_word_forward(&mut self, select: bool) {
+        if select {
             if self.state.selection_start.is_none() {
                 self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
             }
@@ -766,8 +805,8 @@ impl Editor {
         self.clamp_cursor();
     }
 
-    fn jump_word_backward(&mut self, shift: bool) {
-        if shift {
+    fn jump_word_backward(&mut self, select: bool) {
+        if select {
             if self.state.selection_start.is_none() {
                 self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
             }
@@ -812,8 +851,8 @@ impl Editor {
         self.state.cursor_x = self.state.cursor_x.saturating_sub(skipped);
     }
 
-    fn jump_block_forward(&mut self, shift: bool) {
-        if shift {
+    fn jump_block_forward(&mut self, select: bool) {
+        if select {
             if self.state.selection_start.is_none() {
                 self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
             }
@@ -837,8 +876,8 @@ impl Editor {
         self.clamp_cursor();
     }
 
-    fn jump_block_backward(&mut self, shift: bool) {
-        if shift {
+    fn jump_block_backward(&mut self, select: bool) {
+        if select {
             if self.state.selection_start.is_none() {
                 self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
             }
@@ -884,7 +923,13 @@ impl Editor {
 
         if self.is_editing {
             let mode_str = match self.mode {
-                Mode::Command => "[COMMAND]",
+                Mode::Command => {
+                    if self.visual_mode {
+                        "[VISUAL]"
+                    } else {
+                        "[COMMAND]"
+                    }
+                }
                 Mode::Insert => "[INSERT]",
             };
             let title = if self.rel_path.is_empty() {
@@ -931,6 +976,8 @@ impl Editor {
             self.scroll_x = self.state.cursor_x - text_inner_w + 1;
         }
 
+        let selection = self.get_selection_bounds();
+
         for (i, line) in self
             .state
             .lines
@@ -960,21 +1007,17 @@ impl Editor {
                 }
             }
 
-            let chars: Vec<char> = line.chars().collect();
-
-            for (j, &c) in chars
-                .iter()
+            for (j, c) in line
+                .chars()
                 .enumerate()
                 .skip(self.scroll_x)
                 .take(text_inner_w)
             {
                 let display_x = (j - self.scroll_x + prefix_width) as i16;
 
-                let is_selected = if let Some((start, end)) = self.get_selection_bounds() {
-                    let p_start = (start.0, start.1);
-                    let p_end = (end.0, end.1);
-                    let is_after_start = i > p_start.1 || (i == p_start.1 && j >= p_start.0);
-                    let is_before_end = i < p_end.1 || (i == p_end.1 && j < p_end.0);
+                let is_selected = if let Some((start, end)) = selection {
+                    let is_after_start = i > start.1 || (i == start.1 && j >= start.0);
+                    let is_before_end = i < end.1 || (i == end.1 && j < end.0);
                     is_after_start && is_before_end
                 } else {
                     false
@@ -1008,7 +1051,8 @@ impl Editor {
                 }
             }
 
-            if self.is_editing && i == self.state.cursor_y && self.state.cursor_x == chars.len() {
+            let line_len = line.chars().count();
+            if self.is_editing && i == self.state.cursor_y && self.state.cursor_x == line_len {
                 if self.state.cursor_x >= self.scroll_x {
                     let display_x = self.state.cursor_x - self.scroll_x + prefix_width;
                     if display_x < inner_w {

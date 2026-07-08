@@ -194,6 +194,28 @@ mod sys {
 
     #[cfg(target_os = "linux")]
     pub fn is_caps_lock_on() -> bool {
+        use std::path::PathBuf;
+        use std::sync::OnceLock;
+
+        static CAPSLOCK_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+        let path_opt = CAPSLOCK_PATH.get_or_init(|| {
+            if let Ok(entries) = std::fs::read_dir("/sys/class/leds/") {
+                for entry in entries.filter_map(Result::ok) {
+                    if entry.file_name().to_string_lossy().contains("capslock") {
+                        return Some(entry.path().join("brightness"));
+                    }
+                }
+            }
+            None
+        });
+
+        if let Some(path) = path_opt {
+            if let Ok(content) = std::fs::read_to_string(path) {
+                return content.trim() == "1";
+            }
+        }
+
         use libc::{O_RDONLY, close, ioctl, open};
         const KDGKBLED: libc::c_ulong = 0x4B64;
         unsafe {
