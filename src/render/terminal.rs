@@ -26,7 +26,6 @@ pub enum Key {
     Char(char),
     Shift(char),
     Ctrl(char),
-    CtrlShift(char),
     Esc,
     Enter,
     Tab,
@@ -82,6 +81,8 @@ impl Terminal {
         };
 
         match b {
+            9 => Key::Tab,
+            10 | 13 => Key::Enter,
             127 => Key::Backspace,
             27 => {
                 match self.key_rx.recv_timeout(Duration::from_millis(16)) {
@@ -117,54 +118,6 @@ impl Terminal {
                             b"1;6D" => Key::CtrlShiftLeft,
                             b"3~" => Key::Delete,
                             b"3;5~" => Key::CtrlDelete,
-                            s if s.starts_with(b"27;") && s.ends_with(b"~") => {
-                                let s_str = std::str::from_utf8(&s[3..s.len() - 1]).unwrap_or("");
-                                let mut parts = s_str.split(';');
-                                let modifier =
-                                    parts.next().and_then(|p| p.parse::<u8>().ok()).unwrap_or(1);
-                                let code = parts
-                                    .next()
-                                    .and_then(|p| p.parse::<u32>().ok())
-                                    .unwrap_or(0);
-                                if let Some(c) = std::char::from_u32(code) {
-                                    if (c == '\x7f' || c == '\x08') && modifier == 5 {
-                                        Key::CtrlBackspace
-                                    } else {
-                                        match modifier {
-                                            2 => Key::Shift(c),
-                                            5 => Key::Ctrl(c),
-                                            6 => Key::CtrlShift(c),
-                                            _ => Key::Char(c),
-                                        }
-                                    }
-                                } else {
-                                    Key::Esc
-                                }
-                            }
-                            s if s.ends_with(b"u") => {
-                                let s_str = std::str::from_utf8(&s[..s.len() - 1]).unwrap_or("");
-                                let mut parts = s_str.split(';');
-                                let code = parts
-                                    .next()
-                                    .and_then(|p| p.parse::<u32>().ok())
-                                    .unwrap_or(0);
-                                let modifier =
-                                    parts.next().and_then(|p| p.parse::<u8>().ok()).unwrap_or(1);
-                                if let Some(c) = std::char::from_u32(code) {
-                                    if (c == '\x7f' || c == '\x08') && modifier == 5 {
-                                        Key::CtrlBackspace
-                                    } else {
-                                        match modifier {
-                                            2 => Key::Shift(c),
-                                            5 => Key::Ctrl(c),
-                                            6 => Key::CtrlShift(c),
-                                            _ => Key::Char(c),
-                                        }
-                                    }
-                                } else {
-                                    Key::Esc
-                                }
-                            }
                             _ => Key::Esc,
                         };
                     }
@@ -173,21 +126,27 @@ impl Terminal {
                 Key::Esc
             }
             b if b < 32 => {
-                if b == 8 {
-                    Key::CtrlBackspace
-                } else if b == 9 {
-                    Key::Tab
-                } else if b == 10 {
-                    Key::Ctrl('j')
-                } else if b == 13 {
-                    Key::Enter
-                } else if b >= 1 && b <= 26 {
+                if b >= 1 && b <= 26 {
                     Key::Ctrl((b + 96) as char)
                 } else {
                     Key::Char(b as char)
                 }
             }
-            b => Key::Char(b as char),
+            b => {
+                let c = b as char;
+                let caps = sys::is_caps_lock_on();
+                if c.is_ascii_uppercase() {
+                    if caps {
+                        Key::Char(c.to_ascii_lowercase())
+                    } else {
+                        Key::Shift(c.to_ascii_lowercase())
+                    }
+                } else if c.is_ascii_lowercase() {
+                    if caps { Key::Shift(c) } else { Key::Char(c) }
+                } else {
+                    Key::Char(c)
+                }
+            }
         }
     }
 
@@ -233,6 +192,29 @@ mod sys {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    pub fn is_caps_lock_on() -> bool {
+        use libc::{O_RDONLY, close, ioctl, open};
+        const KDGKBLED: libc::c_ulong = 0x4B64;
+        unsafe {
+            let fd = open(b"/dev/tty\0".as_ptr() as *const libc::c_char, O_RDONLY);
+            if fd >= 0 {
+                let mut flags: libc::c_char = 0;
+                let res = ioctl(fd, KDGKBLED as _, &mut flags);
+                close(fd);
+                if res == 0 {
+                    return (flags & 0x04) != 0;
+                }
+            }
+        }
+        false
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub fn is_caps_lock_on() -> bool {
+        false
+    }
+
     pub fn get_terminal_size() -> (u16, u16) {
         unsafe {
             let mut ws: winsize = zeroed();
@@ -248,6 +230,11 @@ mod sys {
 #[cfg(windows)]
 mod sys {
     use windows_sys::Win32::System::Console::*;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CAPITAL};
+
+    pub fn is_caps_lock_on() -> bool {
+        unsafe { (GetKeyState(VK_CAPITAL as i32) & 0x0001) != 0 }
+    }
 
     pub struct RawModeGuard {
         out_handle: *mut std::ffi::c_void,
