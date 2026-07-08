@@ -138,7 +138,7 @@ impl Editor {
         let mut reset_y = true;
 
         match key {
-            Key::Char('i') => {
+            Key::Char('i') | Key::Esc => {
                 self.state.selection_start = None;
                 self.mode = Mode::Insert;
             }
@@ -165,6 +165,8 @@ impl Editor {
             }
             Key::Char('w') => self.jump_word_forward(),
             Key::Char('b') => self.jump_word_backward(),
+            Key::CtrlLeft | Key::Ctrl('h') => self.jump_word_backward(),
+            Key::CtrlRight | Key::Ctrl('l') => self.jump_word_forward(),
             Key::Char('g') => {
                 self.state.selection_start = None;
                 if self.last_key_g {
@@ -260,7 +262,9 @@ impl Editor {
                 self.push_undo();
                 self.delete_char_before();
             }
-            Key::CtrlBackspace | Key::Ctrl('w') | Key::Ctrl('h') => {
+            Key::CtrlLeft | Key::Ctrl('h') => self.jump_word_backward(),
+            Key::CtrlRight | Key::Ctrl('l') => self.jump_word_forward(),
+            Key::CtrlBackspace | Key::Ctrl('w') => {
                 self.push_undo();
                 self.delete_word_before();
             }
@@ -633,22 +637,31 @@ impl Editor {
         }
 
         let line = &self.state.lines[self.state.cursor_y];
-        let mut rev_chars = line.chars().take(self.state.cursor_x).collect::<Vec<_>>();
-        rev_chars.reverse();
+        let byte_idx = line
+            .char_indices()
+            .nth(self.state.cursor_x)
+            .map(|(i, _)| i)
+            .unwrap_or(line.len());
+
+        let before_cursor = &line[..byte_idx];
 
         let mut skipped = 0;
-        for &c in &rev_chars {
+        let mut chars_rev = before_cursor.chars().rev();
+
+        while let Some(c) = chars_rev.next() {
             if !c.is_whitespace() {
+                skipped += 1;
                 break;
             }
             skipped += 1;
         }
-        for &c in rev_chars.iter().skip(skipped) {
+        for c in chars_rev {
             if c.is_whitespace() {
                 break;
             }
             skipped += 1;
         }
+
         self.state.cursor_x = self.state.cursor_x.saturating_sub(skipped);
     }
 

@@ -60,9 +60,7 @@ fn main() {
                     {
                         break;
                     }
-                    if main_view.editor.mode == nuui::editor::Mode::Command
-                        && (key == Key::Tab || key == Key::Esc)
-                    {
+                    if main_view.editor.mode == nuui::editor::Mode::Command && (key == Key::Tab) {
                         main_view.toggle_focus();
                         dirty = true;
                         continue;

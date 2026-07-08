@@ -13,6 +13,10 @@ pub enum Key {
     ShiftDown,
     ShiftLeft,
     ShiftRight,
+    CtrlUp,
+    CtrlDown,
+    CtrlLeft,
+    CtrlRight,
     Delete,
     Char(char),
     Ctrl(char),
@@ -73,7 +77,6 @@ impl Terminal {
         match b {
             9 => Key::Tab,
             10 | 13 => Key::Enter,
-            8 => Key::CtrlBackspace,
             127 => Key::Backspace,
             27 => {
                 match self.key_rx.recv_timeout(Duration::from_millis(16)) {
@@ -99,6 +102,10 @@ impl Terminal {
                             b"1;2B" => Key::ShiftDown,
                             b"1;2C" => Key::ShiftRight,
                             b"1;2D" => Key::ShiftLeft,
+                            b"1;5A" => Key::CtrlUp,
+                            b"1;5B" => Key::CtrlDown,
+                            b"1;5C" => Key::CtrlRight,
+                            b"1;5D" => Key::CtrlLeft,
                             b"3~" => Key::Delete,
                             _ => Key::Esc,
                         };

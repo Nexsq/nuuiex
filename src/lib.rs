@@ -1,4 +1,5 @@
 mod config;
+pub mod engine;
 mod library;
 mod panels;
 mod render;
@@ -9,4 +10,4 @@ pub use render::terminal::{Key, Terminal};
 
 pub use config::conf;
 pub use library::lib;
-pub use panels::{editor, PanelResult, error, main, settings, toosmall};
+pub use panels::{PanelResult, editor, error, main, settings, toosmall};

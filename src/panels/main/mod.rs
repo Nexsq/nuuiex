@@ -23,6 +23,7 @@ pub struct MainView {
     pub list_scroll: usize,
 
     pub editor: Editor,
+    pub running_macro: Option<PathBuf>,
     pub main_box: Box,
     pub main_x: i16,
     pub main_y: i16,
@@ -81,6 +82,7 @@ impl MainView {
             library_root,
             expanded_path: Vec::new(),
             editor: Editor::new(),
+            running_macro: None,
             main_box: dummy(),
             main_x: 0,
             main_y: 0,
@@ -182,6 +184,11 @@ impl MainView {
     }
 
     pub fn refresh_list(&mut self) {
+        let active_path = self
+            .running_macro
+            .as_deref()
+            .or(self.editor.file_path.as_deref());
+
         self.list_box = list::refresh(
             self.term_h,
             self.active,
@@ -189,7 +196,7 @@ impl MainView {
             &self.expanded_path,
             &mut self.list_selected,
             &mut self.list_scroll,
-            self.editor.file_path.as_deref(),
+            active_path,
         );
     }
 
@@ -202,6 +209,7 @@ impl MainView {
     pub fn toggle_focus(&mut self) {
         if self.active == ActivePanel::Main {
             self.active = ActivePanel::List;
+            self.running_macro = None;
             if self.editor.is_editing {
                 self.editor.save();
                 self.editor.is_editing = false;
@@ -329,10 +337,16 @@ impl MainView {
 
         let mut should_switch = false;
         if let Some(node) = parent_nodes.get(self.list_selected) {
-            if let MacroNode::Script { name, .. } = node {
-                self.editor.state.lines = vec![name.clone()];
+            if let MacroNode::Script { name, path } = node {
+                if let Ok(source) = std::fs::read_to_string(path) {
+                    let output = crate::engine::run(&source);
+                    self.editor.state.lines = output;
+                } else {
+                    self.editor.state.lines = vec![format!("Failed to read script '{}'", name)];
+                }
 
                 self.editor.file_path = None;
+                self.running_macro = Some(path.clone());
                 should_switch = true;
             }
         }
