@@ -1,7 +1,3 @@
 add custom sorting for library (later later)
 
 add error messages and code analysis when editing
-
-fix editor errors
-
-ctrl backspace in insert does not work

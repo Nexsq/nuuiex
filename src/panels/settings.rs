@@ -426,7 +426,22 @@ where
                         }
                         Key::Char(c) => {
                             if !c.is_control() {
-                                edit_buffer.push(c);
+                                let caps = Terminal::is_caps_lock_on();
+                                let mut final_c = c;
+                                if caps && c.is_ascii_alphabetic() {
+                                    final_c = c.to_ascii_uppercase();
+                                }
+                                edit_buffer.push(final_c);
+                            }
+                        }
+                        Key::Shift(c) => {
+                            if !c.is_control() {
+                                let caps = Terminal::is_caps_lock_on();
+                                let mut final_c = c.to_ascii_uppercase();
+                                if caps && final_c.is_ascii_alphabetic() {
+                                    final_c = final_c.to_ascii_lowercase();
+                                }
+                                edit_buffer.push(final_c);
                             }
                         }
                         _ => {}

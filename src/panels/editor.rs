@@ -163,7 +163,7 @@ impl Editor {
             Key::Right | Key::Char('l') => self.move_cursor(1, 0, self.visual_mode),
             Key::Up | Key::Char('k') => self.move_cursor(0, -1, self.visual_mode),
             Key::Down | Key::Char('j') => self.move_cursor(0, 1, self.visual_mode),
-            Key::CtrlLeft | Key::Ctrl('h') | Key::Char('b') => {
+            Key::CtrlLeft | Key::Ctrl('h') | Key::Char('b') | Key::CtrlBackspace => {
                 self.jump_word_backward(self.visual_mode)
             }
             Key::CtrlRight | Key::Ctrl('l') | Key::Char('w') => {
@@ -186,9 +186,8 @@ impl Editor {
             }
             Key::Char('a') => {
                 if self.last_key_a {
-                    if !self.visual_mode {
-                        self.state.selection_start = None;
-                    }
+                    self.visual_mode = true;
+                    self.state.selection_start = Some((0, 0));
                     self.state.cursor_y = self.state.lines.len().saturating_sub(1);
                     self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
                 } else {
@@ -292,11 +291,34 @@ impl Editor {
                 self.clamp_cursor();
             }
             Key::Char(c) => {
+                if c.is_control() {
+                    return;
+                }
                 self.push_undo();
                 if self.state.selection_start.is_some() {
                     self.delete_selection();
                 }
-                self.insert_char(c);
+                let caps = crate::Terminal::is_caps_lock_on();
+                let mut final_c = c;
+                if caps && c.is_ascii_alphabetic() {
+                    final_c = c.to_ascii_uppercase();
+                }
+                self.insert_char(final_c);
+            }
+            Key::Shift(c) => {
+                if c.is_control() {
+                    return;
+                }
+                self.push_undo();
+                if self.state.selection_start.is_some() {
+                    self.delete_selection();
+                }
+                let caps = crate::Terminal::is_caps_lock_on();
+                let mut final_c = c.to_ascii_uppercase();
+                if caps && final_c.is_ascii_alphabetic() {
+                    final_c = final_c.to_ascii_lowercase();
+                }
+                self.insert_char(final_c);
             }
             Key::Enter => {
                 self.push_undo();
@@ -325,7 +347,7 @@ impl Editor {
                     self.delete_char_after();
                 }
             }
-            Key::CtrlBackspace => {
+            Key::CtrlBackspace | Key::Ctrl('w') | Key::Ctrl('h') => {
                 self.push_undo();
                 if self.state.selection_start.is_some() {
                     self.delete_selection();
@@ -925,12 +947,12 @@ impl Editor {
             let mode_str = match self.mode {
                 Mode::Command => {
                     if self.visual_mode {
-                        "[VISUAL]"
+                        "[VIS]"
                     } else {
-                        "[COMMAND]"
+                        "[CMD]"
                     }
                 }
-                Mode::Insert => "[INSERT]",
+                Mode::Insert => "[INS]",
             };
             let title = if self.rel_path.is_empty() {
                 format!(" {} ", mode_str)
@@ -955,7 +977,19 @@ impl Editor {
 
         let show_line_numbers = self.file_path.is_some();
         let line_count = self.state.lines.len();
-        let max_num_width = line_count.to_string().len();
+        let max_num_width = if line_count < 10 {
+            1
+        } else if line_count < 100 {
+            2
+        } else if line_count < 1000 {
+            3
+        } else if line_count < 10000 {
+            4
+        } else if line_count < 100000 {
+            5
+        } else {
+            line_count.to_string().len()
+        };
         let prefix_width = if show_line_numbers {
             max_num_width + 3
         } else {
@@ -1042,36 +1076,43 @@ impl Editor {
                     style.fg = Color::Black;
                 }
 
+                let display_c = if c.is_control() { ' ' } else { c };
+
                 if (display_x as usize) < inner_w {
                     b.put_cell(
-                        crate::Cell { c, s: style },
+                        crate::Cell {
+                            c: display_c,
+                            s: style,
+                        },
                         display_x as u16 + 1,
                         display_y as u16 + 1,
                     );
                 }
             }
 
-            let line_len = line.chars().count();
-            if self.is_editing && i == self.state.cursor_y && self.state.cursor_x == line_len {
-                if self.state.cursor_x >= self.scroll_x {
-                    let display_x = self.state.cursor_x - self.scroll_x + prefix_width;
-                    if display_x < inner_w {
-                        b.put_cell(
-                            crate::Cell {
-                                c: ' ',
-                                s: Style {
-                                    fg: Color::Black,
-                                    bg: Color::White,
-                                    md: if is_active {
-                                        Modifier::None
-                                    } else {
-                                        Modifier::Dim
+            if self.is_editing && i == self.state.cursor_y {
+                let line_len = line.chars().count();
+                if self.state.cursor_x == line_len {
+                    if self.state.cursor_x >= self.scroll_x {
+                        let display_x = self.state.cursor_x - self.scroll_x + prefix_width;
+                        if display_x < inner_w {
+                            b.put_cell(
+                                crate::Cell {
+                                    c: ' ',
+                                    s: Style {
+                                        fg: Color::Black,
+                                        bg: Color::White,
+                                        md: if is_active {
+                                            Modifier::None
+                                        } else {
+                                            Modifier::Dim
+                                        },
                                     },
                                 },
-                            },
-                            display_x as u16 + 1,
-                            display_y as u16 + 1,
-                        );
+                                display_x as u16 + 1,
+                                display_y as u16 + 1,
+                            );
+                        }
                     }
                 }
             }

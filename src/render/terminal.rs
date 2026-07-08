@@ -49,6 +49,10 @@ impl Drop for Terminal {
 }
 
 impl Terminal {
+    pub fn is_caps_lock_on() -> bool {
+        sys::is_caps_lock_on()
+    }
+
     pub fn init() -> Self {
         let mut stdout = io::stdout().lock();
 
@@ -82,10 +86,11 @@ impl Terminal {
 
         match b {
             9 => Key::Tab,
-            10 | 13 => Key::Enter,
+            13 => Key::Enter,
             127 => Key::Backspace,
             27 => {
                 match self.key_rx.recv_timeout(Duration::from_millis(16)) {
+                    Ok(127) | Ok(8) => return Key::CtrlBackspace,
                     Ok(b'[') => {
                         let mut seq = Vec::new();
                         loop {
@@ -118,6 +123,7 @@ impl Terminal {
                             b"1;6D" => Key::CtrlShiftLeft,
                             b"3~" => Key::Delete,
                             b"3;5~" => Key::CtrlDelete,
+                            b"127;5u" => Key::CtrlBackspace,
                             _ => Key::Esc,
                         };
                     }
@@ -194,25 +200,16 @@ mod sys {
 
     #[cfg(target_os = "linux")]
     pub fn is_caps_lock_on() -> bool {
-        use std::path::PathBuf;
-        use std::sync::OnceLock;
-
-        static CAPSLOCK_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
-
-        let path_opt = CAPSLOCK_PATH.get_or_init(|| {
-            if let Ok(entries) = std::fs::read_dir("/sys/class/leds/") {
-                for entry in entries.filter_map(Result::ok) {
-                    if entry.file_name().to_string_lossy().contains("capslock") {
-                        return Some(entry.path().join("brightness"));
+        if let Ok(entries) = std::fs::read_dir("/sys/class/leds/") {
+            for entry in entries.filter_map(Result::ok) {
+                let name = entry.file_name().to_string_lossy().to_lowercase();
+                if name.contains("capslock") {
+                    if let Ok(content) = std::fs::read_to_string(entry.path().join("brightness")) {
+                        if content.trim() == "1" {
+                            return true;
+                        }
                     }
                 }
-            }
-            None
-        });
-
-        if let Some(path) = path_opt {
-            if let Ok(content) = std::fs::read_to_string(path) {
-                return content.trim() == "1";
             }
         }
 
