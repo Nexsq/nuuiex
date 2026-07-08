@@ -2,4 +2,4 @@ add custom sorting for library (later later)
 
 add error messages and code analysis when editing
 
-test on linux
+fix editor errors

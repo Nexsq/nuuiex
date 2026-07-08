@@ -146,14 +146,14 @@ impl Editor {
                 self.state.selection_start = None;
                 self.mode = Mode::Insert;
             }
-            Key::Char('h') | Key::Left => self.move_cursor(-1, 0, false),
-            Key::Char('j') | Key::Down => self.move_cursor(0, 1, false),
-            Key::Char('k') | Key::Up => self.move_cursor(0, -1, false),
-            Key::Char('l') | Key::Right => self.move_cursor(1, 0, false),
-            Key::ShiftLeft => self.move_cursor(-1, 0, true),
-            Key::ShiftDown => self.move_cursor(0, 1, true),
-            Key::ShiftUp => self.move_cursor(0, -1, true),
-            Key::ShiftRight => self.move_cursor(1, 0, true),
+            Key::Left | Key::Char('h') => self.move_cursor(-1, 0, false),
+            Key::Right | Key::Char('l') => self.move_cursor(1, 0, false),
+            Key::Up | Key::Char('k') => self.move_cursor(0, -1, false),
+            Key::Down | Key::Char('j') => self.move_cursor(0, 1, false),
+            Key::ShiftLeft | Key::Shift('h') => self.move_cursor(-1, 0, true),
+            Key::ShiftRight | Key::Shift('l') => self.move_cursor(1, 0, true),
+            Key::ShiftUp | Key::Shift('k') => self.move_cursor(0, -1, true),
+            Key::ShiftDown | Key::Shift('j') => self.move_cursor(0, 1, true),
             Key::Char('1') => {
                 self.state.selection_start = None;
                 self.state.cursor_x = 0;
@@ -172,22 +172,20 @@ impl Editor {
                     self.last_key_a = true;
                 }
             }
-            Key::Char('w') => self.jump_word_forward(false),
-            Key::Char('b') => self.jump_word_backward(false),
-            Key::CtrlLeft | Key::Ctrl('h') => self.jump_word_backward(false),
-            Key::CtrlRight | Key::Ctrl('l') => self.jump_word_forward(false),
-            Key::CtrlShiftLeft => self.jump_word_backward(true),
-            Key::CtrlShiftRight => self.jump_word_forward(true),
+            Key::CtrlLeft | Key::Ctrl('h') | Key::Char('b') => self.jump_word_backward(false),
+            Key::CtrlRight | Key::Ctrl('l') | Key::Char('w') => self.jump_word_forward(false),
             Key::CtrlUp | Key::Ctrl('k') => self.jump_block_backward(false),
             Key::CtrlDown | Key::Ctrl('j') => self.jump_block_forward(false),
+            Key::CtrlShiftLeft => self.jump_word_backward(true),
+            Key::CtrlShiftRight => self.jump_word_forward(true),
             Key::CtrlShiftUp => self.jump_block_backward(true),
             Key::CtrlShiftDown => self.jump_block_forward(true),
-            Key::Backspace => {
+            Key::Delete => {
+                self.push_undo();
                 if self.state.selection_start.is_some() {
-                    self.push_undo();
                     self.delete_selection();
                 } else {
-                    self.move_cursor(-1, 0, false);
+                    self.delete_char_after();
                 }
             }
             Key::Char('!') => {
@@ -258,14 +256,6 @@ impl Editor {
                 }
             }
             Key::Char('s') => self.save(),
-            Key::Delete => {
-                self.push_undo();
-                if self.state.selection_start.is_some() {
-                    self.delete_selection();
-                } else {
-                    self.delete_char_after();
-                }
-            }
             _ => {}
         }
 
@@ -314,15 +304,15 @@ impl Editor {
                     self.delete_char_before();
                 }
             }
-            Key::CtrlLeft | Key::Ctrl('h') => self.jump_word_backward(false),
-            Key::CtrlRight | Key::Ctrl('l') => self.jump_word_forward(false),
-            Key::CtrlShiftLeft => self.jump_word_backward(true),
-            Key::CtrlShiftRight => self.jump_word_forward(true),
+            Key::CtrlLeft => self.jump_word_backward(false),
+            Key::CtrlRight => self.jump_word_forward(false),
             Key::CtrlUp => self.jump_block_backward(false),
             Key::CtrlDown => self.jump_block_forward(false),
+            Key::CtrlShiftLeft => self.jump_word_backward(true),
+            Key::CtrlShiftRight => self.jump_word_forward(true),
             Key::CtrlShiftUp => self.jump_block_backward(true),
             Key::CtrlShiftDown => self.jump_block_forward(true),
-            Key::CtrlBackspace | Key::Ctrl('w') => {
+            Key::CtrlBackspace => {
                 self.push_undo();
                 if self.state.selection_start.is_some() {
                     self.delete_selection();
@@ -355,14 +345,14 @@ impl Editor {
                     self.insert_char(' ');
                 }
             }
-            Key::Up => self.move_cursor(0, -1, false),
-            Key::ShiftUp => self.move_cursor(0, -1, true),
-            Key::Down => self.move_cursor(0, 1, false),
-            Key::ShiftDown => self.move_cursor(0, 1, true),
             Key::Left => self.move_cursor(-1, 0, false),
-            Key::ShiftLeft => self.move_cursor(-1, 0, true),
             Key::Right => self.move_cursor(1, 0, false),
+            Key::Up => self.move_cursor(0, -1, false),
+            Key::Down => self.move_cursor(0, 1, false),
+            Key::ShiftLeft => self.move_cursor(-1, 0, true),
             Key::ShiftRight => self.move_cursor(1, 0, true),
+            Key::ShiftUp => self.move_cursor(0, -1, true),
+            Key::ShiftDown => self.move_cursor(0, 1, true),
             _ => {}
         }
     }
