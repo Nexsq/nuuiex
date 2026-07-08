@@ -178,6 +178,18 @@ impl Editor {
             Key::CtrlRight | Key::Ctrl('l') => self.jump_word_forward(false),
             Key::CtrlShiftLeft => self.jump_word_backward(true),
             Key::CtrlShiftRight => self.jump_word_forward(true),
+            Key::CtrlUp | Key::Ctrl('k') => self.jump_block_backward(false),
+            Key::CtrlDown | Key::Ctrl('j') => self.jump_block_forward(false),
+            Key::CtrlShiftUp => self.jump_block_backward(true),
+            Key::CtrlShiftDown => self.jump_block_forward(true),
+            Key::Backspace => {
+                if self.state.selection_start.is_some() {
+                    self.push_undo();
+                    self.delete_selection();
+                } else {
+                    self.move_cursor(-1, 0, false);
+                }
+            }
             Key::Char('!') => {
                 if self.state.selection_start.is_none() {
                     self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
@@ -248,7 +260,11 @@ impl Editor {
             Key::Char('s') => self.save(),
             Key::Delete => {
                 self.push_undo();
-                self.delete_char_after();
+                if self.state.selection_start.is_some() {
+                    self.delete_selection();
+                } else {
+                    self.delete_char_after();
+                }
             }
             _ => {}
         }
@@ -278,38 +294,75 @@ impl Editor {
             }
             Key::Char(c) => {
                 self.push_undo();
+                if self.state.selection_start.is_some() {
+                    self.delete_selection();
+                }
                 self.insert_char(c);
             }
             Key::Enter => {
                 self.push_undo();
+                if self.state.selection_start.is_some() {
+                    self.delete_selection();
+                }
                 self.insert_newline();
             }
             Key::Backspace => {
                 self.push_undo();
-                self.delete_char_before();
+                if self.state.selection_start.is_some() {
+                    self.delete_selection();
+                } else {
+                    self.delete_char_before();
+                }
             }
             Key::CtrlLeft | Key::Ctrl('h') => self.jump_word_backward(false),
             Key::CtrlRight | Key::Ctrl('l') => self.jump_word_forward(false),
             Key::CtrlShiftLeft => self.jump_word_backward(true),
             Key::CtrlShiftRight => self.jump_word_forward(true),
+            Key::CtrlUp => self.jump_block_backward(false),
+            Key::CtrlDown => self.jump_block_forward(false),
+            Key::CtrlShiftUp => self.jump_block_backward(true),
+            Key::CtrlShiftDown => self.jump_block_forward(true),
             Key::CtrlBackspace | Key::Ctrl('w') => {
                 self.push_undo();
-                self.delete_word_before();
+                if self.state.selection_start.is_some() {
+                    self.delete_selection();
+                } else {
+                    self.delete_word_before();
+                }
+            }
+            Key::CtrlDelete => {
+                self.push_undo();
+                if self.state.selection_start.is_some() {
+                    self.delete_selection();
+                } else {
+                    self.delete_word_after();
+                }
             }
             Key::Delete => {
                 self.push_undo();
-                self.delete_char_after();
+                if self.state.selection_start.is_some() {
+                    self.delete_selection();
+                } else {
+                    self.delete_char_after();
+                }
             }
             Key::Tab => {
                 self.push_undo();
+                if self.state.selection_start.is_some() {
+                    self.delete_selection();
+                }
                 for _ in 0..4 {
                     self.insert_char(' ');
                 }
             }
-            Key::Up | Key::ShiftUp => self.move_cursor(0, -1, false),
-            Key::Down | Key::ShiftDown => self.move_cursor(0, 1, false),
-            Key::Left | Key::ShiftLeft => self.move_cursor(-1, 0, false),
-            Key::Right | Key::ShiftRight => self.move_cursor(1, 0, false),
+            Key::Up => self.move_cursor(0, -1, false),
+            Key::ShiftUp => self.move_cursor(0, -1, true),
+            Key::Down => self.move_cursor(0, 1, false),
+            Key::ShiftDown => self.move_cursor(0, 1, true),
+            Key::Left => self.move_cursor(-1, 0, false),
+            Key::ShiftLeft => self.move_cursor(-1, 0, true),
+            Key::Right => self.move_cursor(1, 0, false),
+            Key::ShiftRight => self.move_cursor(1, 0, true),
             _ => {}
         }
     }
@@ -427,6 +480,68 @@ impl Editor {
 
             self.state.lines[self.state.cursor_y] = new_line;
             self.state.cursor_x = new_cursor_x;
+        }
+    }
+
+    fn delete_word_after(&mut self) {
+        let line_len = self.state.lines[self.state.cursor_y].chars().count();
+        if self.state.cursor_x >= line_len {
+            if self.state.cursor_y < self.state.lines.len().saturating_sub(1) {
+                let next_line = self.state.lines.remove(self.state.cursor_y + 1);
+                self.state.lines[self.state.cursor_y].push_str(&next_line);
+            }
+            return;
+        }
+
+        let line = &self.state.lines[self.state.cursor_y];
+        let byte_idx = line
+            .char_indices()
+            .nth(self.state.cursor_x)
+            .map(|(i, _)| i)
+            .unwrap_or(line.len());
+
+        let (before, after) = line.split_at(byte_idx);
+
+        let mut chars = after.chars().peekable();
+        let mut deleted_count = 0;
+
+        while let Some(&c) = chars.peek() {
+            if c.is_whitespace() {
+                deleted_count += 1;
+                chars.next();
+            } else {
+                break;
+            }
+        }
+
+        if let Some(&c) = chars.peek() {
+            let is_word = c.is_alphanumeric() || c == '_';
+            while let Some(&next_c) = chars.peek() {
+                if next_c.is_whitespace() {
+                    break;
+                }
+                let next_is_word = next_c.is_alphanumeric() || next_c == '_';
+                if next_is_word == is_word {
+                    deleted_count += 1;
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if deleted_count > 0 {
+            let delete_end_byte = after
+                .char_indices()
+                .nth(deleted_count)
+                .map(|(i, _)| i)
+                .unwrap_or(after.len());
+
+            let mut new_line = String::new();
+            new_line.push_str(before);
+            new_line.push_str(&after[delete_end_byte..]);
+
+            self.state.lines[self.state.cursor_y] = new_line;
         }
     }
 
@@ -705,6 +820,55 @@ impl Editor {
         }
 
         self.state.cursor_x = self.state.cursor_x.saturating_sub(skipped);
+    }
+
+    fn jump_block_forward(&mut self, shift: bool) {
+        if shift {
+            if self.state.selection_start.is_none() {
+                self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
+            }
+        } else {
+            self.state.selection_start = None;
+        }
+
+        let mut y = self.state.cursor_y;
+        let lines = &self.state.lines;
+        let max_y = lines.len().saturating_sub(1);
+
+        if y < max_y {
+            let start_is_empty = lines[y].trim().is_empty();
+            y += 1;
+            while y < max_y && lines[y].trim().is_empty() == start_is_empty {
+                y += 1;
+            }
+        }
+
+        self.state.cursor_y = y;
+        self.clamp_cursor();
+    }
+
+    fn jump_block_backward(&mut self, shift: bool) {
+        if shift {
+            if self.state.selection_start.is_none() {
+                self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
+            }
+        } else {
+            self.state.selection_start = None;
+        }
+
+        let mut y = self.state.cursor_y;
+        let lines = &self.state.lines;
+
+        if y > 0 {
+            let start_is_empty = lines[y].trim().is_empty();
+            y -= 1;
+            while y > 0 && lines[y].trim().is_empty() == start_is_empty {
+                y -= 1;
+            }
+        }
+
+        self.state.cursor_y = y;
+        self.clamp_cursor();
     }
 
     pub fn render(&mut self, width: u16, height: u16, is_active: bool) -> Box {

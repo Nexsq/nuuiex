@@ -22,6 +22,7 @@ pub enum Key {
     CtrlShiftLeft,
     CtrlShiftRight,
     Delete,
+    CtrlDelete,
     Char(char),
     Shift(char),
     Ctrl(char),
@@ -116,6 +117,7 @@ impl Terminal {
                             b"1;6C" => Key::CtrlShiftRight,
                             b"1;6D" => Key::CtrlShiftLeft,
                             b"3~" => Key::Delete,
+                            b"3;5~" => Key::CtrlDelete,
                             _ => Key::Esc,
                         };
                     }
