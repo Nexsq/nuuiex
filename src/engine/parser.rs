@@ -53,9 +53,10 @@ impl<'a> Parser<'a> {
         let mut expr = self.parse_factor()?;
 
         while self.check(&TokenKind::Plus) || self.check(&TokenKind::Minus) {
-            let op = BinaryOp::from_token(&self.advance().kind).unwrap();
+            let token = self.advance().clone();
+            let op = BinaryOp::from_token(&token.kind).unwrap();
             let right = self.parse_factor()?;
-            expr = Expr::Binary(Box::new(expr), op, Box::new(right));
+            expr = Expr::Binary(Box::new(expr), op, Box::new(right), token.line);
         }
 
         Some(expr)
@@ -65,9 +66,10 @@ impl<'a> Parser<'a> {
         let mut expr = self.parse_primary()?;
 
         while self.check(&TokenKind::Star) || self.check(&TokenKind::Slash) {
-            let op = BinaryOp::from_token(&self.advance().kind).unwrap();
+            let token = self.advance().clone();
+            let op = BinaryOp::from_token(&token.kind).unwrap();
             let right = self.parse_primary()?;
-            expr = Expr::Binary(Box::new(expr), op, Box::new(right));
+            expr = Expr::Binary(Box::new(expr), op, Box::new(right), token.line);
         }
 
         Some(expr)
@@ -79,12 +81,13 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        let token = self.advance();
-        match &token.kind {
-            TokenKind::Number(n) => Some(Expr::Number(*n)),
-            TokenKind::String(s) => Some(Expr::String(s.clone())),
+        let token = self.advance().clone();
+        let line = token.line;
+        match token.kind {
+            TokenKind::Number(n) => Some(Expr::Number(n, line)),
+            TokenKind::String(s) => Some(Expr::String(s, line)),
             TokenKind::Ident(name) => {
-                let func_name = *name;
+                let func_name = name;
 
                 if self.check(&TokenKind::LParen) {
                     self.advance();
@@ -106,13 +109,13 @@ impl<'a> Parser<'a> {
                     }
                     if self.check(&TokenKind::RParen) {
                         self.advance();
-                        Some(Expr::Call(func_name, args))
+                        Some(Expr::Call(func_name, args, line))
                     } else {
                         self.error("Expected ')' after arguments.");
                         None
                     }
                 } else {
-                    Some(Expr::Ident(func_name))
+                    Some(Expr::Ident(func_name, line))
                 }
             }
             TokenKind::LParen => {
@@ -126,8 +129,7 @@ impl<'a> Parser<'a> {
                 }
             }
             TokenKind::Error(msg) => {
-                let error_msg = msg.clone();
-                self.error(&error_msg);
+                self.error(&msg);
                 None
             }
             _ => {

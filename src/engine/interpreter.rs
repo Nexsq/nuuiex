@@ -41,10 +41,10 @@ impl Interpreter {
 
     fn eval_expr(&mut self, expr: &Expr) -> Result<Value, String> {
         match expr {
-            Expr::Number(n) => Ok(Value::Number(*n)),
-            Expr::String(s) => Ok(Value::String(s.clone())),
-            Expr::Ident(name) => Err(format!("Undefined variable '{}'", name)),
-            Expr::Binary(left, op, right) => {
+            Expr::Number(n, _) => Ok(Value::Number(*n)),
+            Expr::String(s, _) => Ok(Value::String(s.clone())),
+            Expr::Ident(name, line) => Err(format!("Line {}: Undefined variable '{}'", line, name)),
+            Expr::Binary(left, op, right, line) => {
                 let l = self.eval_expr(left)?;
                 let r = self.eval_expr(right)?;
 
@@ -55,7 +55,7 @@ impl Interpreter {
                         BinaryOp::Mul => Ok(Value::Number(ln * rn)),
                         BinaryOp::Div => {
                             if rn == 0.0 {
-                                Err("Division by zero".to_string())
+                                Err(format!("Line {}: Division by zero", line))
                             } else {
                                 Ok(Value::Number(ln / rn))
                             }
@@ -78,10 +78,10 @@ impl Interpreter {
                         let count = ln.max(0.0) as usize;
                         Ok(Value::String(rs.repeat(count)))
                     }
-                    _ => Err(format!("Unsupported operands for {:?}", op)),
+                    _ => Err(format!("Line {}: Unsupported operands for {:?}", line, op)),
                 }
             }
-            Expr::Call(name, args) => {
+            Expr::Call(name, args, line) => {
                 let mut eval_args = Vec::with_capacity(args.len());
                 for arg in args {
                     eval_args.push(self.eval_expr(arg)?);
@@ -112,7 +112,7 @@ impl Interpreter {
 
                     Ok(Value::Nil)
                 } else {
-                    Err(format!("Undefined function '{}'", name))
+                    Err(format!("Line {}: Undefined function '{}'", line, name))
                 }
             }
         }

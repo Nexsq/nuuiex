@@ -17,8 +17,13 @@ pub enum Key {
     CtrlDown,
     CtrlLeft,
     CtrlRight,
+    CtrlShiftUp,
+    CtrlShiftDown,
+    CtrlShiftLeft,
+    CtrlShiftRight,
     Delete,
     Char(char),
+    Shift(char),
     Ctrl(char),
     Esc,
     Enter,
@@ -106,6 +111,10 @@ impl Terminal {
                             b"1;5B" => Key::CtrlDown,
                             b"1;5C" => Key::CtrlRight,
                             b"1;5D" => Key::CtrlLeft,
+                            b"1;6A" => Key::CtrlShiftUp,
+                            b"1;6B" => Key::CtrlShiftDown,
+                            b"1;6C" => Key::CtrlShiftRight,
+                            b"1;6D" => Key::CtrlShiftLeft,
                             b"3~" => Key::Delete,
                             _ => Key::Esc,
                         };
@@ -121,7 +130,21 @@ impl Terminal {
                     Key::Char(b as char)
                 }
             }
-            b => Key::Char(b as char),
+            b => {
+                let c = b as char;
+                let caps = sys::is_caps_lock_on();
+                if c.is_ascii_uppercase() {
+                    if caps {
+                        Key::Char(c.to_ascii_lowercase())
+                    } else {
+                        Key::Shift(c.to_ascii_lowercase())
+                    }
+                } else if c.is_ascii_lowercase() {
+                    if caps { Key::Shift(c) } else { Key::Char(c) }
+                } else {
+                    Key::Char(c)
+                }
+            }
         }
     }
 
@@ -167,6 +190,29 @@ mod sys {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    pub fn is_caps_lock_on() -> bool {
+        use libc::{O_RDONLY, close, ioctl, open};
+        const KDGKBLED: libc::c_ulong = 0x4B64;
+        unsafe {
+            let fd = open(b"/dev/tty\0".as_ptr() as *const libc::c_char, O_RDONLY);
+            if fd >= 0 {
+                let mut flags: libc::c_char = 0;
+                let res = ioctl(fd, KDGKBLED as _, &mut flags);
+                close(fd);
+                if res == 0 {
+                    return (flags & 0x04) != 0;
+                }
+            }
+        }
+        false
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub fn is_caps_lock_on() -> bool {
+        false
+    }
+
     pub fn get_terminal_size() -> (u16, u16) {
         unsafe {
             let mut ws: winsize = zeroed();
@@ -182,6 +228,11 @@ mod sys {
 #[cfg(windows)]
 mod sys {
     use windows_sys::Win32::System::Console::*;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CAPITAL};
+
+    pub fn is_caps_lock_on() -> bool {
+        unsafe { (GetKeyState(VK_CAPITAL as i32) & 0x0001) != 0 }
+    }
 
     pub struct RawModeGuard {
         out_handle: *mut std::ffi::c_void,

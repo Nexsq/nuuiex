@@ -55,8 +55,7 @@ fn main() {
                     if key == Key::Char('\x03') {
                         break;
                     }
-                    if main_view.editor.mode == nuui::editor::Mode::Command
-                        && (key == Key::Char('q') || key == Key::Char('Q'))
+                    if main_view.editor.mode == nuui::editor::Mode::Command && key == Key::Char('q')
                     {
                         break;
                     }
@@ -79,7 +78,7 @@ fn main() {
                 }
 
                 match key {
-                    Key::Char('q' | 'Q') | Key::Char('\x03') => break,
+                    Key::Char('q') | Key::Char('\x03') => break,
 
                     Key::Tab => main_view.toggle_focus(),
 
@@ -117,7 +116,7 @@ fn main() {
                     Key::Left => main_view.handle_left_arrow(),
                     Key::Enter => main_view.trigger_selected(),
 
-                    Key::Char('r' | 'R') => {
+                    Key::Char('r') => {
                         library = lib::init();
                         main_view.library_tree = library.tree.clone();
                         main_view.library_root = library.root_path.clone();
@@ -159,7 +158,7 @@ fn main() {
                             break;
                         }
                     }
-                    Key::Char('T') => {
+                    Key::Shift('t') => {
                         let result = error::error_screen(
                             &terminal,
                             &mut canvas,

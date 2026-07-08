@@ -31,6 +31,7 @@ pub struct Editor {
     pub undo_stack: Vec<EditorState>,
     pub redo_stack: Vec<EditorState>,
 
+    pub last_key_a: bool,
     pub last_key_g: bool,
     pub last_key_d: bool,
     pub last_key_y: bool,
@@ -60,6 +61,7 @@ impl Editor {
             clipboard: Clipboard::new().ok(),
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
+            last_key_a: false,
             last_key_g: false,
             last_key_d: false,
             last_key_y: false,
@@ -115,6 +117,7 @@ impl Editor {
     }
 
     fn reset_keys(&mut self) {
+        self.last_key_a = false;
         self.last_key_g = false;
         self.last_key_d = false;
         self.last_key_y = false;
@@ -133,6 +136,7 @@ impl Editor {
     }
 
     fn handle_command_key(&mut self, key: Key) {
+        let mut reset_a = true;
         let mut reset_g = true;
         let mut reset_d = true;
         let mut reset_y = true;
@@ -159,14 +163,33 @@ impl Editor {
                 self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
             }
             Key::Char('a') => {
-                self.state.selection_start = Some((0, 0));
-                self.state.cursor_y = self.state.lines.len().saturating_sub(1);
+                if self.last_key_a {
+                    self.state.selection_start = Some((0, 0));
+                    self.state.cursor_y = self.state.lines.len().saturating_sub(1);
+                    self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
+                } else {
+                    reset_a = false;
+                    self.last_key_a = true;
+                }
+            }
+            Key::Char('w') => self.jump_word_forward(false),
+            Key::Char('b') => self.jump_word_backward(false),
+            Key::CtrlLeft | Key::Ctrl('h') => self.jump_word_backward(false),
+            Key::CtrlRight | Key::Ctrl('l') => self.jump_word_forward(false),
+            Key::CtrlShiftLeft => self.jump_word_backward(true),
+            Key::CtrlShiftRight => self.jump_word_forward(true),
+            Key::Char('!') => {
+                if self.state.selection_start.is_none() {
+                    self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
+                }
+                self.state.cursor_x = 0;
+            }
+            Key::Char(')') => {
+                if self.state.selection_start.is_none() {
+                    self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
+                }
                 self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
             }
-            Key::Char('w') => self.jump_word_forward(),
-            Key::Char('b') => self.jump_word_backward(),
-            Key::CtrlLeft | Key::Ctrl('h') => self.jump_word_backward(),
-            Key::CtrlRight | Key::Ctrl('l') => self.jump_word_forward(),
             Key::Char('g') => {
                 self.state.selection_start = None;
                 if self.last_key_g {
@@ -177,7 +200,7 @@ impl Editor {
                     self.last_key_g = true;
                 }
             }
-            Key::Char('G') => {
+            Key::Shift('g') => {
                 self.state.selection_start = None;
                 self.state.cursor_y = self.state.lines.len().saturating_sub(1);
                 self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
@@ -230,6 +253,9 @@ impl Editor {
             _ => {}
         }
 
+        if reset_a {
+            self.last_key_a = false;
+        }
         if reset_g {
             self.last_key_g = false;
         }
@@ -262,8 +288,10 @@ impl Editor {
                 self.push_undo();
                 self.delete_char_before();
             }
-            Key::CtrlLeft | Key::Ctrl('h') => self.jump_word_backward(),
-            Key::CtrlRight | Key::Ctrl('l') => self.jump_word_forward(),
+            Key::CtrlLeft | Key::Ctrl('h') => self.jump_word_backward(false),
+            Key::CtrlRight | Key::Ctrl('l') => self.jump_word_forward(false),
+            Key::CtrlShiftLeft => self.jump_word_backward(true),
+            Key::CtrlShiftRight => self.jump_word_forward(true),
             Key::CtrlBackspace | Key::Ctrl('w') => {
                 self.push_undo();
                 self.delete_word_before();
@@ -596,8 +624,15 @@ impl Editor {
         }
     }
 
-    fn jump_word_forward(&mut self) {
-        self.state.selection_start = None;
+    fn jump_word_forward(&mut self, shift: bool) {
+        if shift {
+            if self.state.selection_start.is_none() {
+                self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
+            }
+        } else {
+            self.state.selection_start = None;
+        }
+
         let line = &self.state.lines[self.state.cursor_y];
         if self.state.cursor_x >= line.chars().count() {
             if self.state.cursor_y < self.state.lines.len() - 1 {
@@ -626,8 +661,15 @@ impl Editor {
         self.clamp_cursor();
     }
 
-    fn jump_word_backward(&mut self) {
-        self.state.selection_start = None;
+    fn jump_word_backward(&mut self, shift: bool) {
+        if shift {
+            if self.state.selection_start.is_none() {
+                self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
+            }
+        } else {
+            self.state.selection_start = None;
+        }
+
         if self.state.cursor_x == 0 {
             if self.state.cursor_y > 0 {
                 self.state.cursor_y -= 1;

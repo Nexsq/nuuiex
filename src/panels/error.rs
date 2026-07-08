@@ -146,7 +146,7 @@ where
                     }
                     Key::Enter => return PanelResult::Ok(selected_idx),
                     Key::Esc => return PanelResult::Cancel,
-                    Key::Char('q' | 'Q') | Key::Char('\x03') => return PanelResult::Quit,
+                    Key::Char('q') | Key::Char('\x03') => return PanelResult::Quit,
                     _ => continue,
                 }
                 dirty = true;
@@ -273,7 +273,7 @@ pub fn error_screen(
                     }
                     Key::Enter => return PanelResult::Ok(selected_idx),
                     Key::Esc => return PanelResult::Cancel,
-                    Key::Char('q' | 'Q') | Key::Char('\x03') => return PanelResult::Quit,
+                    Key::Char('q') | Key::Char('\x03') => return PanelResult::Quit,
                     _ => continue,
                 }
                 dirty = true;

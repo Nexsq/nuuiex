@@ -417,14 +417,15 @@ where
                         Key::Esc => {
                             edit_mode = false;
                         }
+                        Key::Backspace => {
+                            edit_buffer.pop();
+                        }
                         Key::Char('\x03') => {
                             config.save();
                             return true;
                         }
                         Key::Char(c) => {
-                            if c == '\x08' || c == '\x7F' {
-                                edit_buffer.pop();
-                            } else if !c.is_control() {
+                            if !c.is_control() {
                                 edit_buffer.push(c);
                             }
                         }
@@ -439,7 +440,7 @@ where
                         config.save();
                         return false;
                     }
-                    Key::Char('q' | 'Q') | Key::Char('\x03') => {
+                    Key::Char('q') | Key::Char('\x03') => {
                         config.save();
                         return true;
                     }
