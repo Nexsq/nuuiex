@@ -1,5 +1,3 @@
 add custom sorting for library (later later)
 
 add error messages and code analysis when editing
-
-config color is bugged due to the # symbol at the start of hex value
