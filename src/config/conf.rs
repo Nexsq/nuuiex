@@ -7,6 +7,7 @@ const DEFAULT_CONFIG: &str = include_str!("template.conf");
 #[derive(Debug, Clone)]
 pub struct Config {
     pub indicator_style: String,
+    pub theme: String,
 
     pub bind_insert: char,
     pub bind_visual: char,
@@ -32,6 +33,7 @@ impl Default for Config {
     fn default() -> Self {
         let mut config = Self {
             indicator_style: String::new(),
+            theme: String::new(),
 
             bind_insert: '\0',
             bind_visual: '\0',
@@ -74,6 +76,7 @@ impl Config {
 
                 match key {
                     "indicator_style" => self.indicator_style = val.to_string(),
+                    "theme" => self.theme = val.to_string(),
 
                     "bind_insert" => {
                         self.bind_insert = val
@@ -211,6 +214,7 @@ impl Config {
     pub fn reset_appearance(&mut self) {
         let default = Config::default();
         self.indicator_style = default.indicator_style;
+        self.theme = default.theme;
     }
 
     pub fn reset_keybinds(&mut self) {
@@ -269,6 +273,9 @@ impl Config {
                         key_str, self.indicator_style, comment
                     )
                     .unwrap(),
+                    "theme" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.theme, comment).unwrap()
+                    }
                     "bind_insert" => {
                         writeln!(&mut output, "{} = {}{}", key_str, self.bind_insert, comment)
                             .unwrap()

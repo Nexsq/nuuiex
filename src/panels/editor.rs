@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::conf::Config;
-use crate::{Border, Box, Color, Key, Modifier, Style};
+use crate::{Border, Box, Color, Key, Modifier, Style, theme::themecore::Theme};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Mode {
@@ -948,7 +948,14 @@ impl Editor {
         self.clamp_cursor();
     }
 
-    pub fn render(&mut self, width: u16, height: u16, is_active: bool, config: &Config) -> Box {
+    pub fn render(
+        &mut self,
+        width: u16,
+        height: u16,
+        is_active: bool,
+        config: &Config,
+        theme: &Theme,
+    ) -> Box {
         let use_corner = config.indicator_style == "corner";
 
         let mut b = Box::new(
@@ -962,9 +969,9 @@ impl Editor {
             },
             Style {
                 fg: if is_active && !use_corner {
-                    Color::White
+                    theme.selected_box
                 } else {
-                    Color::Magenta
+                    theme.main_box
                 },
                 bg: Color::None,
                 md: Modifier::None,
@@ -972,32 +979,41 @@ impl Editor {
         );
 
         if self.is_editing {
-            let mode_str = match self.mode {
+            let (mode_str, mode_color) = match self.mode {
                 Mode::Command => {
                     if self.visual_mode {
-                        "[VIS]"
+                        ("[VIS]", theme.editor_vis)
                     } else {
-                        "[CMD]"
+                        ("[CMD]", theme.editor_cmd)
                     }
                 }
-                Mode::Insert => "[INS]",
+                Mode::Insert => ("[INS]", theme.editor_ins),
             };
-            let title = if self.rel_path.is_empty() {
-                format!(" {} ", mode_str)
+
+            let default_style = Style {
+                fg: theme.main_label,
+                bg: Color::None,
+                md: Modifier::Bold,
+            };
+            let mode_style = Style {
+                fg: mode_color,
+                bg: Color::None,
+                md: Modifier::Bold,
+            };
+
+            b.insert_text(" ", 1, -1, false, default_style);
+            b.insert_text(mode_str, 2, -1, false, mode_style);
+            if !self.rel_path.is_empty() {
+                b.insert_text(
+                    &format!(" {} ", self.rel_path),
+                    2 + mode_str.len() as i16,
+                    -1,
+                    false,
+                    default_style,
+                );
             } else {
-                format!(" {} {} ", mode_str, self.rel_path)
-            };
-            b.insert_text(
-                &title,
-                1,
-                -1,
-                false,
-                Style {
-                    fg: Color::Yellow,
-                    bg: Color::None,
-                    md: Modifier::Bold,
-                },
-            );
+                b.insert_text(" ", 2 + mode_str.len() as i16, -1, false, default_style);
+            }
         }
 
         if is_active && use_corner {
@@ -1006,7 +1022,7 @@ impl Editor {
                     crate::Cell {
                         c: '■',
                         s: Style {
-                            fg: Color::White,
+                            fg: theme.selected_box,
                             bg: Color::None,
                             md: Modifier::None,
                         },

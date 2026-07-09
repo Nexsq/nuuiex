@@ -1,6 +1,8 @@
 use super::ActivePanel;
-use super::layout::{LIST_W, TITLE_H};
-use crate::{Border, Box, Color, Modifier, Style, conf::Config, lib::MacroNode};
+use super::layout::LIST_W;
+use crate::{
+    Border, Box, Color, Modifier, Style, conf::Config, lib::MacroNode, theme::themecore::Theme,
+};
 
 pub fn resolve_view(
     expanded_path: &[usize],
@@ -24,6 +26,7 @@ pub fn resolve_view(
 
 pub fn refresh(
     term_h: u16,
+    header_h: u16,
     active: ActivePanel,
     library_tree: &[MacroNode],
     expanded_path: &[usize],
@@ -31,16 +34,17 @@ pub fn refresh(
     list_scroll: &mut usize,
     editing_path: Option<&std::path::Path>,
     config: &Config,
+    theme: &Theme,
 ) -> Box {
-    let list_h = term_h.saturating_sub(TITLE_H);
+    let list_h = term_h.saturating_sub(header_h);
 
     let is_active = active == ActivePanel::List;
     let use_corner = config.indicator_style == "corner";
 
     let list_color = if is_active && !use_corner {
-        Color::White
+        theme.selected_box
     } else {
-        Color::Blue
+        theme.list_box
     };
     let list_border = if is_active && !use_corner {
         Border::Heavy
@@ -66,7 +70,7 @@ pub fn refresh(
                 crate::Cell {
                     c: '■',
                     s: Style {
-                        fg: Color::White,
+                        fg: theme.selected_box,
                         bg: Color::None,
                         md: Modifier::None,
                     },
@@ -212,24 +216,35 @@ pub fn refresh(
     {
         let (node_symbol, normal_color) = if let Some(n) = item.node {
             match n {
-                MacroNode::Folder { .. } => ("▪", Color::Blue),
-                MacroNode::Script { .. } => ("▫", Color::Magenta),
+                MacroNode::Folder { .. } => ("▪", theme.list_folder),
+                MacroNode::Script { .. } => ("▫", theme.list_file),
             }
         } else {
-            ("", Color::DarkGray)
+            ("", theme.settings_entry)
         };
 
         let is_selected =
             item.is_selectable && (item.selectable_idx == Some(*list_selected)) && is_active;
 
+        let is_empty_indicator = item.node.is_none() && item.custom_text == Some("...");
+        let use_dim = !item.is_selectable && !is_empty_indicator && !item.is_active_parent;
+
         let (fg_color, bg_color) = if item.is_active_parent {
             (normal_color, Color::None)
         } else if !item.is_selectable {
-            (Color::DarkGray, Color::None)
+            (theme.settings_entry, Color::None)
         } else if is_selected {
             (Color::Black, normal_color)
         } else {
             (normal_color, Color::None)
+        };
+
+        let md = if is_selected {
+            Modifier::None
+        } else if use_dim {
+            Modifier::Dim
+        } else {
+            Modifier::None
         };
 
         let indent_prefix = match (item.indent_spaces, item.use_branch_prefix) {
@@ -286,7 +301,7 @@ pub fn refresh(
             Style {
                 fg: fg_color,
                 bg: bg_color,
-                md: Modifier::None,
+                md,
             },
         );
     }

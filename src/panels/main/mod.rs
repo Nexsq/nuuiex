@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use crate::{
     Border, Box, Canvas, Color, Modifier, Style, conf::Config, editor::Editor, lib::MacroNode,
+    theme::themecore::Theme,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -48,6 +49,8 @@ pub struct MainView {
     pub deck_box: Box,
     pub deck_x: i16,
     pub deck_y: i16,
+
+    pub theme: Theme,
 }
 
 impl MainView {
@@ -58,7 +61,10 @@ impl MainView {
         library_tree: Vec<MacroNode>,
         library_root: PathBuf,
         config: &Config,
+        theme: Theme,
     ) -> Self {
+        let header_h = theme.title.len().max(1) as u16;
+
         let dummy = || {
             Box::new(
                 1,
@@ -77,7 +83,7 @@ impl MainView {
             term_w,
             term_h,
             min_w: 64,
-            min_h: 16,
+            min_h: 13 + header_h,
             active,
             list_selected: 0,
             list_scroll: 0,
@@ -101,6 +107,7 @@ impl MainView {
             deck_box: dummy(),
             deck_x: 0,
             deck_y: 0,
+            theme,
         };
 
         view.auto_load();
@@ -155,8 +162,10 @@ impl MainView {
         self.term_w = term_w;
         self.term_h = term_h;
 
+        let header_h = self.theme.title.len().max(1) as u16;
+
         let (main_pos, list_pos, tabs_pos, title_pos, deck_pos) =
-            layout::get_positions(term_w, term_h);
+            layout::get_positions(term_w, term_h, header_h);
 
         self.main_x = main_pos.0;
         self.main_y = main_pos.1;
@@ -179,15 +188,18 @@ impl MainView {
     }
 
     pub fn refresh_main(&mut self, config: &Config) {
+        let header_h = self.theme.title.len().max(1) as u16;
         self.main_box = self.editor.render(
             self.term_w.saturating_sub(layout::TABS_W + layout::LIST_W),
-            self.term_h.saturating_sub(layout::DECK_H),
+            self.term_h.saturating_sub(header_h),
             self.active == ActivePanel::Main,
             config,
+            &self.theme,
         );
     }
 
     pub fn refresh_list(&mut self, config: &Config) {
+        let header_h = self.theme.title.len().max(1) as u16;
         let active_path = self
             .running_macro
             .as_deref()
@@ -195,6 +207,7 @@ impl MainView {
 
         self.list_box = list::refresh(
             self.term_h,
+            header_h,
             self.active,
             &self.library_tree,
             &self.expanded_path,
@@ -202,13 +215,15 @@ impl MainView {
             &mut self.list_scroll,
             active_path,
             config,
+            &self.theme,
         );
     }
 
     pub fn refresh_static_boxes(&mut self) {
-        self.tabs_box = r#static::refresh_tabs(self.term_h);
-        self.title_box = r#static::refresh_title();
-        self.deck_box = r#static::refresh_deck(self.term_w);
+        let header_h = self.theme.title.len().max(1) as u16;
+        self.tabs_box = r#static::refresh_tabs(self.term_h, header_h, &self.theme);
+        self.title_box = r#static::refresh_title(&self.theme);
+        self.deck_box = r#static::refresh_deck(self.term_w, header_h, &self.theme);
     }
 
     pub fn toggle_focus(&mut self, config: &Config) {
@@ -344,7 +359,7 @@ impl MainView {
         if let Some(node) = parent_nodes.get(self.list_selected) {
             if let MacroNode::Script { name, path } = node {
                 if let Ok(source) = std::fs::read_to_string(path) {
-                    let output = crate::engine::run(&source);
+                    let output = crate::engine::core::run(&source);
                     self.editor.state.lines = output;
                 } else {
                     self.editor.state.lines = vec![format!("Failed to read script '{}'", name)];

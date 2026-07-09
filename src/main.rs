@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use nuui::Canvas;
+use nuui::themecore;
 use nuui::{Key, Terminal};
 use nuui::{conf, lib};
 use nuui::{error, main, settings, toosmall};
@@ -44,6 +45,31 @@ fn main() {
         }
     };
 
+    let theme = match themecore::init(&config.theme) {
+        Ok(t) => t,
+        Err(e) => {
+            let msg = format!("Theme Warning:\n{}\n\nWhat would you like to do?", e);
+            let res = error::warning_box(
+                &terminal,
+                &mut canvas,
+                &msg,
+                &["EXIT", "RESET TO DEFAULT THEME"],
+                0,
+                0,
+                min_w,
+                min_h,
+                |_, _, _| {},
+            );
+            if res == nuui::PanelResult::Ok(1) {
+                config.theme = "default".to_string();
+                config.save();
+                themecore::init("default").unwrap_or_default()
+            } else {
+                return;
+            }
+        }
+    };
+
     let mut library = match lib::init() {
         Ok(l) => l,
         Err(e) => {
@@ -66,6 +92,7 @@ fn main() {
         library.tree.clone(),
         library.root_path.clone(),
         &config,
+        theme,
     );
 
     let mut dirty = true;
@@ -134,26 +161,7 @@ fn main() {
                             &terminal,
                             &mut canvas,
                             &mut config,
-                            main_view.min_w,
-                            main_view.min_h,
-                            |cvs, cfg, w, h| {
-                                if w != term_w || h != term_h {
-                                    term_w = w;
-                                    term_h = h;
-                                    if term_w >= main_view.min_w && term_h >= main_view.min_h {
-                                        main_view.resize(term_w, term_h, cfg);
-                                    }
-                                } else {
-                                    if term_w >= main_view.min_w && term_h >= main_view.min_h {
-                                        main_view.refresh_all(cfg);
-                                    }
-                                }
-                                if term_w < main_view.min_w || term_h < main_view.min_h {
-                                    toosmall::render(cvs, term_w, term_h);
-                                } else {
-                                    main_view.render(cvs);
-                                }
-                            },
+                            &mut main_view,
                         );
 
                         if should_quit {

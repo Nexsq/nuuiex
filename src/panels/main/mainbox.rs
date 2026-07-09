@@ -1,21 +1,23 @@
 use super::ActivePanel;
-use super::layout::{DECK_H, LIST_W, TABS_W};
-use crate::{Border, Box, Color, Modifier, Style, conf::Config};
+use super::layout::{LIST_W, TABS_W};
+use crate::{Border, Box, Color, Modifier, Style, conf::Config, theme::themecore::Theme};
 
 pub fn refresh(
     term_w: u16,
     term_h: u16,
+    header_h: u16,
     active: ActivePanel,
     main_buffer: &str,
     config: &Config,
+    theme: &Theme,
 ) -> Box {
     let is_active = active == ActivePanel::Main;
     let use_corner = config.indicator_style == "corner";
 
     let main_color = if is_active && !use_corner {
-        Color::White
+        theme.selected_box
     } else {
-        Color::Magenta
+        theme.main_box
     };
     let main_border = if is_active && !use_corner {
         Border::Heavy
@@ -25,7 +27,7 @@ pub fn refresh(
 
     let mut main_box = Box::new(
         term_w.saturating_sub(TABS_W + LIST_W),
-        term_h.saturating_sub(DECK_H),
+        term_h.saturating_sub(header_h),
         1,
         main_border,
         Style {
@@ -41,7 +43,7 @@ pub fn refresh(
                 crate::Cell {
                     c: '■',
                     s: Style {
-                        fg: Color::White,
+                        fg: theme.selected_box,
                         bg: Color::None,
                         md: Modifier::None,
                     },

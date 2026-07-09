@@ -26,13 +26,39 @@ pub enum SettingType {
     Action,
 }
 
-fn build_categories(config: &Config) -> Vec<Category> {
+pub fn available_themes() -> Vec<String> {
+    let proj_dirs = directories::ProjectDirs::from("com", "Nexsq", "nuui").unwrap();
+    let themes_dir = proj_dirs.config_dir().join("themes");
+    let mut themes = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(themes_dir) {
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if path.extension().map_or(false, |ext| ext == "conf") {
+                if let Some(stem) = path.file_stem() {
+                    themes.push(stem.to_string_lossy().into_owned());
+                }
+            }
+        }
+    }
+    if !themes.contains(&"default".to_string()) {
+        themes.push("default".to_string());
+    }
+    themes.sort();
+    themes
+}
+
+fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec<Category> {
     let def = Config::default();
 
     vec![
         Category {
             name: "Appearance",
             settings: vec![
+                Setting {
+                    name: "Theme",
+                    key: "theme",
+                    kind: SettingType::Choice(themes.to_vec(), theme_idx),
+                },
                 Setting {
                     name: "Selected Indicator",
                     key: "indicator_style",
@@ -248,23 +274,21 @@ pub struct Category {
     pub settings: Vec<Setting>,
 }
 
-pub fn settings_modal<F>(
+pub fn settings_modal(
     terminal: &Terminal,
     canvas: &mut Canvas,
     config: &mut Config,
-    min_w: u16,
-    min_h: u16,
-    mut draw_background: F,
-) -> bool
-where
-    F: FnMut(&mut Canvas, &Config, u16, u16),
-{
+    main_view: &mut crate::main::MainView,
+) -> bool {
     let mut active_panel = ActiveSettingsPanel::Categories;
 
     let mut edit_mode = false;
     let mut edit_buffer = String::new();
 
-    let mut categories = build_categories(config);
+    let themes = available_themes();
+    let current_theme_idx = themes.iter().position(|t| t == &config.theme).unwrap_or(0);
+
+    let mut categories = build_categories(config, &themes, current_theme_idx);
 
     let mut cat_selected = 0;
     let mut cat_scroll = 0;
@@ -272,6 +296,7 @@ where
     let mut det_selected = vec![0; categories.len()];
     let mut det_scroll = vec![0; categories.len()];
 
+    let mut prev_theme = config.theme.clone();
     let mut dirty = true;
 
     let version_str = format!(" v{} ", env!("CARGO_PKG_VERSION"));
@@ -281,6 +306,11 @@ where
         for cat in categories {
             for set in &cat.settings {
                 match set.key {
+                    "theme" => {
+                        if let SettingType::Choice(opts, idx) = &set.kind {
+                            config.theme = opts[*idx].clone();
+                        }
+                    }
                     "indicator_style" => {
                         if let SettingType::Choice(opts, idx) = &set.kind {
                             config.indicator_style = opts[*idx].clone();
@@ -402,11 +432,19 @@ where
         if dirty {
             canvas.clean();
 
-            if current_w < min_w || current_h < min_h {
+            let current_min_w = main_view.min_w;
+            let current_min_h = main_view.min_h;
+
+            if current_w < current_min_w || current_h < current_min_h {
                 crate::toosmall::render(canvas, current_w, current_h);
                 canvas.render();
             } else {
-                draw_background(canvas, config, current_w, current_h);
+                if current_w != main_view.term_w || current_h != main_view.term_h {
+                    main_view.resize(current_w, current_h, config);
+                } else {
+                    main_view.refresh_all(config);
+                }
+                main_view.render(canvas);
                 canvas.apply_dim();
 
                 let term_w = canvas.width;
@@ -424,11 +462,6 @@ where
                 let use_corner = config.indicator_style == "corner";
 
                 let cat_active = active_panel == ActiveSettingsPanel::Categories;
-                let cat_color = if cat_active && !use_corner {
-                    Color::White
-                } else {
-                    Color::Blue
-                };
                 let cat_border = if cat_active && !use_corner {
                     Border::Heavy
                 } else {
@@ -440,7 +473,11 @@ where
                     1,
                     cat_border,
                     Style {
-                        fg: cat_color,
+                        fg: if cat_active && !use_corner {
+                            main_view.theme.selected_box
+                        } else {
+                            main_view.theme.settings_category_box
+                        },
                         bg: Color::None,
                         md: Modifier::None,
                     },
@@ -451,7 +488,7 @@ where
                     -1,
                     false,
                     Style {
-                        fg: Color::Yellow,
+                        fg: main_view.theme.main_label,
                         bg: Color::None,
                         md: Modifier::Bold,
                     },
@@ -463,7 +500,7 @@ where
                             Cell {
                                 c: '■',
                                 s: Style {
-                                    fg: Color::White,
+                                    fg: main_view.theme.selected_box,
                                     bg: Color::None,
                                     md: Modifier::None,
                                 },
@@ -493,11 +530,11 @@ where
                     let is_selected = i == cat_selected;
 
                     let (fg_color, bg_color) = if is_selected && cat_active {
-                        (Color::Black, cat_color)
+                        (Color::Black, main_view.theme.settings_selected)
                     } else if is_selected {
-                        (cat_color, Color::None)
+                        (main_view.theme.settings_selected, Color::None)
                     } else {
-                        (Color::DarkGray, Color::None)
+                        (main_view.theme.settings_entry, Color::None)
                     };
 
                     let style = Style {
@@ -523,11 +560,6 @@ where
                 }
 
                 let det_active = active_panel == ActiveSettingsPanel::Details;
-                let det_color = if det_active && !use_corner {
-                    Color::White
-                } else {
-                    Color::Blue
-                };
                 let det_border = if det_active && !use_corner {
                     Border::Heavy
                 } else {
@@ -539,7 +571,11 @@ where
                     1,
                     det_border,
                     Style {
-                        fg: det_color,
+                        fg: if det_active && !use_corner {
+                            main_view.theme.selected_box
+                        } else {
+                            main_view.theme.settings_options_box
+                        },
                         bg: Color::None,
                         md: Modifier::None,
                     },
@@ -550,7 +586,7 @@ where
                     -1,
                     false,
                     Style {
-                        fg: Color::Yellow,
+                        fg: main_view.theme.main_label,
                         bg: Color::None,
                         md: Modifier::Bold,
                     },
@@ -562,7 +598,7 @@ where
                             Cell {
                                 c: '■',
                                 s: Style {
-                                    fg: Color::White,
+                                    fg: main_view.theme.selected_box,
                                     bg: Color::None,
                                     md: Modifier::None,
                                 },
@@ -599,21 +635,21 @@ where
                     let is_action = matches!(setting.kind, SettingType::Action);
 
                     let (mut fg_color, mut bg_color) = if is_selected && det_active {
-                        (Color::Black, det_color)
+                        (Color::Black, main_view.theme.settings_selected)
                     } else if is_selected {
-                        (det_color, Color::None)
+                        (main_view.theme.settings_selected, Color::None)
                     } else {
-                        (Color::DarkGray, Color::None)
+                        (main_view.theme.settings_entry, Color::None)
                     };
 
                     if is_action {
                         if is_selected && det_active {
                             fg_color = Color::Black;
-                            bg_color = Color::Yellow;
+                            bg_color = main_view.theme.settings_special;
                         } else if is_selected {
-                            fg_color = Color::Yellow;
+                            fg_color = main_view.theme.settings_special;
                         } else {
-                            fg_color = Color::DarkGray;
+                            fg_color = main_view.theme.settings_entry;
                         }
                     }
 
@@ -669,7 +705,7 @@ where
                 let v_start_x = det_box.width.saturating_sub(3 + version_len);
 
                 let det_style = Style {
-                    fg: det_color,
+                    fg: main_view.theme.settings_options_box,
                     bg: Color::None,
                     md: Modifier::None,
                 };
@@ -687,6 +723,8 @@ where
             }
             dirty = false;
         }
+
+        let mut check_theme = false;
 
         match terminal.read_key(Duration::from_millis(16)) {
             Key::None => continue,
@@ -709,6 +747,7 @@ where
                                 }
                             }
                             apply_settings(&categories, config);
+                            check_theme = true;
                             edit_mode = false;
                         }
                         Key::Esc => {
@@ -774,153 +813,217 @@ where
                         _ => {}
                     }
                     dirty = true;
-                    continue;
-                }
-
-                match key {
-                    Key::Esc => {
-                        config.save();
-                        return false;
-                    }
-                    Key::Char('q') | Key::Char('\x03') => {
-                        config.save();
-                        return true;
-                    }
-                    Key::Tab => {
-                        active_panel = if active_panel == ActiveSettingsPanel::Categories {
-                            ActiveSettingsPanel::Details
-                        } else {
-                            ActiveSettingsPanel::Categories
-                        };
-                    }
-                    Key::Left => {
-                        if active_panel == ActiveSettingsPanel::Details {
-                            let cat = &mut categories[cat_selected];
-                            if !cat.settings.is_empty() {
-                                let setting = &mut cat.settings[det_selected[cat_selected]];
-                                match &mut setting.kind {
-                                    SettingType::Choice(opts, idx) => {
-                                        if *idx > 0 {
-                                            *idx -= 1;
-                                        } else {
-                                            *idx = opts.len() - 1;
-                                        }
-                                        apply_settings(&categories, config);
-                                    }
-                                    SettingType::Custom { .. } | SettingType::Action => {}
-                                }
-                            }
+                } else {
+                    match key {
+                        Key::Esc => {
+                            config.save();
+                            return false;
                         }
-                    }
-                    Key::Right => {
-                        if active_panel == ActiveSettingsPanel::Categories {
-                            active_panel = ActiveSettingsPanel::Details;
-                        } else if active_panel == ActiveSettingsPanel::Details {
-                            let cat = &mut categories[cat_selected];
-                            if !cat.settings.is_empty() {
-                                let setting = &mut cat.settings[det_selected[cat_selected]];
-                                match &mut setting.kind {
-                                    SettingType::Choice(opts, idx) => {
-                                        if *idx < opts.len() - 1 {
-                                            *idx += 1;
-                                        } else {
-                                            *idx = 0;
-                                        }
-                                        apply_settings(&categories, config);
-                                    }
-                                    SettingType::Custom { .. } | SettingType::Action => {}
-                                }
-                            }
+                        Key::Char('q') | Key::Char('\x03') => {
+                            config.save();
+                            return true;
                         }
-                    }
-                    Key::Up => {
-                        if active_panel == ActiveSettingsPanel::Categories {
-                            if cat_selected > 0 {
-                                cat_selected -= 1;
-                            }
-                        } else {
-                            if det_selected[cat_selected] > 0 {
-                                det_selected[cat_selected] -= 1;
-                            }
+                        Key::Tab => {
+                            active_panel = if active_panel == ActiveSettingsPanel::Categories {
+                                ActiveSettingsPanel::Details
+                            } else {
+                                ActiveSettingsPanel::Categories
+                            };
                         }
-                    }
-                    Key::Down => {
-                        if active_panel == ActiveSettingsPanel::Categories {
-                            if cat_selected < categories.len().saturating_sub(1) {
-                                cat_selected += 1;
-                            }
-                        } else {
-                            let max_det = categories[cat_selected].settings.len().saturating_sub(1);
-                            if det_selected[cat_selected] < max_det {
-                                det_selected[cat_selected] += 1;
-                            }
-                        }
-                    }
-                    Key::Enter => {
-                        if active_panel == ActiveSettingsPanel::Details {
-                            let cat = &mut categories[cat_selected];
-                            if !cat.settings.is_empty() {
-                                let setting = &mut cat.settings[det_selected[cat_selected]];
-                                match &setting.kind {
-                                    SettingType::Custom { value, .. } => {
-                                        edit_mode = true;
-                                        edit_buffer = value.clone();
-                                    }
-                                    SettingType::Action => {
-                                        let (msg, is_config, is_appearance) = match setting.key {
-                                            "reset_config" => (
-                                                "Reset all configurations to default?\n\nAre you sure?",
-                                                true,
-                                                false,
-                                            ),
-                                            "reset_keybinds" => (
-                                                "Reset all editor keybinds to default?\n\nAre you sure?",
-                                                false,
-                                                false,
-                                            ),
-                                            "reset_appearance" => (
-                                                "Reset appearance settings to default?\n\nAre you sure?",
-                                                false,
-                                                true,
-                                            ),
-                                            _ => ("", false, false),
-                                        };
-
-                                        let result = crate::error::warning_box(
-                                            terminal,
-                                            canvas,
-                                            msg,
-                                            &["CANCEL", "CONFIRM"],
-                                            0,
-                                            0,
-                                            min_w,
-                                            min_h,
-                                            |cvs, w, h| draw_background(cvs, config, w, h),
-                                        );
-
-                                        if result == crate::PanelResult::Ok(1) {
-                                            if is_config {
-                                                *config = Config::default();
-                                            } else if is_appearance {
-                                                config.reset_appearance();
+                        Key::Left => {
+                            if active_panel == ActiveSettingsPanel::Details {
+                                let cat = &mut categories[cat_selected];
+                                if !cat.settings.is_empty() {
+                                    let setting = &mut cat.settings[det_selected[cat_selected]];
+                                    match &mut setting.kind {
+                                        SettingType::Choice(opts, idx) => {
+                                            if *idx > 0 {
+                                                *idx -= 1;
                                             } else {
-                                                config.reset_keybinds();
+                                                *idx = opts.len() - 1;
                                             }
-                                            config.save();
-                                            categories = build_categories(config);
+                                            apply_settings(&categories, config);
+                                            check_theme = true;
                                         }
+                                        SettingType::Custom { .. } | SettingType::Action => {}
                                     }
-                                    _ => {}
                                 }
                             }
-                        } else if active_panel == ActiveSettingsPanel::Categories {
-                            active_panel = ActiveSettingsPanel::Details;
                         }
+                        Key::Right => {
+                            if active_panel == ActiveSettingsPanel::Categories {
+                                active_panel = ActiveSettingsPanel::Details;
+                            } else if active_panel == ActiveSettingsPanel::Details {
+                                let cat = &mut categories[cat_selected];
+                                if !cat.settings.is_empty() {
+                                    let setting = &mut cat.settings[det_selected[cat_selected]];
+                                    match &mut setting.kind {
+                                        SettingType::Choice(opts, idx) => {
+                                            if *idx < opts.len() - 1 {
+                                                *idx += 1;
+                                            } else {
+                                                *idx = 0;
+                                            }
+                                            apply_settings(&categories, config);
+                                            check_theme = true;
+                                        }
+                                        SettingType::Custom { .. } | SettingType::Action => {}
+                                    }
+                                }
+                            }
+                        }
+                        Key::Up => {
+                            if active_panel == ActiveSettingsPanel::Categories {
+                                if cat_selected > 0 {
+                                    cat_selected -= 1;
+                                }
+                            } else {
+                                if det_selected[cat_selected] > 0 {
+                                    det_selected[cat_selected] -= 1;
+                                }
+                            }
+                        }
+                        Key::Down => {
+                            if active_panel == ActiveSettingsPanel::Categories {
+                                if cat_selected < categories.len().saturating_sub(1) {
+                                    cat_selected += 1;
+                                }
+                            } else {
+                                let max_det =
+                                    categories[cat_selected].settings.len().saturating_sub(1);
+                                if det_selected[cat_selected] < max_det {
+                                    det_selected[cat_selected] += 1;
+                                }
+                            }
+                        }
+                        Key::Enter => {
+                            if active_panel == ActiveSettingsPanel::Details {
+                                let cat = &mut categories[cat_selected];
+                                if !cat.settings.is_empty() {
+                                    let setting = &mut cat.settings[det_selected[cat_selected]];
+                                    match &setting.kind {
+                                        SettingType::Custom { value, .. } => {
+                                            edit_mode = true;
+                                            edit_buffer = value.clone();
+                                        }
+                                        SettingType::Action => {
+                                            let (msg, is_config, is_appearance) = match setting.key
+                                            {
+                                                "reset_config" => (
+                                                    "Reset all configurations to default?\n\nAre you sure?",
+                                                    true,
+                                                    false,
+                                                ),
+                                                "reset_keybinds" => (
+                                                    "Reset all editor keybinds to default?\n\nAre you sure?",
+                                                    false,
+                                                    false,
+                                                ),
+                                                "reset_appearance" => (
+                                                    "Reset appearance settings to default?\n\nAre you sure?",
+                                                    false,
+                                                    true,
+                                                ),
+                                                _ => ("", false, false),
+                                            };
+
+                                            let result = crate::error::warning_box(
+                                                terminal,
+                                                canvas,
+                                                msg,
+                                                &["CANCEL", "CONFIRM"],
+                                                0,
+                                                0,
+                                                main_view.min_w,
+                                                main_view.min_h,
+                                                |cvs, w, h| {
+                                                    if w != main_view.term_w
+                                                        || h != main_view.term_h
+                                                    {
+                                                        main_view.resize(w, h, config);
+                                                    } else {
+                                                        main_view.refresh_all(config);
+                                                    }
+                                                    main_view.render(cvs);
+                                                },
+                                            );
+
+                                            if result == crate::PanelResult::Ok(1) {
+                                                if is_config {
+                                                    *config = Config::default();
+                                                } else if is_appearance {
+                                                    config.reset_appearance();
+                                                } else {
+                                                    config.reset_keybinds();
+                                                }
+                                                config.save();
+                                                let themes = available_themes();
+                                                let current_theme_idx = themes
+                                                    .iter()
+                                                    .position(|t| t == &config.theme)
+                                                    .unwrap_or(0);
+                                                categories = build_categories(
+                                                    config,
+                                                    &themes,
+                                                    current_theme_idx,
+                                                );
+                                                check_theme = true;
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            } else if active_panel == ActiveSettingsPanel::Categories {
+                                active_panel = ActiveSettingsPanel::Details;
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => continue,
+                    dirty = true;
                 }
-                dirty = true;
             }
+        }
+
+        if check_theme && config.theme != prev_theme {
+            match crate::theme::themecore::init(&config.theme) {
+                Ok(new_theme) => {
+                    main_view.theme = new_theme;
+                    let header_h = main_view.theme.title.len().max(1) as u16;
+                    main_view.min_h = 13 + header_h;
+
+                    let (term_w, term_h) = Terminal::size();
+                    main_view.resize(term_w, term_h, config);
+
+                    prev_theme = config.theme.clone();
+                }
+                Err(e) => {
+                    let msg = format!("Failed to load theme '{}':\n{}", config.theme, e);
+                    crate::error::warning_box(
+                        terminal,
+                        canvas,
+                        &msg,
+                        &["OK"],
+                        0,
+                        0,
+                        main_view.min_w,
+                        main_view.min_h,
+                        |cvs, w, h| {
+                            if w != main_view.term_w || h != main_view.term_h {
+                                main_view.resize(w, h, config);
+                            } else {
+                                main_view.refresh_all(config);
+                            }
+                            main_view.render(cvs);
+                        },
+                    );
+                    config.theme = prev_theme.clone();
+                    let themes = available_themes();
+                    let current_theme_idx =
+                        themes.iter().position(|t| t == &config.theme).unwrap_or(0);
+                    categories = build_categories(config, &themes, current_theme_idx);
+                }
+            }
+            dirty = true;
         }
     }
 }
