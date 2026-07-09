@@ -2,6 +2,7 @@ use arboard::Clipboard;
 use std::fs;
 use std::path::PathBuf;
 
+use crate::conf::Config;
 use crate::{Border, Box, Color, Key, Modifier, Style};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -32,10 +33,10 @@ pub struct Editor {
     pub undo_stack: Vec<EditorState>,
     pub redo_stack: Vec<EditorState>,
 
-    pub last_key_a: bool,
-    pub last_key_g: bool,
-    pub last_key_d: bool,
-    pub last_key_y: bool,
+    pub last_key_select_all: bool,
+    pub last_key_file_bounds: bool,
+    pub last_key_delete: bool,
+    pub last_key_copy: bool,
 }
 
 impl Default for Editor {
@@ -63,10 +64,10 @@ impl Editor {
             clipboard: Clipboard::new().ok(),
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
-            last_key_a: false,
-            last_key_g: false,
-            last_key_d: false,
-            last_key_y: false,
+            last_key_select_all: false,
+            last_key_file_bounds: false,
+            last_key_delete: false,
+            last_key_copy: false,
         }
     }
 
@@ -120,10 +121,10 @@ impl Editor {
     }
 
     fn reset_keys(&mut self) {
-        self.last_key_a = false;
-        self.last_key_g = false;
-        self.last_key_d = false;
-        self.last_key_y = false;
+        self.last_key_select_all = false;
+        self.last_key_file_bounds = false;
+        self.last_key_delete = false;
+        self.last_key_copy = false;
     }
 
     fn push_undo(&mut self) {
@@ -131,26 +132,31 @@ impl Editor {
         self.redo_stack.clear();
     }
 
-    pub fn handle_key(&mut self, key: Key) {
+    pub fn handle_key(&mut self, key: Key, config: &Config) {
         match self.mode {
-            Mode::Command => self.handle_command_key(key),
-            Mode::Insert => self.handle_insert_key(key),
+            Mode::Command => self.handle_command_key(key, config),
+            Mode::Insert => self.handle_insert_key(key, config),
         }
     }
 
-    fn handle_command_key(&mut self, key: Key) {
-        let mut reset_a = true;
-        let mut reset_g = true;
-        let mut reset_d = true;
-        let mut reset_y = true;
+    fn handle_command_key(&mut self, key: Key, config: &Config) {
+        let mut reset_select_all = true;
+        let mut reset_file_bounds = true;
+        let mut reset_delete = true;
+        let mut reset_copy = true;
 
         match key {
-            Key::Char('i') | Key::Esc => {
+            Key::Esc => {
                 self.visual_mode = false;
                 self.state.selection_start = None;
                 self.mode = Mode::Insert;
             }
-            Key::Char('v') => {
+            k if k == Key::Char(config.bind_insert) => {
+                self.visual_mode = false;
+                self.state.selection_start = None;
+                self.mode = Mode::Insert;
+            }
+            k if k == Key::Char(config.bind_visual) => {
                 if self.visual_mode {
                     self.visual_mode = false;
                     self.state.selection_start = None;
@@ -159,40 +165,60 @@ impl Editor {
                     self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
                 }
             }
-            Key::Left | Key::Char('h') => self.move_cursor(-1, 0, self.visual_mode),
-            Key::Right | Key::Char('l') => self.move_cursor(1, 0, self.visual_mode),
-            Key::Up | Key::Char('k') => self.move_cursor(0, -1, self.visual_mode),
-            Key::Down | Key::Char('j') => self.move_cursor(0, 1, self.visual_mode),
-            Key::CtrlLeft | Key::Ctrl('h') | Key::Char('b') | Key::CtrlBackspace => {
+            k if k == Key::Left || k == Key::Char(config.bind_left) => {
+                self.move_cursor(-1, 0, self.visual_mode)
+            }
+            k if k == Key::Right || k == Key::Char(config.bind_right) => {
+                self.move_cursor(1, 0, self.visual_mode)
+            }
+            k if k == Key::Up || k == Key::Char(config.bind_up) => {
+                self.move_cursor(0, -1, self.visual_mode)
+            }
+            k if k == Key::Down || k == Key::Char(config.bind_down) => {
+                self.move_cursor(0, 1, self.visual_mode)
+            }
+
+            k if k == Key::CtrlLeft
+                || k == Key::Ctrl(config.bind_left)
+                || k == Key::Char(config.bind_word_prev)
+                || k == Key::CtrlBackspace =>
+            {
                 self.jump_word_backward(self.visual_mode)
             }
-            Key::CtrlRight | Key::Ctrl('l') | Key::Char('w') => {
+            k if k == Key::CtrlRight
+                || k == Key::Ctrl(config.bind_right)
+                || k == Key::Char(config.bind_word_next) =>
+            {
                 self.jump_word_forward(self.visual_mode)
             }
-            Key::CtrlUp | Key::Ctrl('k') => self.jump_block_backward(self.visual_mode),
-            Key::CtrlDown | Key::Ctrl('j') => self.jump_block_forward(self.visual_mode),
+            k if k == Key::CtrlUp || k == Key::Ctrl(config.bind_up) => {
+                self.jump_block_backward(self.visual_mode)
+            }
+            k if k == Key::CtrlDown || k == Key::Ctrl(config.bind_down) => {
+                self.jump_block_forward(self.visual_mode)
+            }
 
-            Key::Char('1') => {
+            k if k == Key::Char(config.bind_line_start) => {
                 if !self.visual_mode {
                     self.state.selection_start = None;
                 }
                 self.state.cursor_x = 0;
             }
-            Key::Char('0') => {
+            k if k == Key::Char(config.bind_line_end) => {
                 if !self.visual_mode {
                     self.state.selection_start = None;
                 }
                 self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
             }
-            Key::Char('a') => {
-                if self.last_key_a {
+            k if k == Key::Char(config.bind_select_all) => {
+                if self.last_key_select_all {
                     self.visual_mode = true;
                     self.state.selection_start = Some((0, 0));
                     self.state.cursor_y = self.state.lines.len().saturating_sub(1);
                     self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
                 } else {
-                    reset_a = false;
-                    self.last_key_a = true;
+                    reset_select_all = false;
+                    self.last_key_select_all = true;
                 }
             }
             Key::Delete => {
@@ -203,86 +229,86 @@ impl Editor {
                     self.delete_char_after();
                 }
             }
-            Key::Char('g') => {
+            k if k == Key::Char(config.bind_file_bounds) => {
                 if !self.visual_mode {
                     self.state.selection_start = None;
                 }
-                if self.last_key_g {
+                if self.last_key_file_bounds {
                     self.state.cursor_y = 0;
                     self.state.cursor_x = 0;
                 } else {
-                    reset_g = false;
-                    self.last_key_g = true;
+                    reset_file_bounds = false;
+                    self.last_key_file_bounds = true;
                 }
             }
-            Key::Shift('g') => {
+            k if k == Key::Shift(config.bind_file_bounds) => {
                 if !self.visual_mode {
                     self.state.selection_start = None;
                 }
                 self.state.cursor_y = self.state.lines.len().saturating_sub(1);
                 self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
             }
-            Key::Char('d') => {
+            k if k == Key::Char(config.bind_delete) => {
                 if self.state.selection_start.is_some() {
                     self.push_undo();
                     self.delete_selection();
-                    reset_d = true;
-                } else if self.last_key_d {
+                    reset_delete = true;
+                } else if self.last_key_delete {
                     self.push_undo();
                     self.delete_current_line();
                 } else {
-                    reset_d = false;
-                    self.last_key_d = true;
+                    reset_delete = false;
+                    self.last_key_delete = true;
                 }
             }
-            Key::Char('y') => {
+            k if k == Key::Char(config.bind_copy) => {
                 if self.state.selection_start.is_some() {
                     self.copy_selection();
-                    reset_y = true;
-                } else if self.last_key_y {
+                    reset_copy = true;
+                } else if self.last_key_copy {
                     self.copy_current_line();
                 } else {
-                    reset_y = false;
-                    self.last_key_y = true;
+                    reset_copy = false;
+                    self.last_key_copy = true;
                 }
             }
-            Key::Char('p') => {
+            k if k == Key::Char(config.bind_paste) => {
                 self.push_undo();
                 self.paste_from_clipboard();
             }
-            Key::Char('u') => {
+            k if k == Key::Char(config.bind_undo) => {
                 if let Some(state) = self.undo_stack.pop() {
                     self.redo_stack.push(self.state.clone());
                     self.state = state;
                 }
             }
-            Key::Ctrl('r') => {
+            k if k == Key::Ctrl(config.bind_redo) => {
                 if let Some(state) = self.redo_stack.pop() {
                     self.undo_stack.push(self.state.clone());
                     self.state = state;
                 }
             }
-            Key::Char('s') => self.save(),
+            k if k == Key::Char(config.bind_save) => self.save(),
             _ => {}
         }
 
-        if reset_a {
-            self.last_key_a = false;
+        if reset_select_all {
+            self.last_key_select_all = false;
         }
-        if reset_g {
-            self.last_key_g = false;
+        if reset_file_bounds {
+            self.last_key_file_bounds = false;
         }
-        if reset_d {
-            self.last_key_d = false;
+        if reset_delete {
+            self.last_key_delete = false;
         }
-        if reset_y {
-            self.last_key_y = false;
+        if reset_copy {
+            self.last_key_copy = false;
         }
 
         self.clamp_cursor();
     }
 
-    fn handle_insert_key(&mut self, key: Key) {
+    fn handle_insert_key(&mut self, key: Key, _config: &Config) {
         match key {
             Key::Esc => {
                 self.mode = Mode::Command;

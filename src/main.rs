@@ -65,13 +65,13 @@ fn main() {
                         continue;
                     }
                     if main_view.editor.mode == nuui::editor::Mode::Insert && key == Key::Tab {
-                        main_view.editor.handle_key(key);
+                        main_view.editor.handle_key(key, &config);
                         main_view.refresh_main();
                         dirty = true;
                         continue;
                     }
 
-                    main_view.editor.handle_key(key);
+                    main_view.editor.handle_key(key, &config);
                     main_view.refresh_main();
                     dirty = true;
                     continue;
@@ -129,7 +129,7 @@ fn main() {
                     }
 
                     Key::Char('t') => {
-                        let result = error::error_box(
+                        let result = error::warning_box(
                             &terminal,
                             &mut canvas,
                             "This is a test warning\n\nDo you want to proceed",
@@ -159,7 +159,7 @@ fn main() {
                         }
                     }
                     Key::Shift('t') => {
-                        let result = error::error_screen(
+                        let result = error::error_box(
                             &terminal,
                             &mut canvas,
                             "This is a test warning\n\nDo you want to proceed",

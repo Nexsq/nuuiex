@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::{Border, Box, Canvas, Color, Key, Modifier, PanelResult, Style, Terminal};
 
-pub fn error_box<F>(
+pub fn warning_box<F>(
     terminal: &Terminal,
     canvas: &mut Canvas,
     msg: &str,
@@ -155,7 +155,7 @@ where
     }
 }
 
-pub fn error_screen(
+pub fn error_box(
     terminal: &Terminal,
     canvas: &mut Canvas,
     msg: &str,
