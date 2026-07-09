@@ -1,6 +1,6 @@
 use super::ActivePanel;
 use super::layout::{LIST_W, TITLE_H};
-use crate::{Border, Box, Color, Modifier, Style, lib::MacroNode};
+use crate::{Border, Box, Color, Modifier, Style, conf::Config, lib::MacroNode};
 
 pub fn resolve_view(
     expanded_path: &[usize],
@@ -30,15 +30,19 @@ pub fn refresh(
     list_selected: &mut usize,
     list_scroll: &mut usize,
     editing_path: Option<&std::path::Path>,
+    config: &Config,
 ) -> Box {
     let list_h = term_h.saturating_sub(TITLE_H);
 
-    let list_color = if active == ActivePanel::List {
+    let is_active = active == ActivePanel::List;
+    let use_corner = config.indicator_style == "corner";
+
+    let list_color = if is_active && !use_corner {
         Color::White
     } else {
         Color::Blue
     };
-    let list_border = if active == ActivePanel::List {
+    let list_border = if is_active && !use_corner {
         Border::Heavy
     } else {
         Border::Light
@@ -55,6 +59,23 @@ pub fn refresh(
             md: Modifier::None,
         },
     );
+
+    if is_active && use_corner {
+        if LIST_W > 0 {
+            list_box.put_cell(
+                crate::Cell {
+                    c: '■',
+                    s: Style {
+                        fg: Color::White,
+                        bg: Color::None,
+                        md: Modifier::None,
+                    },
+                },
+                LIST_W - 1,
+                0,
+            );
+        }
+    }
 
     let (view_path, empty_child_idx) = resolve_view(expanded_path, library_tree);
 
@@ -198,9 +219,8 @@ pub fn refresh(
             ("", Color::DarkGray)
         };
 
-        let is_selected = item.is_selectable
-            && (item.selectable_idx == Some(*list_selected))
-            && (active == ActivePanel::List);
+        let is_selected =
+            item.is_selectable && (item.selectable_idx == Some(*list_selected)) && is_active;
 
         let (fg_color, bg_color) = if item.is_active_parent {
             (normal_color, Color::None)

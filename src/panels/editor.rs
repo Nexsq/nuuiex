@@ -948,18 +948,20 @@ impl Editor {
         self.clamp_cursor();
     }
 
-    pub fn render(&mut self, width: u16, height: u16, is_active: bool) -> Box {
+    pub fn render(&mut self, width: u16, height: u16, is_active: bool, config: &Config) -> Box {
+        let use_corner = config.indicator_style == "corner";
+
         let mut b = Box::new(
             width,
             height,
             1,
-            if is_active {
+            if is_active && !use_corner {
                 Border::Heavy
             } else {
                 Border::Light
             },
             Style {
-                fg: if is_active {
+                fg: if is_active && !use_corner {
                     Color::White
                 } else {
                     Color::Magenta
@@ -996,6 +998,23 @@ impl Editor {
                     md: Modifier::Bold,
                 },
             );
+        }
+
+        if is_active && use_corner {
+            if width > 0 {
+                b.put_cell(
+                    crate::Cell {
+                        c: '■',
+                        s: Style {
+                            fg: Color::White,
+                            bg: Color::None,
+                            md: Modifier::None,
+                        },
+                    },
+                    width - 1,
+                    0,
+                );
+            }
         }
 
         let inner_w = width.saturating_sub(2) as usize;

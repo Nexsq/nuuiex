@@ -6,10 +6,7 @@ const DEFAULT_CONFIG: &str = include_str!("template.conf");
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub test: bool,
-    pub border_test: String,
-    pub something: i32,
-    pub primary_color: String,
+    pub indicator_style: String,
 
     pub bind_insert: char,
     pub bind_visual: char,
@@ -34,10 +31,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         let mut config = Self {
-            test: false,
-            border_test: String::new(),
-            something: 0,
-            primary_color: String::new(),
+            indicator_style: String::new(),
 
             bind_insert: '\0',
             bind_visual: '\0',
@@ -58,13 +52,13 @@ impl Default for Config {
             bind_redo: '\0',
             bind_save: '\0',
         };
-        config.parse_str(DEFAULT_CONFIG);
+        config.parse_str(DEFAULT_CONFIG).unwrap();
         config
     }
 }
 
 impl Config {
-    fn parse_str(&mut self, contents: &str) {
+    fn parse_str(&mut self, contents: &str) -> Result<(), String> {
         for line in contents.lines() {
             let trimmed = line.trim();
 
@@ -79,10 +73,7 @@ impl Config {
                 val = val.split_once(" #").map_or(val, |(v, _)| v).trim();
 
                 match key {
-                    "test" => self.test = val.parse().unwrap_or(self.test),
-                    "border_test" => self.border_test = val.to_string(),
-                    "something" => self.something = val.parse().unwrap_or(self.something),
-                    "primary_color" => self.primary_color = val.to_string(),
+                    "indicator_style" => self.indicator_style = val.to_string(),
 
                     "bind_insert" => {
                         self.bind_insert = val
@@ -214,12 +205,12 @@ impl Config {
                 }
             }
         }
+        Ok(())
     }
 
-    pub fn reset_general(&mut self) {
+    pub fn reset_appearance(&mut self) {
         let default = Config::default();
-        self.test = default.test;
-        self.border_test = default.border_test;
+        self.indicator_style = default.indicator_style;
     }
 
     pub fn reset_keybinds(&mut self) {
@@ -272,21 +263,10 @@ impl Config {
                 };
 
                 match key_str {
-                    "test" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.test, comment).unwrap()
-                    }
-                    "border_test" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.border_test, comment)
-                            .unwrap()
-                    }
-                    "something" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.something, comment)
-                            .unwrap()
-                    }
-                    "primary_color" => writeln!(
+                    "indicator_style" => writeln!(
                         &mut output,
                         "{} = {}{}",
-                        key_str, self.primary_color, comment
+                        key_str, self.indicator_style, comment
                     )
                     .unwrap(),
                     "bind_insert" => {
@@ -391,25 +371,48 @@ impl Config {
     }
 }
 
-pub fn init() -> Config {
+pub fn init() -> Result<Config, String> {
     let proj_dirs = ProjectDirs::from("com", "Nexsq", "nuui")
-        .expect("Failed to locate the system configuration directory.");
+        .ok_or("Failed to locate the system configuration directory.")?;
 
     let config_dir = proj_dirs.config_dir().join("conf");
     let config_file = config_dir.join("config.conf");
 
     if !config_dir.exists() {
-        fs::create_dir_all(&config_dir).expect("Failed to create config directory");
+        fs::create_dir_all(&config_dir)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
     }
 
     if !config_file.exists() {
-        fs::write(&config_file, DEFAULT_CONFIG).expect("Failed to write default config file");
+        fs::write(&config_file, DEFAULT_CONFIG)
+            .map_err(|e| format!("Failed to write default config file: {}", e))?;
     }
 
-    let contents = fs::read_to_string(&config_file).expect("Failed to read config file");
+    let contents = fs::read_to_string(&config_file)
+        .map_err(|e| format!("Failed to read config file: {}", e))?;
 
     let mut config = Config::default();
-    config.parse_str(&contents);
+    if let Err(e) = config.parse_str(&contents) {
+        return Err(format!("Config file is corrupted: {}", e));
+    }
 
-    config
+    Ok(config)
+}
+
+pub fn reset_to_default() -> Result<(), String> {
+    let proj_dirs = ProjectDirs::from("com", "Nexsq", "nuui")
+        .ok_or("Failed to locate the system configuration directory.")?;
+
+    let config_dir = proj_dirs.config_dir().join("conf");
+    let config_file = config_dir.join("config.conf");
+
+    if !config_dir.exists() {
+        fs::create_dir_all(&config_dir)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+    }
+
+    fs::write(&config_file, DEFAULT_CONFIG)
+        .map_err(|e| format!("Failed to write default config file: {}", e))?;
+
+    Ok(())
 }

@@ -38,27 +38,27 @@ pub struct MacroLibrary {
     pub tree: Vec<MacroNode>,
 }
 
-pub fn init() -> MacroLibrary {
+pub fn init() -> Result<MacroLibrary, String> {
     let proj_dirs = ProjectDirs::from("com", "Nexsq", "nuui")
-        .expect("Failed to locate the system configuration directory.");
+        .ok_or("Failed to locate the system configuration directory.")?;
 
     let lib_dir = proj_dirs.config_dir().join("lib");
 
     if !lib_dir.exists() {
         if let Err(e) = fs::create_dir_all(&lib_dir) {
-            panic!(
+            return Err(format!(
                 "Failed to create library directory at {:?}\nDetails: {}",
                 lib_dir, e
-            );
+            ));
         }
     }
 
     let tree = scan_lib(&lib_dir);
 
-    MacroLibrary {
+    Ok(MacroLibrary {
         root_path: lib_dir,
         tree,
-    }
+    })
 }
 
 fn scan_lib(path: &Path) -> Vec<MacroNode> {

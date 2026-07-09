@@ -6,11 +6,58 @@ use nuui::{conf, lib};
 use nuui::{error, main, settings, toosmall};
 
 fn main() {
-    let mut config = conf::init();
-    let mut library = lib::init();
-
     let terminal = Terminal::init();
     let (mut term_w, mut term_h) = Terminal::size();
+    let mut canvas = Canvas::new(term_w, term_h);
+
+    let min_w = 64;
+    let min_h = 16;
+
+    let mut config = match conf::init() {
+        Ok(c) => c,
+        Err(e) => {
+            let msg = format!("Configuration Error:\n{}\n\nWhat would you like to do?", e);
+            let res = error::error_box(
+                &terminal,
+                &mut canvas,
+                &msg,
+                &["EXIT", "RESET CONFIG"],
+                min_w,
+                min_h,
+            );
+            if res == nuui::PanelResult::Ok(1) {
+                if let Err(err) = conf::reset_to_default() {
+                    error::error_box(
+                        &terminal,
+                        &mut canvas,
+                        &format!("Failed to reset config:\n{}", err),
+                        &["EXIT"],
+                        min_w,
+                        min_h,
+                    );
+                    return;
+                }
+                conf::init().unwrap()
+            } else {
+                return;
+            }
+        }
+    };
+
+    let mut library = match lib::init() {
+        Ok(l) => l,
+        Err(e) => {
+            error::error_box(
+                &terminal,
+                &mut canvas,
+                &format!("Library Error:\n{}\n\nCannot proceed.", e),
+                &["EXIT"],
+                min_w,
+                min_h,
+            );
+            return;
+        }
+    };
 
     let mut main_view = main::MainView::new(
         term_w,
@@ -18,8 +65,8 @@ fn main() {
         main::ActivePanel::List,
         library.tree.clone(),
         library.root_path.clone(),
+        &config,
     );
-    let mut canvas = Canvas::new(term_w, term_h);
 
     let mut dirty = true;
 
@@ -32,7 +79,7 @@ fn main() {
             term_h = current_h;
 
             if term_w >= main_view.min_w && term_h >= main_view.min_h {
-                main_view.resize(term_w, term_h);
+                main_view.resize(term_w, term_h, &config);
             }
             dirty = true;
         }
@@ -60,19 +107,19 @@ fn main() {
                         break;
                     }
                     if main_view.editor.mode == nuui::editor::Mode::Command && (key == Key::Tab) {
-                        main_view.toggle_focus();
+                        main_view.toggle_focus(&config);
                         dirty = true;
                         continue;
                     }
                     if main_view.editor.mode == nuui::editor::Mode::Insert && key == Key::Tab {
                         main_view.editor.handle_key(key, &config);
-                        main_view.refresh_main();
+                        main_view.refresh_main(&config);
                         dirty = true;
                         continue;
                     }
 
                     main_view.editor.handle_key(key, &config);
-                    main_view.refresh_main();
+                    main_view.refresh_main(&config);
                     dirty = true;
                     continue;
                 }
@@ -80,7 +127,7 @@ fn main() {
                 match key {
                     Key::Char('q') | Key::Char('\x03') => break,
 
-                    Key::Tab => main_view.toggle_focus(),
+                    Key::Tab => main_view.toggle_focus(&config),
 
                     Key::Esc => {
                         let should_quit = settings::settings_modal(
@@ -94,7 +141,11 @@ fn main() {
                                     term_w = w;
                                     term_h = h;
                                     if term_w >= main_view.min_w && term_h >= main_view.min_h {
-                                        main_view.resize(term_w, term_h);
+                                        main_view.resize(term_w, term_h, cfg);
+                                    }
+                                } else {
+                                    if term_w >= main_view.min_w && term_h >= main_view.min_h {
+                                        main_view.refresh_all(cfg);
                                     }
                                 }
                                 if term_w < main_view.min_w || term_h < main_view.min_h {
@@ -110,22 +161,35 @@ fn main() {
                         }
                     }
 
-                    Key::Up => main_view.selection_up(),
-                    Key::Down => main_view.selection_down(),
-                    Key::Right => main_view.handle_right_arrow(),
-                    Key::Left => main_view.handle_left_arrow(),
-                    Key::Enter => main_view.trigger_selected(),
+                    Key::Up => main_view.selection_up(&config),
+                    Key::Down => main_view.selection_down(&config),
+                    Key::Right => main_view.handle_right_arrow(&config),
+                    Key::Left => main_view.handle_left_arrow(&config),
+                    Key::Enter => main_view.trigger_selected(&config),
 
                     Key::Char('r') => {
-                        library = lib::init();
+                        library = match lib::init() {
+                            Ok(l) => l,
+                            Err(e) => {
+                                error::error_box(
+                                    &terminal,
+                                    &mut canvas,
+                                    &format!("Library Error:\n{}\n\nCannot proceed.", e),
+                                    &["EXIT"],
+                                    min_w,
+                                    min_h,
+                                );
+                                break;
+                            }
+                        };
                         main_view.library_tree = library.tree.clone();
                         main_view.library_root = library.root_path.clone();
                         main_view.expanded_path.clear();
                         main_view.list_selected = 0;
                         main_view.list_scroll = 0;
                         main_view.auto_load();
-                        main_view.refresh_main();
-                        main_view.refresh_list();
+                        main_view.refresh_main(&config);
+                        main_view.refresh_list(&config);
                     }
 
                     Key::Char('t') => {
@@ -143,9 +207,14 @@ fn main() {
                                     term_w = w;
                                     term_h = h;
                                     if term_w >= main_view.min_w && term_h >= main_view.min_h {
-                                        main_view.resize(term_w, term_h);
+                                        main_view.resize(term_w, term_h, &config);
+                                    }
+                                } else {
+                                    if term_w >= main_view.min_w && term_h >= main_view.min_h {
+                                        main_view.refresh_all(&config);
                                     }
                                 }
+
                                 if term_w < main_view.min_w || term_h < main_view.min_h {
                                     toosmall::render(cvs, term_w, term_h);
                                 } else {

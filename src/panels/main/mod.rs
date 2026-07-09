@@ -5,7 +5,9 @@ pub mod r#static;
 
 use std::path::PathBuf;
 
-use crate::{Border, Box, Canvas, Color, Modifier, Style, editor::Editor, lib::MacroNode};
+use crate::{
+    Border, Box, Canvas, Color, Modifier, Style, conf::Config, editor::Editor, lib::MacroNode,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ActivePanel {
@@ -55,6 +57,7 @@ impl MainView {
         active: ActivePanel,
         library_tree: Vec<MacroNode>,
         library_root: PathBuf,
+        config: &Config,
     ) -> Self {
         let dummy = || {
             Box::new(
@@ -101,7 +104,7 @@ impl MainView {
         };
 
         view.auto_load();
-        view.resize(term_w, term_h);
+        view.resize(term_w, term_h, config);
         view
     }
 
@@ -148,7 +151,7 @@ impl MainView {
         }
     }
 
-    pub fn resize(&mut self, term_w: u16, term_h: u16) {
+    pub fn resize(&mut self, term_w: u16, term_h: u16, config: &Config) {
         self.term_w = term_w;
         self.term_h = term_h;
 
@@ -166,24 +169,25 @@ impl MainView {
         self.deck_x = deck_pos.0;
         self.deck_y = deck_pos.1;
 
-        self.refresh_all();
+        self.refresh_all(config);
     }
 
-    pub fn refresh_all(&mut self) {
-        self.refresh_main();
-        self.refresh_list();
+    pub fn refresh_all(&mut self, config: &Config) {
+        self.refresh_main(config);
+        self.refresh_list(config);
         self.refresh_static_boxes();
     }
 
-    pub fn refresh_main(&mut self) {
+    pub fn refresh_main(&mut self, config: &Config) {
         self.main_box = self.editor.render(
             self.term_w.saturating_sub(layout::TABS_W + layout::LIST_W),
             self.term_h.saturating_sub(layout::DECK_H),
             self.active == ActivePanel::Main,
+            config,
         );
     }
 
-    pub fn refresh_list(&mut self) {
+    pub fn refresh_list(&mut self, config: &Config) {
         let active_path = self
             .running_macro
             .as_deref()
@@ -197,6 +201,7 @@ impl MainView {
             &mut self.list_selected,
             &mut self.list_scroll,
             active_path,
+            config,
         );
     }
 
@@ -206,7 +211,7 @@ impl MainView {
         self.deck_box = r#static::refresh_deck(self.term_w);
     }
 
-    pub fn toggle_focus(&mut self) {
+    pub fn toggle_focus(&mut self, config: &Config) {
         if self.active == ActivePanel::Main {
             self.active = ActivePanel::List;
             self.running_macro = None;
@@ -221,11 +226,11 @@ impl MainView {
                 self.editor.is_editing = true;
             }
         }
-        self.refresh_main();
-        self.refresh_list();
+        self.refresh_main(config);
+        self.refresh_list(config);
     }
 
-    pub fn selection_up(&mut self) {
+    pub fn selection_up(&mut self, config: &Config) {
         if self.active != ActivePanel::List {
             return;
         }
@@ -239,11 +244,11 @@ impl MainView {
             }
         }
         self.auto_load();
-        self.refresh_main();
-        self.refresh_list();
+        self.refresh_main(config);
+        self.refresh_list(config);
     }
 
-    pub fn selection_down(&mut self) {
+    pub fn selection_down(&mut self, config: &Config) {
         if self.active != ActivePanel::List {
             return;
         }
@@ -265,11 +270,11 @@ impl MainView {
             }
         }
         self.auto_load();
-        self.refresh_main();
-        self.refresh_list();
+        self.refresh_main(config);
+        self.refresh_list(config);
     }
 
-    pub fn handle_right_arrow(&mut self) {
+    pub fn handle_right_arrow(&mut self, config: &Config) {
         if self.active != ActivePanel::List {
             return;
         }
@@ -302,12 +307,12 @@ impl MainView {
                 self.list_scroll = 0;
             }
             self.auto_load();
-            self.refresh_main();
-            self.refresh_list();
+            self.refresh_main(config);
+            self.refresh_list(config);
         }
     }
 
-    pub fn handle_left_arrow(&mut self) {
+    pub fn handle_left_arrow(&mut self, config: &Config) {
         if self.active != ActivePanel::List {
             return;
         }
@@ -316,12 +321,12 @@ impl MainView {
             self.list_selected = previous_parent_idx;
             self.list_scroll = 0;
             self.auto_load();
-            self.refresh_main();
-            self.refresh_list();
+            self.refresh_main(config);
+            self.refresh_list(config);
         }
     }
 
-    pub fn trigger_selected(&mut self) {
+    pub fn trigger_selected(&mut self, config: &Config) {
         if self.active != ActivePanel::List {
             return;
         }
@@ -354,8 +359,8 @@ impl MainView {
         if should_switch {
             self.active = ActivePanel::Main;
             self.editor.is_editing = false;
-            self.refresh_main();
-            self.refresh_list();
+            self.refresh_main(config);
+            self.refresh_list(config);
         }
     }
 
