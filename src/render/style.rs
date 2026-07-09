@@ -44,7 +44,6 @@ pub enum Border {
     None,
     Light,
     Heavy,
-    Double,
     Rounded,
 }
 
@@ -151,14 +150,6 @@ impl Border {
                 br: '┛',
                 h: '━',
                 v: '┃',
-            }),
-            Border::Double => Some(BorderChars {
-                tl: '╔',
-                tr: '╗',
-                bl: '╚',
-                br: '╝',
-                h: '═',
-                v: '║',
             }),
             Border::Rounded => Some(BorderChars {
                 tl: '╭',
