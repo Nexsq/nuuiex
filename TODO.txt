@@ -4,3 +4,4 @@ add error messages and code analysis when editing
 
 add these options to appearance:
 border = round / squared / heavy
+background colors

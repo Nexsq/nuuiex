@@ -27,22 +27,28 @@ pub enum SettingType {
 }
 
 pub fn available_themes() -> Vec<String> {
-    let proj_dirs = directories::ProjectDirs::from("com", "Nexsq", "nuui").unwrap();
-    let themes_dir = proj_dirs.config_dir().join("themes");
     let mut themes = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(themes_dir) {
-        for entry in entries.filter_map(Result::ok) {
-            let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "conf") {
-                if let Some(stem) = path.file_stem() {
-                    themes.push(stem.to_string_lossy().into_owned());
+    for (name, _) in crate::theme::themecore::BUILTIN_THEMES {
+        themes.push(name.to_string());
+    }
+
+    if let Some(proj_dirs) = directories::ProjectDirs::from("com", "Nexsq", "nuui") {
+        let themes_dir = proj_dirs.config_dir().join("themes");
+        if let Ok(entries) = std::fs::read_dir(themes_dir) {
+            for entry in entries.filter_map(Result::ok) {
+                let path = entry.path();
+                if path.extension().map_or(false, |ext| ext == "conf") {
+                    if let Some(stem) = path.file_stem() {
+                        let name = stem.to_string_lossy().into_owned();
+                        if !themes.contains(&name) {
+                            themes.push(name);
+                        }
+                    }
                 }
             }
         }
     }
-    if !themes.contains(&"default".to_string()) {
-        themes.push("default".to_string());
-    }
+
     themes.sort();
     themes
 }

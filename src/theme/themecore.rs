@@ -4,6 +4,11 @@ use std::fs;
 
 const DEFAULT_THEME: &str = include_str!("themes/default.conf");
 
+pub const BUILTIN_THEMES: &[(&str, &str)] = &[
+    ("default", DEFAULT_THEME),
+    ("another", include_str!("themes/another.conf")),
+];
+
 #[derive(Debug, Clone)]
 pub struct Theme {
     pub name: String,
@@ -63,18 +68,20 @@ impl Default for Theme {
 }
 
 pub fn init(name: &str) -> Result<Theme, String> {
+    for (b_name, content) in BUILTIN_THEMES {
+        if *b_name == name {
+            let mut theme = parse_theme_base(content, Theme::default())?;
+            theme.name = name.to_string();
+            return Ok(theme);
+        }
+    }
+
     let proj_dirs =
         ProjectDirs::from("com", "Nexsq", "nuui").ok_or("Failed to locate config directory.")?;
     let themes_dir = proj_dirs.config_dir().join("themes");
 
     if !themes_dir.exists() {
-        fs::create_dir_all(&themes_dir)
-            .map_err(|e| format!("Failed to create themes directory: {}", e))?;
-    }
-
-    let default_theme = Theme::default();
-    if name == "default" {
-        return Ok(default_theme);
+        let _ = fs::create_dir_all(&themes_dir);
     }
 
     let theme_path = themes_dir.join(format!("{}.conf", name));
@@ -85,7 +92,7 @@ pub fn init(name: &str) -> Result<Theme, String> {
     let content =
         fs::read_to_string(&theme_path).map_err(|e| format!("Failed to read theme file: {}", e))?;
 
-    let mut theme = parse_theme_base(&content, default_theme)?;
+    let mut theme = parse_theme_base(&content, Theme::default())?;
     theme.name = name.to_string();
 
     Ok(theme)
