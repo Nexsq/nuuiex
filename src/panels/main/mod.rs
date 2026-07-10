@@ -800,7 +800,14 @@ pub fn handle_list_action(
                 let is_folder = matches!(node, crate::lib::MacroNode::Folder { .. });
 
                 let msg = if is_folder {
-                    format!("Delete folder '{}' and all contents?", node.name())
+                    let is_empty = std::fs::read_dir(&path)
+                        .map(|mut i| i.next().is_none())
+                        .unwrap_or(true);
+                    if is_empty {
+                        format!("Delete folder '{}'?", node.name())
+                    } else {
+                        format!("Delete folder '{}' and all contents?", node.name())
+                    }
                 } else {
                     format!("Delete file '{}'?", node.name())
                 };
@@ -896,7 +903,31 @@ pub fn handle_list_action(
             } else {
                 let content = std::fs::read_to_string(&path).unwrap_or_default();
                 if !content.trim().is_empty() {
-                    confirm = false;
+                    let msg = format!("Delete file '{}'?", node.name());
+                    let res = crate::error::warning_box(
+                        terminal,
+                        canvas,
+                        &msg,
+                        &["CANCEL", "CONFIRM"],
+                        0,
+                        0,
+                        view.min_w,
+                        view.min_h,
+                        config.get_border(),
+                        |cvs, w, h| {
+                            if w != view.term_w || h != view.term_h {
+                                if w >= view.min_w && h >= view.min_h {
+                                    view.resize(w, h, config);
+                                }
+                            } else {
+                                if view.term_w >= view.min_w && view.term_h >= view.min_h {
+                                    view.refresh_all(config);
+                                }
+                            }
+                            view.render(cvs);
+                        },
+                    );
+                    confirm = res == crate::PanelResult::Ok(1);
                 }
             }
 

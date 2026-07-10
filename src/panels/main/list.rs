@@ -345,8 +345,8 @@ pub fn refresh(
             (n, false) => " ".repeat(n),
         };
 
-        let mut text = indent_prefix;
-        text.push_str(node_symbol);
+        let mut prefix = indent_prefix;
+        prefix.push_str(node_symbol);
 
         let mut base_name = if item.is_input {
             if let Some(custom) = &item.custom_text {
@@ -372,18 +372,31 @@ pub fn refresh(
             false
         };
 
-        if !base_name.is_empty() {
-            if !text.is_empty() {
-                text.push(' ');
-            }
-            text.push_str(&base_name);
+        if !base_name.is_empty() && !prefix.is_empty() {
+            prefix.push(' ');
         }
 
-        let char_count = text.chars().count();
         let target_len = max_text_len.saturating_sub(2);
         let e_len = if is_editing_this { 2 } else { 0 };
         let allowed_len = target_len.saturating_sub(e_len);
 
+        let prefix_chars = prefix.chars().count();
+        let allowed_name_len = allowed_len.saturating_sub(prefix_chars);
+        let name_chars = base_name.chars().count();
+
+        if name_chars > allowed_name_len {
+            if item.is_input {
+                let skip = name_chars.saturating_sub(allowed_name_len);
+                base_name = base_name.chars().skip(skip).collect();
+            } else {
+                base_name = base_name.chars().take(allowed_name_len).collect();
+            }
+        }
+
+        prefix.push_str(&base_name);
+        let mut text = prefix;
+
+        let char_count = text.chars().count();
         if char_count > allowed_len {
             text = text.chars().take(allowed_len).collect();
         } else {
