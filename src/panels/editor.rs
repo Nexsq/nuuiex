@@ -151,12 +151,12 @@ impl Editor {
                 self.state.selection_start = None;
                 self.mode = Mode::Insert;
             }
-            k if k == Key::Char(config.bind_insert) => {
+            k if k == Key::Char(config.bind_edit_insert) => {
                 self.visual_mode = false;
                 self.state.selection_start = None;
                 self.mode = Mode::Insert;
             }
-            k if k == Key::Char(config.bind_visual) => {
+            k if k == Key::Char(config.bind_edit_visual) => {
                 if self.visual_mode {
                     self.visual_mode = false;
                     self.state.selection_start = None;
@@ -165,52 +165,52 @@ impl Editor {
                     self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
                 }
             }
-            k if k == Key::Left || k == Key::Char(config.bind_left) => {
+            k if k == Key::Left || k == Key::Char(config.bind_edit_left) => {
                 self.move_cursor(-1, 0, self.visual_mode)
             }
-            k if k == Key::Right || k == Key::Char(config.bind_right) => {
+            k if k == Key::Right || k == Key::Char(config.bind_edit_right) => {
                 self.move_cursor(1, 0, self.visual_mode)
             }
-            k if k == Key::Up || k == Key::Char(config.bind_up) => {
+            k if k == Key::Up || k == Key::Char(config.bind_edit_up) => {
                 self.move_cursor(0, -1, self.visual_mode)
             }
-            k if k == Key::Down || k == Key::Char(config.bind_down) => {
+            k if k == Key::Down || k == Key::Char(config.bind_edit_down) => {
                 self.move_cursor(0, 1, self.visual_mode)
             }
 
             k if k == Key::CtrlLeft
-                || k == Key::Ctrl(config.bind_left)
-                || k == Key::Char(config.bind_word_prev)
+                || k == Key::Ctrl(config.bind_edit_left)
+                || k == Key::Char(config.bind_edit_word_prev)
                 || k == Key::CtrlBackspace =>
             {
                 self.jump_word_backward(self.visual_mode)
             }
             k if k == Key::CtrlRight
-                || k == Key::Ctrl(config.bind_right)
-                || k == Key::Char(config.bind_word_next) =>
+                || k == Key::Ctrl(config.bind_edit_right)
+                || k == Key::Char(config.bind_edit_word_next) =>
             {
                 self.jump_word_forward(self.visual_mode)
             }
-            k if k == Key::CtrlUp || k == Key::Ctrl(config.bind_up) => {
+            k if k == Key::CtrlUp || k == Key::Ctrl(config.bind_edit_up) => {
                 self.jump_block_backward(self.visual_mode)
             }
-            k if k == Key::CtrlDown || k == Key::Ctrl(config.bind_down) => {
+            k if k == Key::CtrlDown || k == Key::Ctrl(config.bind_edit_down) => {
                 self.jump_block_forward(self.visual_mode)
             }
 
-            k if k == Key::Char(config.bind_line_start) => {
+            k if k == Key::Char(config.bind_edit_line_start) => {
                 if !self.visual_mode {
                     self.state.selection_start = None;
                 }
                 self.state.cursor_x = 0;
             }
-            k if k == Key::Char(config.bind_line_end) => {
+            k if k == Key::Char(config.bind_edit_line_end) => {
                 if !self.visual_mode {
                     self.state.selection_start = None;
                 }
                 self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
             }
-            k if k == Key::Char(config.bind_select_all) => {
+            k if k == Key::Char(config.bind_edit_select_all) => {
                 if self.last_key_select_all {
                     self.visual_mode = true;
                     self.state.selection_start = Some((0, 0));
@@ -229,7 +229,7 @@ impl Editor {
                     self.delete_char_after();
                 }
             }
-            k if k == Key::Char(config.bind_file_bounds) => {
+            k if k == Key::Char(config.bind_edit_file_bounds) => {
                 if !self.visual_mode {
                     self.state.selection_start = None;
                 }
@@ -241,14 +241,14 @@ impl Editor {
                     self.last_key_file_bounds = true;
                 }
             }
-            k if k == Key::Shift(config.bind_file_bounds) => {
+            k if k == Key::Shift(config.bind_edit_file_bounds) => {
                 if !self.visual_mode {
                     self.state.selection_start = None;
                 }
                 self.state.cursor_y = self.state.lines.len().saturating_sub(1);
                 self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
             }
-            k if k == Key::Char(config.bind_delete) => {
+            k if k == Key::Char(config.bind_edit_delete) => {
                 if self.state.selection_start.is_some() {
                     self.push_undo();
                     self.delete_selection();
@@ -261,7 +261,7 @@ impl Editor {
                     self.last_key_delete = true;
                 }
             }
-            k if k == Key::Char(config.bind_copy) => {
+            k if k == Key::Char(config.bind_edit_copy) => {
                 if self.state.selection_start.is_some() {
                     self.copy_selection();
                     reset_copy = true;
@@ -272,23 +272,23 @@ impl Editor {
                     self.last_key_copy = true;
                 }
             }
-            k if k == Key::Char(config.bind_paste) => {
+            k if k == Key::Char(config.bind_edit_paste) => {
                 self.push_undo();
                 self.paste_from_clipboard();
             }
-            k if k == Key::Char(config.bind_undo) => {
+            k if k == Key::Char(config.bind_edit_undo) => {
                 if let Some(state) = self.undo_stack.pop() {
                     self.redo_stack.push(self.state.clone());
                     self.state = state;
                 }
             }
-            k if k == Key::Char(config.bind_redo) => {
+            k if k == Key::Char(config.bind_edit_redo) => {
                 if let Some(state) = self.redo_stack.pop() {
                     self.undo_stack.push(self.state.clone());
                     self.state = state;
                 }
             }
-            k if k == Key::Char(config.bind_save) => self.save(),
+            k if k == Key::Char(config.bind_edit_save) => self.save(),
             _ => {}
         }
 

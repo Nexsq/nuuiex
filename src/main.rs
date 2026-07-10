@@ -70,7 +70,7 @@ fn main() {
         }
     };
 
-    let mut library = match lib::init() {
+    let library = match lib::init(&config.lib_sorting) {
         Ok(l) => l,
         Err(e) => {
             error::error_box(
@@ -162,6 +162,62 @@ fn main() {
                     continue;
                 }
 
+                if main_view.list_input != main::ListInputMode::None {
+                    match main::handle_list_input(
+                        &mut main_view,
+                        &key,
+                        &terminal,
+                        &mut canvas,
+                        &config,
+                    ) {
+                        Ok(true) => {
+                            dirty = true;
+                            continue;
+                        }
+                        Ok(false) => {}
+                        Err(e) => {
+                            error::error_box(
+                                &terminal,
+                                &mut canvas,
+                                &format!("Library Error:\n{}\n\nCannot proceed", e),
+                                &["EXIT"],
+                                min_w,
+                                min_h,
+                                config.get_border(),
+                            );
+                            break;
+                        }
+                    }
+                }
+
+                if main_view.active == main::ActivePanel::List {
+                    match main::handle_list_action(
+                        &mut main_view,
+                        &key,
+                        &terminal,
+                        &mut canvas,
+                        &config,
+                    ) {
+                        Ok(true) => {
+                            dirty = true;
+                            continue;
+                        }
+                        Ok(false) => {}
+                        Err(e) => {
+                            error::error_box(
+                                &terminal,
+                                &mut canvas,
+                                &format!("Library Error:\n{}\n\nCannot proceed", e),
+                                &["EXIT"],
+                                min_w,
+                                min_h,
+                                config.get_border(),
+                            );
+                            break;
+                        }
+                    }
+                }
+
                 match key {
                     Key::Char('q') | Key::Char('\x03') => break,
 
@@ -175,6 +231,13 @@ fn main() {
                             &mut main_view,
                         );
 
+                        if let Ok(l) = lib::init(&config.lib_sorting) {
+                            main_view.library_tree = l.tree;
+                            main_view.library_root = l.root_path;
+                        }
+                        main_view.auto_load();
+                        main_view.refresh_all(&config);
+
                         if should_quit {
                             break;
                         }
@@ -186,78 +249,6 @@ fn main() {
                     Key::Left => main_view.handle_left_arrow(&config),
                     Key::Enter => main_view.trigger_selected(&config),
 
-                    Key::Char('r') => {
-                        library = match lib::init() {
-                            Ok(l) => l,
-                            Err(e) => {
-                                error::error_box(
-                                    &terminal,
-                                    &mut canvas,
-                                    &format!("Library Error:\n{}\n\nCannot proceed", e),
-                                    &["EXIT"],
-                                    min_w,
-                                    min_h,
-                                    config.get_border(),
-                                );
-                                break;
-                            }
-                        };
-                        main_view.library_tree = library.tree.clone();
-                        main_view.library_root = library.root_path.clone();
-                        main_view.expanded_path.clear();
-                        main_view.list_selected = 0;
-                        main_view.list_scroll = 0;
-                        main_view.auto_load();
-                        main_view.refresh_main(&config);
-                        main_view.refresh_list(&config);
-                    }
-
-                    Key::Char('t') => {
-                        let result = error::warning_box(
-                            &terminal,
-                            &mut canvas,
-                            "This is a test warning\n\nDo you want to proceed?",
-                            &["CANCEL", "CONFIRM"],
-                            0,
-                            0,
-                            main_view.min_w,
-                            main_view.min_h,
-                            config.get_border(),
-                            |cvs, w, h| {
-                                if w != term_w || h != term_h {
-                                    term_w = w;
-                                    term_h = h;
-                                    if term_w >= main_view.min_w && term_h >= main_view.min_h {
-                                        main_view.resize(term_w, term_h, &config);
-                                    }
-                                } else {
-                                    if term_w >= main_view.min_w && term_h >= main_view.min_h {
-                                        main_view.refresh_all(&config);
-                                    }
-                                }
-                                main_view.render(cvs);
-                            },
-                        );
-
-                        if result == nuui::PanelResult::Quit {
-                            break;
-                        }
-                    }
-                    Key::Shift('t') => {
-                        let result = error::error_box(
-                            &terminal,
-                            &mut canvas,
-                            "This is a test warning\n\nDo you want to proceed?",
-                            &["CANCEL", "CONFIRM"],
-                            main_view.min_w,
-                            main_view.min_h,
-                            config.get_border(),
-                        );
-
-                        if result == nuui::PanelResult::Quit {
-                            break;
-                        }
-                    }
                     _ => continue,
                 }
 

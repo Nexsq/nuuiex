@@ -38,7 +38,47 @@ pub struct MacroLibrary {
     pub tree: Vec<MacroNode>,
 }
 
-pub fn init() -> Result<MacroLibrary, String> {
+pub fn get_order_path() -> Result<PathBuf, String> {
+    let proj_dirs = ProjectDirs::from("com", "Nexsq", "nuui")
+        .ok_or("Failed to locate the system configuration directory.")?;
+    Ok(proj_dirs.config_dir().join("conf").join("order.conf"))
+}
+
+pub fn load_custom_order() -> Vec<String> {
+    if let Ok(path) = get_order_path() {
+        if let Ok(contents) = fs::read_to_string(path) {
+            return contents.lines().map(|s| s.to_string()).collect();
+        }
+    }
+    Vec::new()
+}
+
+pub fn save_custom_order(order: &[String]) {
+    if let Ok(path) = get_order_path() {
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(path, order.join("\n"));
+    }
+}
+
+pub fn reset_custom_order() {
+    if let Ok(path) = get_order_path() {
+        let _ = fs::remove_file(path);
+    }
+}
+
+pub fn reset_library() {
+    if let Some(proj_dirs) = ProjectDirs::from("com", "Nexsq", "nuui") {
+        let lib_dir = proj_dirs.config_dir().join("lib");
+        if lib_dir.exists() {
+            let _ = fs::remove_dir_all(&lib_dir);
+            let _ = fs::create_dir_all(&lib_dir);
+        }
+    }
+}
+
+pub fn init(sorting: &str) -> Result<MacroLibrary, String> {
     let proj_dirs = ProjectDirs::from("com", "Nexsq", "nuui")
         .ok_or("Failed to locate the system configuration directory.")?;
 
@@ -53,7 +93,13 @@ pub fn init() -> Result<MacroLibrary, String> {
         }
     }
 
-    let tree = scan_lib(&lib_dir);
+    let custom_order = if sorting == "custom" {
+        load_custom_order()
+    } else {
+        Vec::new()
+    };
+
+    let tree = scan_lib(&lib_dir, &lib_dir, sorting, &custom_order);
 
     Ok(MacroLibrary {
         root_path: lib_dir,
@@ -61,7 +107,12 @@ pub fn init() -> Result<MacroLibrary, String> {
     })
 }
 
-fn scan_lib(path: &Path) -> Vec<MacroNode> {
+fn scan_lib(
+    path: &Path,
+    root_path: &Path,
+    sorting: &str,
+    custom_order: &[String],
+) -> Vec<MacroNode> {
     let mut nodes = Vec::new();
 
     if let Ok(entries) = fs::read_dir(path) {
@@ -79,7 +130,7 @@ fn scan_lib(path: &Path) -> Vec<MacroNode> {
                 if file_type.is_dir() {
                     nodes.push(MacroNode::Folder {
                         name: raw_name,
-                        children: scan_lib(&entry_path),
+                        children: scan_lib(&entry_path, root_path, sorting, custom_order),
                         path: entry_path,
                     });
                 } else if file_type.is_file() {
@@ -99,10 +150,49 @@ fn scan_lib(path: &Path) -> Vec<MacroNode> {
         }
     }
 
-    nodes.sort_unstable_by(|a, b| match (a, b) {
-        (MacroNode::Folder { .. }, MacroNode::Script { .. }) => Ordering::Less,
-        (MacroNode::Script { .. }, MacroNode::Folder { .. }) => Ordering::Greater,
-        _ => a.name().cmp(b.name()),
+    nodes.sort_unstable_by(|a, b| {
+        if sorting == "custom" {
+            let path_a = a
+                .path()
+                .strip_prefix(root_path)
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
+            let path_b = b
+                .path()
+                .strip_prefix(root_path)
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
+
+            let idx_a = custom_order
+                .iter()
+                .position(|p| p == &path_a)
+                .unwrap_or(usize::MAX);
+            let idx_b = custom_order
+                .iter()
+                .position(|p| p == &path_b)
+                .unwrap_or(usize::MAX);
+
+            if idx_a != idx_b {
+                return idx_a.cmp(&idx_b);
+            }
+        }
+
+        let folder_a = matches!(a, MacroNode::Folder { .. });
+        let folder_b = matches!(b, MacroNode::Folder { .. });
+
+        match (folder_a, folder_b) {
+            (true, false) => Ordering::Less,
+            (false, true) => Ordering::Greater,
+            _ => {
+                if sorting == "descending" {
+                    b.name().cmp(a.name())
+                } else {
+                    a.name().cmp(b.name())
+                }
+            }
+        }
     });
 
     nodes

@@ -9,25 +9,33 @@ pub struct Config {
     pub indicator_style: String,
     pub border_style: String,
     pub theme: String,
+    pub lib_sorting: String,
 
-    pub bind_insert: char,
-    pub bind_visual: char,
-    pub bind_left: char,
-    pub bind_right: char,
-    pub bind_up: char,
-    pub bind_down: char,
-    pub bind_word_next: char,
-    pub bind_word_prev: char,
-    pub bind_line_start: char,
-    pub bind_line_end: char,
-    pub bind_select_all: char,
-    pub bind_file_bounds: char,
-    pub bind_delete: char,
-    pub bind_copy: char,
-    pub bind_paste: char,
-    pub bind_undo: char,
-    pub bind_redo: char,
-    pub bind_save: char,
+    pub bind_edit_insert: char,
+    pub bind_edit_visual: char,
+    pub bind_edit_left: char,
+    pub bind_edit_right: char,
+    pub bind_edit_up: char,
+    pub bind_edit_down: char,
+    pub bind_edit_word_next: char,
+    pub bind_edit_word_prev: char,
+    pub bind_edit_line_start: char,
+    pub bind_edit_line_end: char,
+    pub bind_edit_select_all: char,
+    pub bind_edit_file_bounds: char,
+    pub bind_edit_delete: char,
+    pub bind_edit_copy: char,
+    pub bind_edit_paste: char,
+    pub bind_edit_undo: char,
+    pub bind_edit_redo: char,
+    pub bind_edit_save: char,
+
+    pub bind_lib_new_file: char,
+    pub bind_lib_new_folder: char,
+    pub bind_lib_rename: char,
+    pub bind_lib_delete: char,
+    pub bind_lib_move_up: char,
+    pub bind_lib_move_down: char,
 }
 
 impl Default for Config {
@@ -36,25 +44,33 @@ impl Default for Config {
             indicator_style: String::new(),
             border_style: String::new(),
             theme: String::new(),
+            lib_sorting: String::new(),
 
-            bind_insert: '\0',
-            bind_visual: '\0',
-            bind_left: '\0',
-            bind_right: '\0',
-            bind_up: '\0',
-            bind_down: '\0',
-            bind_word_next: '\0',
-            bind_word_prev: '\0',
-            bind_line_start: '\0',
-            bind_line_end: '\0',
-            bind_select_all: '\0',
-            bind_file_bounds: '\0',
-            bind_delete: '\0',
-            bind_copy: '\0',
-            bind_paste: '\0',
-            bind_undo: '\0',
-            bind_redo: '\0',
-            bind_save: '\0',
+            bind_edit_insert: '\0',
+            bind_edit_visual: '\0',
+            bind_edit_left: '\0',
+            bind_edit_right: '\0',
+            bind_edit_up: '\0',
+            bind_edit_down: '\0',
+            bind_edit_word_next: '\0',
+            bind_edit_word_prev: '\0',
+            bind_edit_line_start: '\0',
+            bind_edit_line_end: '\0',
+            bind_edit_select_all: '\0',
+            bind_edit_file_bounds: '\0',
+            bind_edit_delete: '\0',
+            bind_edit_copy: '\0',
+            bind_edit_paste: '\0',
+            bind_edit_undo: '\0',
+            bind_edit_redo: '\0',
+            bind_edit_save: '\0',
+
+            bind_lib_new_file: '\0',
+            bind_lib_new_folder: '\0',
+            bind_lib_rename: '\0',
+            bind_lib_delete: '\0',
+            bind_lib_move_up: '\0',
+            bind_lib_move_down: '\0',
         };
         config.parse_str(DEFAULT_CONFIG).unwrap();
         config
@@ -88,131 +104,174 @@ impl Config {
                     "indicator_style" => self.indicator_style = val.to_string(),
                     "border_style" => self.border_style = val.to_string(),
                     "theme" => self.theme = val.to_string(),
+                    "lib_sorting" => self.lib_sorting = val.to_string(),
 
-                    "bind_insert" => {
-                        self.bind_insert = val
+                    "bind_edit_insert" => {
+                        self.bind_edit_insert = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_insert)
+                            .unwrap_or(self.bind_edit_insert)
                             .to_ascii_lowercase()
                     }
-                    "bind_visual" => {
-                        self.bind_visual = val
+                    "bind_edit_visual" => {
+                        self.bind_edit_visual = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_visual)
+                            .unwrap_or(self.bind_edit_visual)
                             .to_ascii_lowercase()
                     }
-                    "bind_left" => {
-                        self.bind_left = val
+                    "bind_edit_left" => {
+                        self.bind_edit_left = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_left)
+                            .unwrap_or(self.bind_edit_left)
                             .to_ascii_lowercase()
                     }
-                    "bind_right" => {
-                        self.bind_right = val
+                    "bind_edit_right" => {
+                        self.bind_edit_right = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_right)
+                            .unwrap_or(self.bind_edit_right)
                             .to_ascii_lowercase()
                     }
-                    "bind_up" => {
-                        self.bind_up = val
+                    "bind_edit_up" => {
+                        self.bind_edit_up = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_up)
+                            .unwrap_or(self.bind_edit_up)
                             .to_ascii_lowercase()
                     }
-                    "bind_down" => {
-                        self.bind_down = val
+                    "bind_edit_down" => {
+                        self.bind_edit_down = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_down)
+                            .unwrap_or(self.bind_edit_down)
                             .to_ascii_lowercase()
                     }
-                    "bind_word_next" => {
-                        self.bind_word_next = val
+                    "bind_edit_word_next" => {
+                        self.bind_edit_word_next = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_word_next)
+                            .unwrap_or(self.bind_edit_word_next)
                             .to_ascii_lowercase()
                     }
-                    "bind_word_prev" => {
-                        self.bind_word_prev = val
+                    "bind_edit_word_prev" => {
+                        self.bind_edit_word_prev = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_word_prev)
+                            .unwrap_or(self.bind_edit_word_prev)
                             .to_ascii_lowercase()
                     }
-                    "bind_line_start" => {
-                        self.bind_line_start = val
+                    "bind_edit_line_start" => {
+                        self.bind_edit_line_start = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_line_start)
+                            .unwrap_or(self.bind_edit_line_start)
                             .to_ascii_lowercase()
                     }
-                    "bind_line_end" => {
-                        self.bind_line_end = val
+                    "bind_edit_line_end" => {
+                        self.bind_edit_line_end = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_line_end)
+                            .unwrap_or(self.bind_edit_line_end)
                             .to_ascii_lowercase()
                     }
-                    "bind_select_all" => {
-                        self.bind_select_all = val
+                    "bind_edit_select_all" => {
+                        self.bind_edit_select_all = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_select_all)
+                            .unwrap_or(self.bind_edit_select_all)
                             .to_ascii_lowercase()
                     }
-                    "bind_file_bounds" => {
-                        self.bind_file_bounds = val
+                    "bind_edit_file_bounds" => {
+                        self.bind_edit_file_bounds = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_file_bounds)
+                            .unwrap_or(self.bind_edit_file_bounds)
                             .to_ascii_lowercase()
                     }
-                    "bind_delete" => {
-                        self.bind_delete = val
+                    "bind_edit_delete" => {
+                        self.bind_edit_delete = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_delete)
+                            .unwrap_or(self.bind_edit_delete)
                             .to_ascii_lowercase()
                     }
-                    "bind_copy" => {
-                        self.bind_copy = val
+                    "bind_edit_copy" => {
+                        self.bind_edit_copy = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_copy)
+                            .unwrap_or(self.bind_edit_copy)
                             .to_ascii_lowercase()
                     }
-                    "bind_paste" => {
-                        self.bind_paste = val
+                    "bind_edit_paste" => {
+                        self.bind_edit_paste = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_paste)
+                            .unwrap_or(self.bind_edit_paste)
                             .to_ascii_lowercase()
                     }
-                    "bind_undo" => {
-                        self.bind_undo = val
+                    "bind_edit_undo" => {
+                        self.bind_edit_undo = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_undo)
+                            .unwrap_or(self.bind_edit_undo)
                             .to_ascii_lowercase()
                     }
-                    "bind_redo" => {
-                        self.bind_redo = val
+                    "bind_edit_redo" => {
+                        self.bind_edit_redo = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_redo)
+                            .unwrap_or(self.bind_edit_redo)
                             .to_ascii_lowercase()
                     }
-                    "bind_save" => {
-                        self.bind_save = val
+                    "bind_edit_save" => {
+                        self.bind_edit_save = val
                             .chars()
                             .next()
-                            .unwrap_or(self.bind_save)
+                            .unwrap_or(self.bind_edit_save)
+                            .to_ascii_lowercase()
+                    }
+                    "bind_lib_new_file" => {
+                        self.bind_lib_new_file = val
+                            .chars()
+                            .next()
+                            .unwrap_or(self.bind_lib_new_file)
+                            .to_ascii_lowercase()
+                    }
+                    "bind_lib_new_folder" => {
+                        self.bind_lib_new_folder = val
+                            .chars()
+                            .next()
+                            .unwrap_or(self.bind_lib_new_folder)
+                            .to_ascii_lowercase()
+                    }
+                    "bind_lib_rename" => {
+                        self.bind_lib_rename = val
+                            .chars()
+                            .next()
+                            .unwrap_or(self.bind_lib_rename)
+                            .to_ascii_lowercase()
+                    }
+                    "bind_lib_delete" => {
+                        self.bind_lib_delete = val
+                            .chars()
+                            .next()
+                            .unwrap_or(self.bind_lib_delete)
+                            .to_ascii_lowercase()
+                    }
+                    "bind_lib_move_up" => {
+                        self.bind_lib_move_up = val
+                            .chars()
+                            .next()
+                            .unwrap_or(self.bind_lib_move_up)
+                            .to_ascii_lowercase()
+                    }
+                    "bind_lib_move_down" => {
+                        self.bind_lib_move_down = val
+                            .chars()
+                            .next()
+                            .unwrap_or(self.bind_lib_move_down)
                             .to_ascii_lowercase()
                     }
                     _ => {}
@@ -229,26 +288,36 @@ impl Config {
         self.theme = default.theme;
     }
 
-    pub fn reset_keybinds(&mut self) {
+    pub fn reset_edit_keybinds(&mut self) {
         let default = Config::default();
-        self.bind_insert = default.bind_insert;
-        self.bind_visual = default.bind_visual;
-        self.bind_left = default.bind_left;
-        self.bind_right = default.bind_right;
-        self.bind_up = default.bind_up;
-        self.bind_down = default.bind_down;
-        self.bind_word_next = default.bind_word_next;
-        self.bind_word_prev = default.bind_word_prev;
-        self.bind_line_start = default.bind_line_start;
-        self.bind_line_end = default.bind_line_end;
-        self.bind_select_all = default.bind_select_all;
-        self.bind_file_bounds = default.bind_file_bounds;
-        self.bind_delete = default.bind_delete;
-        self.bind_copy = default.bind_copy;
-        self.bind_paste = default.bind_paste;
-        self.bind_undo = default.bind_undo;
-        self.bind_redo = default.bind_redo;
-        self.bind_save = default.bind_save;
+        self.bind_edit_insert = default.bind_edit_insert;
+        self.bind_edit_visual = default.bind_edit_visual;
+        self.bind_edit_left = default.bind_edit_left;
+        self.bind_edit_right = default.bind_edit_right;
+        self.bind_edit_up = default.bind_edit_up;
+        self.bind_edit_down = default.bind_edit_down;
+        self.bind_edit_word_next = default.bind_edit_word_next;
+        self.bind_edit_word_prev = default.bind_edit_word_prev;
+        self.bind_edit_line_start = default.bind_edit_line_start;
+        self.bind_edit_line_end = default.bind_edit_line_end;
+        self.bind_edit_select_all = default.bind_edit_select_all;
+        self.bind_edit_file_bounds = default.bind_edit_file_bounds;
+        self.bind_edit_delete = default.bind_edit_delete;
+        self.bind_edit_copy = default.bind_edit_copy;
+        self.bind_edit_paste = default.bind_edit_paste;
+        self.bind_edit_undo = default.bind_edit_undo;
+        self.bind_edit_redo = default.bind_edit_redo;
+        self.bind_edit_save = default.bind_edit_save;
+    }
+
+    pub fn reset_lib_keybinds(&mut self) {
+        let default = Config::default();
+        self.bind_lib_new_file = default.bind_lib_new_file;
+        self.bind_lib_new_folder = default.bind_lib_new_folder;
+        self.bind_lib_rename = default.bind_lib_rename;
+        self.bind_lib_delete = default.bind_lib_delete;
+        self.bind_lib_move_up = default.bind_lib_move_up;
+        self.bind_lib_move_down = default.bind_lib_move_down;
     }
 
     pub fn save(&self) {
@@ -258,7 +327,7 @@ impl Config {
         let config_dir = proj_dirs.config_dir().join("conf");
         let config_file = config_dir.join("config.conf");
 
-        let mut output = String::with_capacity(DEFAULT_CONFIG.len() + 128);
+        let mut output = String::with_capacity(DEFAULT_CONFIG.len() + 256);
 
         for line in DEFAULT_CONFIG.lines() {
             let trimmed = line.trim();
@@ -294,89 +363,156 @@ impl Config {
                     "theme" => {
                         writeln!(&mut output, "{} = {}{}", key_str, self.theme, comment).unwrap()
                     }
-                    "bind_insert" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.bind_insert, comment)
+                    "lib_sorting" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.lib_sorting, comment)
                             .unwrap()
                     }
-                    "bind_visual" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.bind_visual, comment)
-                            .unwrap()
-                    }
-                    "bind_left" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.bind_left, comment)
-                            .unwrap()
-                    }
-                    "bind_right" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.bind_right, comment)
-                            .unwrap()
-                    }
-                    "bind_up" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.bind_up, comment).unwrap()
-                    }
-                    "bind_down" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.bind_down, comment)
-                            .unwrap()
-                    }
-                    "bind_word_next" => writeln!(
+
+                    "bind_edit_insert" => writeln!(
                         &mut output,
                         "{} = {}{}",
-                        key_str, self.bind_word_next, comment
+                        key_str, self.bind_edit_insert, comment
                     )
                     .unwrap(),
-                    "bind_word_prev" => writeln!(
+                    "bind_edit_visual" => writeln!(
                         &mut output,
                         "{} = {}{}",
-                        key_str, self.bind_word_prev, comment
+                        key_str, self.bind_edit_visual, comment
                     )
                     .unwrap(),
-                    "bind_line_start" => writeln!(
+                    "bind_edit_left" => writeln!(
                         &mut output,
                         "{} = {}{}",
-                        key_str, self.bind_line_start, comment
+                        key_str, self.bind_edit_left, comment
                     )
                     .unwrap(),
-                    "bind_line_end" => writeln!(
+                    "bind_edit_right" => writeln!(
                         &mut output,
                         "{} = {}{}",
-                        key_str, self.bind_line_end, comment
+                        key_str, self.bind_edit_right, comment
                     )
                     .unwrap(),
-                    "bind_select_all" => writeln!(
+                    "bind_edit_up" => writeln!(
                         &mut output,
                         "{} = {}{}",
-                        key_str, self.bind_select_all, comment
+                        key_str, self.bind_edit_up, comment
                     )
                     .unwrap(),
-                    "bind_file_bounds" => writeln!(
+                    "bind_edit_down" => writeln!(
                         &mut output,
                         "{} = {}{}",
-                        key_str, self.bind_file_bounds, comment
+                        key_str, self.bind_edit_down, comment
                     )
                     .unwrap(),
-                    "bind_delete" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.bind_delete, comment)
-                            .unwrap()
-                    }
-                    "bind_copy" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.bind_copy, comment)
-                            .unwrap()
-                    }
-                    "bind_paste" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.bind_paste, comment)
-                            .unwrap()
-                    }
-                    "bind_undo" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.bind_undo, comment)
-                            .unwrap()
-                    }
-                    "bind_redo" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.bind_redo, comment)
-                            .unwrap()
-                    }
-                    "bind_save" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.bind_save, comment)
-                            .unwrap()
-                    }
+                    "bind_edit_word_next" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_word_next, comment
+                    )
+                    .unwrap(),
+                    "bind_edit_word_prev" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_word_prev, comment
+                    )
+                    .unwrap(),
+                    "bind_edit_line_start" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_line_start, comment
+                    )
+                    .unwrap(),
+                    "bind_edit_line_end" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_line_end, comment
+                    )
+                    .unwrap(),
+                    "bind_edit_select_all" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_select_all, comment
+                    )
+                    .unwrap(),
+                    "bind_edit_file_bounds" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_file_bounds, comment
+                    )
+                    .unwrap(),
+                    "bind_edit_delete" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_delete, comment
+                    )
+                    .unwrap(),
+                    "bind_edit_copy" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_copy, comment
+                    )
+                    .unwrap(),
+                    "bind_edit_paste" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_paste, comment
+                    )
+                    .unwrap(),
+                    "bind_edit_undo" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_undo, comment
+                    )
+                    .unwrap(),
+                    "bind_edit_redo" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_redo, comment
+                    )
+                    .unwrap(),
+                    "bind_edit_save" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_save, comment
+                    )
+                    .unwrap(),
+
+                    "bind_lib_new_file" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_lib_new_file, comment
+                    )
+                    .unwrap(),
+                    "bind_lib_new_folder" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_lib_new_folder, comment
+                    )
+                    .unwrap(),
+                    "bind_lib_rename" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_lib_rename, comment
+                    )
+                    .unwrap(),
+                    "bind_lib_delete" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_lib_delete, comment
+                    )
+                    .unwrap(),
+                    "bind_lib_move_up" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_lib_move_up, comment
+                    )
+                    .unwrap(),
+                    "bind_lib_move_down" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_lib_move_down, comment
+                    )
+                    .unwrap(),
                     _ => {
                         output.push_str(line);
                         output.push('\n');

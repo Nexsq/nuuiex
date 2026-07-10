@@ -105,184 +105,276 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
             ],
         },
         Category {
-            name: "Editor Keybinds",
+            name: "Library",
             settings: vec![
                 Setting {
-                    name: "Insert Mode",
-                    key: "bind_insert",
+                    name: "Sorting",
+                    key: "lib_sorting",
+                    kind: SettingType::Choice(
+                        vec![
+                            "ascending".to_string(),
+                            "descending".to_string(),
+                            "custom".to_string(),
+                        ],
+                        match config.lib_sorting.as_str() {
+                            "descending" => 1,
+                            "custom" => 2,
+                            _ => 0,
+                        },
+                    ),
+                },
+                Setting {
+                    name: "Reset Order",
+                    key: "reset_order",
+                    kind: SettingType::Action,
+                },
+                Setting {
+                    name: "New File",
+                    key: "bind_lib_new_file",
                     kind: SettingType::Custom {
-                        value: config.bind_insert.to_string(),
-                        default: def.bind_insert.to_string(),
+                        value: config.bind_lib_new_file.to_string(),
+                        default: def.bind_lib_new_file.to_string(),
                         validation: CustomType::Char,
                     },
                 },
                 Setting {
-                    name: "Visual Mode",
-                    key: "bind_visual",
+                    name: "New Folder",
+                    key: "bind_lib_new_folder",
                     kind: SettingType::Custom {
-                        value: config.bind_visual.to_string(),
-                        default: def.bind_visual.to_string(),
+                        value: config.bind_lib_new_folder.to_string(),
+                        default: def.bind_lib_new_folder.to_string(),
                         validation: CustomType::Char,
                     },
                 },
                 Setting {
-                    name: "Move Left",
-                    key: "bind_left",
+                    name: "Rename",
+                    key: "bind_lib_rename",
                     kind: SettingType::Custom {
-                        value: config.bind_left.to_string(),
-                        default: def.bind_left.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Move Right",
-                    key: "bind_right",
-                    kind: SettingType::Custom {
-                        value: config.bind_right.to_string(),
-                        default: def.bind_right.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Move Up",
-                    key: "bind_up",
-                    kind: SettingType::Custom {
-                        value: config.bind_up.to_string(),
-                        default: def.bind_up.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Move Down",
-                    key: "bind_down",
-                    kind: SettingType::Custom {
-                        value: config.bind_down.to_string(),
-                        default: def.bind_down.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Next Word",
-                    key: "bind_word_next",
-                    kind: SettingType::Custom {
-                        value: config.bind_word_next.to_string(),
-                        default: def.bind_word_next.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Prev Word",
-                    key: "bind_word_prev",
-                    kind: SettingType::Custom {
-                        value: config.bind_word_prev.to_string(),
-                        default: def.bind_word_prev.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Line Start",
-                    key: "bind_line_start",
-                    kind: SettingType::Custom {
-                        value: config.bind_line_start.to_string(),
-                        default: def.bind_line_start.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Line End",
-                    key: "bind_line_end",
-                    kind: SettingType::Custom {
-                        value: config.bind_line_end.to_string(),
-                        default: def.bind_line_end.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Select All",
-                    key: "bind_select_all",
-                    kind: SettingType::Custom {
-                        value: config.bind_select_all.to_string(),
-                        default: def.bind_select_all.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "File Bounds",
-                    key: "bind_file_bounds",
-                    kind: SettingType::Custom {
-                        value: config.bind_file_bounds.to_string(),
-                        default: def.bind_file_bounds.to_string(),
+                        value: config.bind_lib_rename.to_string(),
+                        default: def.bind_lib_rename.to_string(),
                         validation: CustomType::Char,
                     },
                 },
                 Setting {
                     name: "Delete",
-                    key: "bind_delete",
+                    key: "bind_lib_delete",
                     kind: SettingType::Custom {
-                        value: config.bind_delete.to_string(),
-                        default: def.bind_delete.to_string(),
+                        value: config.bind_lib_delete.to_string(),
+                        default: def.bind_lib_delete.to_string(),
                         validation: CustomType::Char,
                     },
                 },
                 Setting {
-                    name: "Copy",
-                    key: "bind_copy",
+                    name: "Move Up",
+                    key: "bind_lib_move_up",
                     kind: SettingType::Custom {
-                        value: config.bind_copy.to_string(),
-                        default: def.bind_copy.to_string(),
+                        value: config.bind_lib_move_up.to_string(),
+                        default: def.bind_lib_move_up.to_string(),
                         validation: CustomType::Char,
                     },
                 },
                 Setting {
-                    name: "Paste",
-                    key: "bind_paste",
+                    name: "Move Down",
+                    key: "bind_lib_move_down",
                     kind: SettingType::Custom {
-                        value: config.bind_paste.to_string(),
-                        default: def.bind_paste.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Undo",
-                    key: "bind_undo",
-                    kind: SettingType::Custom {
-                        value: config.bind_undo.to_string(),
-                        default: def.bind_undo.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Redo",
-                    key: "bind_redo",
-                    kind: SettingType::Custom {
-                        value: config.bind_redo.to_string(),
-                        default: def.bind_redo.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Save",
-                    key: "bind_save",
-                    kind: SettingType::Custom {
-                        value: config.bind_save.to_string(),
-                        default: def.bind_save.to_string(),
+                        value: config.bind_lib_move_down.to_string(),
+                        default: def.bind_lib_move_down.to_string(),
                         validation: CustomType::Char,
                     },
                 },
                 Setting {
                     name: "Reset Keybinds",
-                    key: "reset_keybinds",
+                    key: "reset_lib_keybinds",
+                    kind: SettingType::Action,
+                },
+            ],
+        },
+        Category {
+            name: "Editor",
+            settings: vec![
+                Setting {
+                    name: "Insert Mode",
+                    key: "bind_edit_insert",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_insert.to_string(),
+                        default: def.bind_edit_insert.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Visual Mode",
+                    key: "bind_edit_visual",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_visual.to_string(),
+                        default: def.bind_edit_visual.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Move Left",
+                    key: "bind_edit_left",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_left.to_string(),
+                        default: def.bind_edit_left.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Move Right",
+                    key: "bind_edit_right",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_right.to_string(),
+                        default: def.bind_edit_right.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Move Up",
+                    key: "bind_edit_up",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_up.to_string(),
+                        default: def.bind_edit_up.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Move Down",
+                    key: "bind_edit_down",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_down.to_string(),
+                        default: def.bind_edit_down.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Next Word",
+                    key: "bind_edit_word_next",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_word_next.to_string(),
+                        default: def.bind_edit_word_next.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Prev Word",
+                    key: "bind_edit_word_prev",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_word_prev.to_string(),
+                        default: def.bind_edit_word_prev.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Line Start",
+                    key: "bind_edit_line_start",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_line_start.to_string(),
+                        default: def.bind_edit_line_start.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Line End",
+                    key: "bind_edit_line_end",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_line_end.to_string(),
+                        default: def.bind_edit_line_end.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Select All",
+                    key: "bind_edit_select_all",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_select_all.to_string(),
+                        default: def.bind_edit_select_all.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "File Bounds",
+                    key: "bind_edit_file_bounds",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_file_bounds.to_string(),
+                        default: def.bind_edit_file_bounds.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Delete",
+                    key: "bind_edit_delete",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_delete.to_string(),
+                        default: def.bind_edit_delete.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Copy",
+                    key: "bind_edit_copy",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_copy.to_string(),
+                        default: def.bind_edit_copy.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Paste",
+                    key: "bind_edit_paste",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_paste.to_string(),
+                        default: def.bind_edit_paste.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Undo",
+                    key: "bind_edit_undo",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_undo.to_string(),
+                        default: def.bind_edit_undo.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Redo",
+                    key: "bind_edit_redo",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_redo.to_string(),
+                        default: def.bind_edit_redo.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Save",
+                    key: "bind_edit_save",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_save.to_string(),
+                        default: def.bind_edit_save.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
+                    name: "Reset Keybinds",
+                    key: "reset_edit_keybinds",
                     kind: SettingType::Action,
                 },
             ],
         },
         Category {
             name: "Advanced",
-            settings: vec![Setting {
-                name: "Reset Config",
-                key: "reset_config",
-                kind: SettingType::Action,
-            }],
+            settings: vec![
+                Setting {
+                    name: "Reset Lib",
+                    key: "reset_lib",
+                    kind: SettingType::Action,
+                },
+                Setting {
+                    name: "Reset Config",
+                    key: "reset_config",
+                    kind: SettingType::Action,
+                },
+            ],
         },
     ]
 }
@@ -323,6 +415,7 @@ pub fn settings_modal(
     let mut det_scroll = vec![0; categories.len()];
 
     let mut prev_theme = config.theme.clone();
+    let mut prev_sorting = config.lib_sorting.clone();
     let mut dirty = true;
 
     let version_str = format!(" v{} ", env!("CARGO_PKG_VERSION"));
@@ -351,25 +444,33 @@ pub fn settings_modal(
                 apply_setting!(config, set, choice "theme", theme);
                 apply_setting!(config, set, choice "border_style", border_style);
                 apply_setting!(config, set, choice "indicator_style", indicator_style);
+                apply_setting!(config, set, choice "lib_sorting", lib_sorting);
 
-                apply_setting!(config, set, "bind_insert", bind_insert);
-                apply_setting!(config, set, "bind_visual", bind_visual);
-                apply_setting!(config, set, "bind_left", bind_left);
-                apply_setting!(config, set, "bind_right", bind_right);
-                apply_setting!(config, set, "bind_up", bind_up);
-                apply_setting!(config, set, "bind_down", bind_down);
-                apply_setting!(config, set, "bind_word_next", bind_word_next);
-                apply_setting!(config, set, "bind_word_prev", bind_word_prev);
-                apply_setting!(config, set, "bind_line_start", bind_line_start);
-                apply_setting!(config, set, "bind_line_end", bind_line_end);
-                apply_setting!(config, set, "bind_select_all", bind_select_all);
-                apply_setting!(config, set, "bind_file_bounds", bind_file_bounds);
-                apply_setting!(config, set, "bind_delete", bind_delete);
-                apply_setting!(config, set, "bind_copy", bind_copy);
-                apply_setting!(config, set, "bind_paste", bind_paste);
-                apply_setting!(config, set, "bind_undo", bind_undo);
-                apply_setting!(config, set, "bind_redo", bind_redo);
-                apply_setting!(config, set, "bind_save", bind_save);
+                apply_setting!(config, set, "bind_edit_insert", bind_edit_insert);
+                apply_setting!(config, set, "bind_edit_visual", bind_edit_visual);
+                apply_setting!(config, set, "bind_edit_left", bind_edit_left);
+                apply_setting!(config, set, "bind_edit_right", bind_edit_right);
+                apply_setting!(config, set, "bind_edit_up", bind_edit_up);
+                apply_setting!(config, set, "bind_edit_down", bind_edit_down);
+                apply_setting!(config, set, "bind_edit_word_next", bind_edit_word_next);
+                apply_setting!(config, set, "bind_edit_word_prev", bind_edit_word_prev);
+                apply_setting!(config, set, "bind_edit_line_start", bind_edit_line_start);
+                apply_setting!(config, set, "bind_edit_line_end", bind_edit_line_end);
+                apply_setting!(config, set, "bind_edit_select_all", bind_edit_select_all);
+                apply_setting!(config, set, "bind_edit_file_bounds", bind_edit_file_bounds);
+                apply_setting!(config, set, "bind_edit_delete", bind_edit_delete);
+                apply_setting!(config, set, "bind_edit_copy", bind_edit_copy);
+                apply_setting!(config, set, "bind_edit_paste", bind_edit_paste);
+                apply_setting!(config, set, "bind_edit_undo", bind_edit_undo);
+                apply_setting!(config, set, "bind_edit_redo", bind_edit_redo);
+                apply_setting!(config, set, "bind_edit_save", bind_edit_save);
+
+                apply_setting!(config, set, "bind_lib_new_file", bind_lib_new_file);
+                apply_setting!(config, set, "bind_lib_new_folder", bind_lib_new_folder);
+                apply_setting!(config, set, "bind_lib_rename", bind_lib_rename);
+                apply_setting!(config, set, "bind_lib_delete", bind_lib_delete);
+                apply_setting!(config, set, "bind_lib_move_up", bind_lib_move_up);
+                apply_setting!(config, set, "bind_lib_move_down", bind_lib_move_down);
             }
         }
     };
@@ -834,24 +935,32 @@ pub fn settings_modal(
                                             edit_buffer = value.clone();
                                         }
                                         SettingType::Action => {
-                                            let (msg, is_config, is_appearance) = match setting.key
-                                            {
+                                            let (msg, action_type) = match setting.key {
                                                 "reset_config" => (
-                                                    "Reset all settings to default?\n\nAre you sure?",
-                                                    true,
-                                                    false,
+                                                    "Reset all settings to default\n\nAre you sure?",
+                                                    0,
                                                 ),
-                                                "reset_keybinds" => (
-                                                    "Reset all editor keybinds to default?\n\nAre you sure?",
-                                                    false,
-                                                    false,
+                                                "reset_edit_keybinds" => (
+                                                    "Reset all editor keybinds to default\n\nAre you sure?",
+                                                    1,
                                                 ),
                                                 "reset_appearance" => (
-                                                    "Reset appearance settings to default?\n\nAre you sure?",
-                                                    false,
-                                                    true,
+                                                    "Reset appearance settings to default\n\nAre you sure?",
+                                                    2,
                                                 ),
-                                                _ => ("", false, false),
+                                                "reset_lib_keybinds" => (
+                                                    "Reset library keybinds to default\n\nAre you sure?",
+                                                    3,
+                                                ),
+                                                "reset_order" => (
+                                                    "Reset custom sorting order\n\nAre you sure?",
+                                                    4,
+                                                ),
+                                                "reset_lib" => (
+                                                    "Delete all files in the library\nThis cannot be undone!\n\nAre you sure?",
+                                                    5,
+                                                ),
+                                                _ => ("", 99),
                                             };
 
                                             let result = crate::error::warning_box(
@@ -877,14 +986,44 @@ pub fn settings_modal(
                                             );
 
                                             if result == crate::PanelResult::Ok(1) {
-                                                if is_config {
+                                                if action_type == 0 {
                                                     *config = Config::default();
-                                                } else if is_appearance {
+                                                } else if action_type == 1 {
+                                                    config.reset_edit_keybinds();
+                                                } else if action_type == 2 {
                                                     config.reset_appearance();
-                                                } else {
-                                                    config.reset_keybinds();
+                                                } else if action_type == 3 {
+                                                    config.reset_lib_keybinds();
+                                                } else if action_type == 4 {
+                                                    crate::lib::reset_custom_order();
+                                                } else if action_type == 5 {
+                                                    crate::lib::reset_library();
                                                 }
                                                 config.save();
+
+                                                if action_type == 4
+                                                    || action_type == 5
+                                                    || action_type == 1
+                                                {
+                                                    if let Ok(l) =
+                                                        crate::lib::init(&config.lib_sorting)
+                                                    {
+                                                        main_view.library_tree = l.tree;
+                                                        main_view.library_root = l.root_path;
+                                                        if action_type == 5 || action_type == 1 {
+                                                            main_view.expanded_path.clear();
+                                                            main_view.list_selected = 0;
+                                                            main_view.list_scroll = 0;
+                                                            main_view.editor.file_path = None;
+                                                            main_view.editor.rel_path.clear();
+                                                            main_view.editor.state.lines =
+                                                                vec![String::new()];
+                                                            main_view.running_macro = None;
+                                                        }
+                                                        main_view.auto_load();
+                                                    }
+                                                }
+
                                                 let themes = available_themes();
                                                 let current_theme_idx = themes
                                                     .iter()
@@ -912,45 +1051,55 @@ pub fn settings_modal(
             }
         }
 
-        if check_theme && config.theme != prev_theme {
-            match crate::theme::themecore::init(&config.theme) {
-                Ok(new_theme) => {
-                    main_view.theme = new_theme;
-                    let header_h = main_view.theme.title.len().max(1) as u16;
-                    main_view.min_h = 13 + header_h;
+        if check_theme {
+            if config.theme != prev_theme {
+                match crate::theme::themecore::init(&config.theme) {
+                    Ok(new_theme) => {
+                        main_view.theme = new_theme;
+                        let header_h = main_view.theme.title.len().max(1) as u16;
+                        main_view.min_h = 13 + header_h;
 
-                    let (term_w, term_h) = Terminal::size();
-                    main_view.resize(term_w, term_h, config);
+                        let (term_w, term_h) = Terminal::size();
+                        main_view.resize(term_w, term_h, config);
 
-                    prev_theme = config.theme.clone();
+                        prev_theme = config.theme.clone();
+                    }
+                    Err(e) => {
+                        let msg = format!("Failed to load theme '{}':\n{}", config.theme, e);
+                        crate::error::warning_box(
+                            terminal,
+                            canvas,
+                            &msg,
+                            &["OK"],
+                            0,
+                            0,
+                            main_view.min_w,
+                            main_view.min_h,
+                            config.get_border(),
+                            |cvs, w, h| {
+                                if w != main_view.term_w || h != main_view.term_h {
+                                    main_view.resize(w, h, config);
+                                } else {
+                                    main_view.refresh_all(config);
+                                }
+                                main_view.render(cvs);
+                            },
+                        );
+                        config.theme = prev_theme.clone();
+                        let themes = available_themes();
+                        let current_theme_idx =
+                            themes.iter().position(|t| t == &config.theme).unwrap_or(0);
+                        categories = build_categories(config, &themes, current_theme_idx);
+                    }
                 }
-                Err(e) => {
-                    let msg = format!("Failed to load theme '{}':\n{}", config.theme, e);
-                    crate::error::warning_box(
-                        terminal,
-                        canvas,
-                        &msg,
-                        &["OK"],
-                        0,
-                        0,
-                        main_view.min_w,
-                        main_view.min_h,
-                        config.get_border(),
-                        |cvs, w, h| {
-                            if w != main_view.term_w || h != main_view.term_h {
-                                main_view.resize(w, h, config);
-                            } else {
-                                main_view.refresh_all(config);
-                            }
-                            main_view.render(cvs);
-                        },
-                    );
-                    config.theme = prev_theme.clone();
-                    let themes = available_themes();
-                    let current_theme_idx =
-                        themes.iter().position(|t| t == &config.theme).unwrap_or(0);
-                    categories = build_categories(config, &themes, current_theme_idx);
+            }
+            if config.lib_sorting != prev_sorting {
+                if let Ok(l) = crate::lib::init(&config.lib_sorting) {
+                    main_view.library_tree = l.tree;
+                    main_view.library_root = l.root_path;
+                    main_view.auto_load();
                 }
+                prev_sorting = config.lib_sorting.clone();
             }
             dirty = true;
         }

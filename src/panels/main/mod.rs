@@ -6,7 +6,7 @@ pub mod r#static;
 use std::path::PathBuf;
 
 use crate::{
-    Border, Box, Canvas, Color, Modifier, Style, conf::Config, editor::Editor, lib::MacroNode,
+    Border, Box, Canvas, Color, Key, Modifier, Style, conf::Config, editor::Editor, lib::MacroNode,
     theme::themecore::Theme,
 };
 
@@ -14,6 +14,14 @@ use crate::{
 pub enum ActivePanel {
     Main,
     List,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ListInputMode {
+    None,
+    CreatingFile(String),
+    CreatingFolder(String),
+    Renaming(String),
 }
 
 pub struct MainView {
@@ -51,6 +59,7 @@ pub struct MainView {
     pub deck_y: i16,
 
     pub theme: Theme,
+    pub list_input: ListInputMode,
 }
 
 impl MainView {
@@ -108,6 +117,7 @@ impl MainView {
             deck_x: 0,
             deck_y: 0,
             theme,
+            list_input: ListInputMode::None,
         };
 
         view.auto_load();
@@ -115,20 +125,23 @@ impl MainView {
         view
     }
 
-    pub fn auto_load(&mut self) {
-        let (view_path, _) = list::resolve_view(&self.expanded_path, &self.library_tree);
-        let mut parent_nodes = &self.library_tree;
-
-        for &idx in &view_path {
-            if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
-                parent_nodes = children;
+    pub fn get_selected_node(&self) -> Option<&MacroNode> {
+        let mut current = &self.library_tree;
+        for &idx in &self.expanded_path {
+            if let Some(MacroNode::Folder { children, .. }) = current.get(idx) {
+                current = children;
+            } else {
+                return None;
             }
         }
+        current.get(self.list_selected)
+    }
 
+    pub fn auto_load(&mut self) {
         let mut to_load = None;
         let mut is_folder = false;
 
-        if let Some(node) = parent_nodes.get(self.list_selected) {
+        if let Some(node) = self.get_selected_node() {
             match node {
                 MacroNode::Script { path, .. } => {
                     let rp = path
@@ -217,6 +230,7 @@ impl MainView {
             active_path,
             config,
             &self.theme,
+            &self.list_input,
         );
     }
 
@@ -238,6 +252,7 @@ impl MainView {
             self.auto_load();
         } else {
             self.active = ActivePanel::Main;
+            self.list_input = ListInputMode::None;
             if self.editor.file_path.is_some() {
                 self.editor.is_editing = true;
             }
@@ -251,7 +266,7 @@ impl MainView {
             return;
         }
 
-        let (_, empty_idx) = list::resolve_view(&self.expanded_path, &self.library_tree);
+        let (_, empty_idx) = list::resolve_view(&self.expanded_path, &self.library_tree, false);
 
         if self.list_selected > 0 {
             self.list_selected -= 1;
@@ -260,8 +275,8 @@ impl MainView {
             }
         }
         self.auto_load();
-        self.refresh_main(config);
         self.refresh_list(config);
+        self.refresh_main(config);
     }
 
     pub fn selection_down(&mut self, config: &Config) {
@@ -269,7 +284,8 @@ impl MainView {
             return;
         }
 
-        let (view_path, empty_idx) = list::resolve_view(&self.expanded_path, &self.library_tree);
+        let (view_path, empty_idx) =
+            list::resolve_view(&self.expanded_path, &self.library_tree, false);
 
         let mut parent_nodes = &self.library_tree;
         for &idx in &view_path {
@@ -286,8 +302,93 @@ impl MainView {
             }
         }
         self.auto_load();
-        self.refresh_main(config);
         self.refresh_list(config);
+        self.refresh_main(config);
+    }
+
+    pub fn move_selected_up(&mut self, config: &Config) {
+        if config.lib_sorting != "custom" {
+            return;
+        }
+        if self.list_selected > 0 {
+            let (view_path, _) = list::resolve_view(&self.expanded_path, &self.library_tree, false);
+            self.swap_items(&view_path, self.list_selected, self.list_selected - 1);
+            self.list_selected -= 1;
+            self.save_custom_order();
+            self.refresh_list(config);
+        }
+    }
+
+    pub fn move_selected_down(&mut self, config: &Config) {
+        if config.lib_sorting != "custom" {
+            return;
+        }
+        let (view_path, _) = list::resolve_view(&self.expanded_path, &self.library_tree, false);
+
+        let mut current = &self.library_tree;
+        for &idx in &view_path {
+            if let Some(MacroNode::Folder { children, .. }) = current.get(idx) {
+                current = children;
+            }
+        }
+
+        if self.list_selected + 1 < current.len() {
+            self.swap_items(&view_path, self.list_selected, self.list_selected + 1);
+            self.list_selected += 1;
+            self.save_custom_order();
+            self.refresh_list(config);
+        }
+    }
+
+    fn swap_items(&mut self, view_path: &[usize], idx1: usize, idx2: usize) {
+        let mut current = &mut self.library_tree;
+        for &idx in view_path {
+            let temp = current;
+            if idx < temp.len() {
+                if let MacroNode::Folder { children, .. } = &mut temp[idx] {
+                    current = children;
+                    continue;
+                }
+            }
+            return;
+        }
+
+        if idx1 < current.len() && idx2 < current.len() {
+            current.swap(idx1, idx2);
+        }
+    }
+
+    pub fn save_custom_order(&self) {
+        let mut order = Vec::new();
+        self.collect_paths(&self.library_tree, &mut order);
+        crate::lib::save_custom_order(&order);
+    }
+
+    fn collect_paths(&self, nodes: &[MacroNode], order: &mut Vec<String>) {
+        for node in nodes {
+            if let Ok(rel) = node.path().strip_prefix(&self.library_root) {
+                order.push(rel.to_string_lossy().to_string());
+            }
+            if let MacroNode::Folder { children, .. } = node {
+                self.collect_paths(children, order);
+            }
+        }
+    }
+
+    pub fn current_parent_path(&self) -> PathBuf {
+        let mut current = &self.library_tree;
+        let mut path = self.library_root.clone();
+
+        for &idx in &self.expanded_path {
+            if let Some(MacroNode::Folder {
+                path: p, children, ..
+            }) = current.get(idx)
+            {
+                path = p.clone();
+                current = children;
+            }
+        }
+        path
     }
 
     pub fn handle_right_arrow(&mut self, config: &Config) {
@@ -295,7 +396,8 @@ impl MainView {
             return;
         }
 
-        let (view_path, empty_idx) = list::resolve_view(&self.expanded_path, &self.library_tree);
+        let (view_path, empty_idx) =
+            list::resolve_view(&self.expanded_path, &self.library_tree, false);
 
         if empty_idx.is_some() {
             return;
@@ -323,8 +425,8 @@ impl MainView {
                 self.list_scroll = 0;
             }
             self.auto_load();
-            self.refresh_main(config);
             self.refresh_list(config);
+            self.refresh_main(config);
         }
     }
 
@@ -337,8 +439,8 @@ impl MainView {
             self.list_selected = previous_parent_idx;
             self.list_scroll = 0;
             self.auto_load();
-            self.refresh_main(config);
             self.refresh_list(config);
+            self.refresh_main(config);
         }
     }
 
@@ -347,32 +449,23 @@ impl MainView {
             return;
         }
 
-        let (view_path, _) = list::resolve_view(&self.expanded_path, &self.library_tree);
-        let mut parent_nodes = &self.library_tree;
-
-        for &idx in &view_path {
-            if let Some(MacroNode::Folder { children, .. }) = parent_nodes.get(idx) {
-                parent_nodes = children;
-            }
-        }
-
-        let mut should_switch = false;
-        if let Some(node) = parent_nodes.get(self.list_selected) {
+        let mut target = None;
+        if let Some(node) = self.get_selected_node() {
             if let MacroNode::Script { name, path } = node {
-                if let Ok(source) = std::fs::read_to_string(path) {
-                    let output = crate::engine::core::run(&source);
-                    self.editor.state.lines = output;
-                } else {
-                    self.editor.state.lines = vec![format!("Failed to read script '{}'", name)];
-                }
-
-                self.editor.file_path = None;
-                self.running_macro = Some(path.clone());
-                should_switch = true;
+                target = Some((name.clone(), path.clone()));
             }
         }
 
-        if should_switch {
+        if let Some((name, path)) = target {
+            if let Ok(source) = std::fs::read_to_string(&path) {
+                let output = crate::engine::core::run(&source);
+                self.editor.state.lines = output;
+            } else {
+                self.editor.state.lines = vec![format!("Failed to read script '{}'", name)];
+            }
+
+            self.editor.file_path = None;
+            self.running_macro = Some(path);
             self.active = ActivePanel::Main;
             self.editor.is_editing = false;
             self.refresh_main(config);
@@ -393,4 +486,444 @@ impl MainView {
             canvas.put_box(&self.main_box, self.main_x, self.main_y);
         }
     }
+}
+
+pub fn handle_list_input(
+    view: &mut MainView,
+    key: &Key,
+    terminal: &crate::Terminal,
+    canvas: &mut crate::Canvas,
+    config: &Config,
+) -> Result<bool, String> {
+    if view.list_input == ListInputMode::None {
+        return Ok(false);
+    }
+
+    match key {
+        Key::Esc => {
+            view.list_input = ListInputMode::None;
+            view.refresh_list(config);
+            return Ok(true);
+        }
+        Key::Enter => {
+            let mut name = match &view.list_input {
+                ListInputMode::CreatingFile(n) => n.trim().to_string(),
+                ListInputMode::CreatingFolder(n) => n.trim().to_string(),
+                ListInputMode::Renaming(n) => n.trim().to_string(),
+                _ => String::new(),
+            };
+
+            if name.ends_with(".nuui") {
+                name = name.strip_suffix(".nuui").unwrap().to_string();
+            }
+
+            if name.is_empty() {
+                view.list_input = ListInputMode::None;
+                view.refresh_list(config);
+                return Ok(true);
+            }
+
+            if let ListInputMode::Renaming(_) = view.list_input {
+                if let Some(node) = view.get_selected_node() {
+                    let old_path = node.path().to_path_buf();
+                    let is_file = matches!(node, crate::lib::MacroNode::Script { .. });
+                    let parent = old_path.parent().unwrap();
+                    let new_path = if is_file {
+                        parent.join(format!("{}.nuui", name))
+                    } else {
+                        parent.join(&name)
+                    };
+
+                    if new_path.exists() && new_path != old_path {
+                        crate::error::warning_box(
+                            terminal,
+                            canvas,
+                            &format!("'{}' already exists!", name),
+                            &["OK"],
+                            0,
+                            0,
+                            view.min_w,
+                            view.min_h,
+                            config.get_border(),
+                            |cvs, w, h| {
+                                if w != view.term_w || h != view.term_h {
+                                    if w >= view.min_w && h >= view.min_h {
+                                        view.resize(w, h, config);
+                                    }
+                                } else {
+                                    if view.term_w >= view.min_w && view.term_h >= view.min_h {
+                                        view.refresh_all(config);
+                                    }
+                                }
+                                view.render(cvs);
+                            },
+                        );
+                        return Ok(true);
+                    }
+
+                    if std::fs::rename(&old_path, &new_path).is_ok() {
+                        if config.lib_sorting == "custom" {
+                            let mut order = crate::lib::load_custom_order();
+                            let old_rel = old_path
+                                .strip_prefix(&view.library_root)
+                                .unwrap()
+                                .to_string_lossy()
+                                .to_string();
+                            let new_rel = new_path
+                                .strip_prefix(&view.library_root)
+                                .unwrap()
+                                .to_string_lossy()
+                                .to_string();
+                            for item in &mut order {
+                                if item == &old_rel {
+                                    *item = new_rel.clone();
+                                } else if item.starts_with(&(old_rel.clone() + "/"))
+                                    || item.starts_with(&(old_rel.clone() + "\\"))
+                                {
+                                    *item = item.replacen(&old_rel, &new_rel, 1);
+                                }
+                            }
+                            crate::lib::save_custom_order(&order);
+                        }
+
+                        if view.editor.file_path.as_ref() == Some(&old_path) {
+                            view.editor.file_path = Some(new_path.clone());
+                        }
+                        if view.running_macro.as_ref() == Some(&old_path) {
+                            view.running_macro = Some(new_path.clone());
+                        }
+                    }
+
+                    let l = crate::lib::init(&config.lib_sorting)?;
+                    view.library_tree = l.tree;
+
+                    let mut current = &view.library_tree;
+                    let (view_path, _) = crate::panels::main::list::resolve_view(
+                        &view.expanded_path,
+                        &view.library_tree,
+                        false,
+                    );
+                    for &idx in &view_path {
+                        if let Some(crate::lib::MacroNode::Folder { children, .. }) =
+                            current.get(idx)
+                        {
+                            current = children;
+                        }
+                    }
+
+                    let is_folder = !is_file;
+                    if let Some(idx) = current.iter().position(|n| {
+                        n.name() == name
+                            && matches!(n, crate::lib::MacroNode::Folder { .. }) == is_folder
+                    }) {
+                        view.list_selected = idx;
+                    }
+
+                    view.list_input = ListInputMode::None;
+                    view.auto_load();
+                    view.refresh_list(config);
+                    view.refresh_main(config);
+                }
+                return Ok(true);
+            } else {
+                let parent = view.current_parent_path();
+                let is_file = matches!(view.list_input, ListInputMode::CreatingFile(_));
+                let is_folder = !is_file;
+
+                let target_path = if is_file {
+                    parent.join(format!("{}.nuui", name))
+                } else {
+                    parent.join(&name)
+                };
+
+                if target_path.exists() {
+                    crate::error::warning_box(
+                        terminal,
+                        canvas,
+                        &format!("'{}' already exists!", name),
+                        &["OK"],
+                        0,
+                        0,
+                        view.min_w,
+                        view.min_h,
+                        config.get_border(),
+                        |cvs, w, h| {
+                            if w != view.term_w || h != view.term_h {
+                                if w >= view.min_w && h >= view.min_h {
+                                    view.resize(w, h, config);
+                                }
+                            } else {
+                                if view.term_w >= view.min_w && view.term_h >= view.min_h {
+                                    view.refresh_all(config);
+                                }
+                            }
+                            view.render(cvs);
+                        },
+                    );
+                    return Ok(true);
+                }
+
+                if is_file {
+                    let _ = std::fs::write(&target_path, "");
+                } else {
+                    let _ = std::fs::create_dir(&target_path);
+                }
+
+                let l = crate::lib::init(&config.lib_sorting)?;
+                view.library_tree = l.tree;
+
+                let mut current = &view.library_tree;
+                let (view_path, _) = crate::panels::main::list::resolve_view(
+                    &view.expanded_path,
+                    &view.library_tree,
+                    false,
+                );
+                for &idx in &view_path {
+                    if let Some(crate::lib::MacroNode::Folder { children, .. }) = current.get(idx) {
+                        current = children;
+                    }
+                }
+
+                if let Some(idx) = current.iter().position(|n| {
+                    n.name() == name
+                        && matches!(n, crate::lib::MacroNode::Folder { .. }) == is_folder
+                }) {
+                    view.list_selected = idx;
+                }
+
+                if config.lib_sorting == "custom" {
+                    view.save_custom_order();
+                }
+
+                view.list_input = ListInputMode::None;
+                view.auto_load();
+                view.refresh_list(config);
+                view.refresh_main(config);
+                return Ok(true);
+            }
+        }
+        Key::Backspace => {
+            match &mut view.list_input {
+                ListInputMode::CreatingFile(n)
+                | ListInputMode::CreatingFolder(n)
+                | ListInputMode::Renaming(n) => {
+                    n.pop();
+                }
+                _ => {}
+            }
+            view.refresh_list(config);
+            return Ok(true);
+        }
+        Key::Up | Key::Down | Key::Left | Key::Right | Key::Tab => {
+            return Ok(true);
+        }
+        Key::Char(c) | Key::Shift(c) => {
+            if !c.is_control() {
+                let mut final_c = *c;
+                if let Key::Shift(_) = key {
+                    let caps = crate::Terminal::is_caps_lock_on();
+                    final_c = c.to_ascii_uppercase();
+                    if caps && final_c.is_ascii_alphabetic() {
+                        final_c = final_c.to_ascii_lowercase();
+                    }
+                } else {
+                    let caps = crate::Terminal::is_caps_lock_on();
+                    if caps && final_c.is_ascii_alphabetic() {
+                        final_c = final_c.to_ascii_uppercase();
+                    }
+                }
+
+                match &mut view.list_input {
+                    ListInputMode::CreatingFile(n)
+                    | ListInputMode::CreatingFolder(n)
+                    | ListInputMode::Renaming(n) => {
+                        if n.chars().count() < 64 {
+                            if final_c != '/' && final_c != '\\' {
+                                n.push(final_c);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                view.refresh_list(config);
+                return Ok(true);
+            }
+        }
+        _ => {}
+    }
+    Ok(false)
+}
+
+pub fn handle_list_action(
+    view: &mut MainView,
+    key: &Key,
+    terminal: &crate::Terminal,
+    canvas: &mut crate::Canvas,
+    config: &Config,
+) -> Result<bool, String> {
+    if view.active != ActivePanel::List {
+        return Ok(false);
+    }
+
+    let mut handled = false;
+
+    let is_force_delete = if let Key::Shift(c) = key {
+        c.to_ascii_lowercase() == config.bind_lib_delete
+    } else {
+        false
+    };
+
+    if let Key::Char(c) = key {
+        if *c == config.bind_lib_move_up {
+            view.move_selected_up(config);
+            handled = true;
+        } else if *c == config.bind_lib_move_down {
+            view.move_selected_down(config);
+            handled = true;
+        } else if *c == config.bind_lib_new_file {
+            view.list_input = ListInputMode::CreatingFile(String::new());
+            view.refresh_list(config);
+            handled = true;
+        } else if *c == config.bind_lib_new_folder {
+            view.list_input = ListInputMode::CreatingFolder(String::new());
+            view.refresh_list(config);
+            handled = true;
+        } else if *c == config.bind_lib_rename {
+            if let Some(node) = view.get_selected_node() {
+                view.list_input = ListInputMode::Renaming(node.name().to_string());
+                view.refresh_list(config);
+                handled = true;
+            }
+        } else if *c == config.bind_lib_delete {
+            if let Some(node) = view.get_selected_node() {
+                let path = node.path().to_path_buf();
+                let is_folder = matches!(node, crate::lib::MacroNode::Folder { .. });
+
+                let msg = if is_folder {
+                    format!("Delete folder '{}' and all contents?", node.name())
+                } else {
+                    format!("Delete file '{}'?", node.name())
+                };
+
+                let res = crate::error::warning_box(
+                    terminal,
+                    canvas,
+                    &msg,
+                    &["CANCEL", "CONFIRM"],
+                    0,
+                    0,
+                    view.min_w,
+                    view.min_h,
+                    config.get_border(),
+                    |cvs, w, h| {
+                        if w != view.term_w || h != view.term_h {
+                            if w >= view.min_w && h >= view.min_h {
+                                view.resize(w, h, config);
+                            }
+                        } else {
+                            if view.term_w >= view.min_w && view.term_h >= view.min_h {
+                                view.refresh_all(config);
+                            }
+                        }
+                        view.render(cvs);
+                    },
+                );
+
+                if res == crate::PanelResult::Ok(1) {
+                    if is_folder {
+                        let _ = std::fs::remove_dir_all(&path);
+                    } else {
+                        let _ = std::fs::remove_file(&path);
+                    }
+
+                    if view.editor.file_path.as_ref() == Some(&path)
+                        || view.running_macro.as_ref() == Some(&path)
+                    {
+                        view.editor.file_path = None;
+                        view.running_macro = None;
+                        view.editor.state.lines = vec![String::new()];
+                    }
+
+                    let l = crate::lib::init(&config.lib_sorting)?;
+                    view.library_tree = l.tree;
+                    view.auto_load();
+                    view.refresh_list(config);
+                    view.refresh_main(config);
+                }
+                handled = true;
+            }
+        }
+    }
+
+    if !handled && is_force_delete {
+        if let Some(node) = view.get_selected_node() {
+            let path = node.path().to_path_buf();
+            let is_folder = matches!(node, crate::lib::MacroNode::Folder { .. });
+
+            let mut confirm = true;
+
+            if is_folder {
+                let is_empty = std::fs::read_dir(&path)
+                    .map(|mut i| i.next().is_none())
+                    .unwrap_or(true);
+                if !is_empty {
+                    let msg = format!("Delete folder '{}' and all contents?", node.name());
+                    let res = crate::error::warning_box(
+                        terminal,
+                        canvas,
+                        &msg,
+                        &["CANCEL", "CONFIRM"],
+                        0,
+                        0,
+                        view.min_w,
+                        view.min_h,
+                        config.get_border(),
+                        |cvs, w, h| {
+                            if w != view.term_w || h != view.term_h {
+                                if w >= view.min_w && h >= view.min_h {
+                                    view.resize(w, h, config);
+                                }
+                            } else {
+                                if view.term_w >= view.min_w && view.term_h >= view.min_h {
+                                    view.refresh_all(config);
+                                }
+                            }
+                            view.render(cvs);
+                        },
+                    );
+                    confirm = res == crate::PanelResult::Ok(1);
+                }
+            } else {
+                let content = std::fs::read_to_string(&path).unwrap_or_default();
+                if !content.trim().is_empty() {
+                    confirm = false;
+                }
+            }
+
+            if confirm {
+                if is_folder {
+                    let _ = std::fs::remove_dir_all(&path);
+                } else {
+                    let _ = std::fs::remove_file(&path);
+                }
+
+                if view.editor.file_path.as_ref() == Some(&path)
+                    || view.running_macro.as_ref() == Some(&path)
+                {
+                    view.editor.file_path = None;
+                    view.running_macro = None;
+                    view.editor.state.lines = vec![String::new()];
+                }
+
+                let l = crate::lib::init(&config.lib_sorting)?;
+                view.library_tree = l.tree;
+                view.auto_load();
+                view.refresh_list(config);
+                view.refresh_main(config);
+            }
+            handled = true;
+        }
+    }
+
+    Ok(handled)
 }
