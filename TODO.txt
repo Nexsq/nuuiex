@@ -1,4 +1,4 @@
-add custom sorting for library (later later)
+add custom sorting for library (I think its time)
 
 add error messages and code analysis when editing
 
