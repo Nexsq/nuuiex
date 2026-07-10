@@ -190,7 +190,8 @@ impl MainView {
     pub fn refresh_main(&mut self, config: &Config) {
         let header_h = self.theme.title.len().max(1) as u16;
         self.main_box = self.editor.render(
-            self.term_w.saturating_sub(layout::TABS_W + layout::LIST_W),
+            self.term_w
+                .saturating_sub(layout::TABS_W + layout::LIST_W - 1),
             self.term_h.saturating_sub(header_h),
             self.active == ActivePanel::Main,
             config,
@@ -380,10 +381,16 @@ impl MainView {
     }
 
     pub fn render(&self, canvas: &mut Canvas) {
-        canvas.put_box(&self.main_box, self.main_x, self.main_y);
-        canvas.put_box(&self.list_box, self.list_x, self.list_y);
-        canvas.put_box(&self.tabs_box, self.tabs_x, self.tabs_y);
         canvas.put_box(&self.title_box, self.title_x, self.title_y);
         canvas.put_box(&self.deck_box, self.deck_x, self.deck_y);
+        canvas.put_box(&self.tabs_box, self.tabs_x, self.tabs_y);
+
+        if self.active == ActivePanel::List {
+            canvas.put_box(&self.main_box, self.main_x, self.main_y);
+            canvas.put_box(&self.list_box, self.list_x, self.list_y);
+        } else {
+            canvas.put_box(&self.list_box, self.list_x, self.list_y);
+            canvas.put_box(&self.main_box, self.main_x, self.main_y);
+        }
     }
 }

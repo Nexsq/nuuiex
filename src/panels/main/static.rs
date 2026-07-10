@@ -75,7 +75,7 @@ pub fn refresh_title(theme: &Theme) -> Box {
 
 pub fn refresh_deck(term_w: u16, header_h: u16, theme: &Theme) -> Box {
     let mut deck_box = Box::new(
-        term_w.saturating_sub(TABS_W + LIST_W),
+        term_w.saturating_sub(TABS_W + LIST_W - 2),
         header_h,
         0,
         crate::Border::None,
