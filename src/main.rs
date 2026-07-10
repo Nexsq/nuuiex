@@ -114,12 +114,22 @@ fn main() {
 
         if dirty {
             if term_w < main_view.min_w || term_h < main_view.min_h {
-                toosmall::render(&mut canvas, term_w, term_h, config.get_border());
-            } else {
-                canvas.clean();
-                main_view.render(&mut canvas);
-                canvas.render();
+                if !toosmall::run(
+                    &terminal,
+                    &mut canvas,
+                    main_view.min_w,
+                    main_view.min_h,
+                    config.get_border(),
+                ) {
+                    break;
+                }
+                dirty = true;
+                continue;
             }
+
+            canvas.clean();
+            main_view.render(&mut canvas);
+            canvas.render();
             dirty = false;
         }
 
@@ -225,12 +235,7 @@ fn main() {
                                         main_view.refresh_all(&config);
                                     }
                                 }
-
-                                if term_w < main_view.min_w || term_h < main_view.min_h {
-                                    toosmall::render(cvs, term_w, term_h, config.get_border());
-                                } else {
-                                    main_view.render(cvs);
-                                }
+                                main_view.render(cvs);
                             },
                         );
 

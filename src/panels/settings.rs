@@ -392,256 +392,262 @@ pub fn settings_modal(
         }
 
         if dirty {
-            canvas.clean();
-
             let current_min_w = main_view.min_w;
             let current_min_h = main_view.min_h;
 
             if current_w < current_min_w || current_h < current_min_h {
-                crate::toosmall::render(canvas, current_w, current_h, config.get_border());
-                canvas.render();
+                if !crate::toosmall::run(
+                    terminal,
+                    canvas,
+                    current_min_w,
+                    current_min_h,
+                    config.get_border(),
+                ) {
+                    return true;
+                }
+                dirty = true;
+                continue;
+            }
+
+            canvas.clean();
+
+            if current_w != main_view.term_w || current_h != main_view.term_h {
+                main_view.resize(current_w, current_h, config);
             } else {
-                if current_w != main_view.term_w || current_h != main_view.term_h {
-                    main_view.resize(current_w, current_h, config);
-                } else {
-                    main_view.refresh_all(config);
-                }
-                main_view.render(canvas);
-                canvas.apply_dim();
+                main_view.refresh_all(config);
+            }
+            main_view.render(canvas);
+            canvas.apply_dim();
 
-                let term_w = canvas.width;
-                let term_h = canvas.height;
+            let term_w = canvas.width;
+            let term_h = canvas.height;
 
-                let modal_w = 64.min(term_w.saturating_sub(4));
-                let modal_h = 24.min(term_h.saturating_sub(4));
+            let modal_w = 64.min(term_w.saturating_sub(4));
+            let modal_h = 24.min(term_h.saturating_sub(4));
 
-                let start_x = ((term_w.saturating_sub(modal_w)) / 2) as i16;
-                let start_y = ((term_h.saturating_sub(modal_h)) / 2) as i16;
+            let start_x = ((term_w.saturating_sub(modal_w)) / 2) as i16;
+            let start_y = ((term_h.saturating_sub(modal_h)) / 2) as i16;
 
-                let left_w = modal_w / 3;
-                let right_w = modal_w.saturating_sub(left_w);
+            let left_w = modal_w / 3;
+            let right_w = modal_w.saturating_sub(left_w);
 
-                let use_border_color = config.indicator_style == "border";
-                let cat_active = active_panel == ActiveSettingsPanel::Categories;
+            let use_border_color = config.indicator_style == "border";
+            let cat_active = active_panel == ActiveSettingsPanel::Categories;
 
-                let mut cat_box = Box::new(
-                    left_w,
-                    modal_h,
-                    1,
-                    config.get_border(),
-                    Style {
-                        fg: if cat_active && use_border_color {
-                            main_view.theme.selected_box
-                        } else {
-                            main_view.theme.settings_category_box
-                        },
-                        bg: Color::None,
-                        md: Modifier::None,
-                    },
-                );
-
-                crate::panels::apply_indicator(&mut cat_box, config, &main_view.theme, cat_active);
-
-                cat_box.insert_text(
-                    " Categories ",
-                    1,
-                    -1,
-                    false,
-                    Style {
-                        fg: main_view.theme.main_label,
-                        bg: Color::None,
-                        md: Modifier::Bold,
-                    },
-                );
-
-                let visible_items = modal_h.saturating_sub(2) as usize;
-
-                if cat_selected < cat_scroll {
-                    cat_scroll = cat_selected;
-                } else if cat_selected >= cat_scroll + visible_items && visible_items > 0 {
-                    cat_scroll = cat_selected.saturating_sub(visible_items - 1);
-                }
-
-                let max_cat_len = left_w.saturating_sub(2) as usize;
-
-                for (i, cat) in categories
-                    .iter()
-                    .enumerate()
-                    .skip(cat_scroll)
-                    .take(visible_items)
-                {
-                    let is_selected = i == cat_selected;
-
-                    let (fg_color, bg_color) = if is_selected && cat_active {
-                        (Color::Black, main_view.theme.settings_selected)
-                    } else if is_selected {
-                        (main_view.theme.settings_selected, Color::None)
+            let mut cat_box = Box::new(
+                left_w,
+                modal_h,
+                1,
+                config.get_border(),
+                Style {
+                    fg: if cat_active && use_border_color {
+                        main_view.theme.selected_box
                     } else {
-                        (main_view.theme.settings_entry, Color::None)
-                    };
-
-                    // Swapped Modifier::Bold to Modifier::None here
-                    let style = Style {
-                        fg: fg_color,
-                        bg: bg_color,
-                        md: Modifier::None,
-                    };
-
-                    let mut text = cat.name.to_string();
-                    let char_count = text.chars().count();
-                    if char_count > max_cat_len {
-                        text = text.chars().take(max_cat_len).collect();
-                    } else {
-                        text.push_str(&" ".repeat(max_cat_len.saturating_sub(char_count + 2)));
-                    }
-
-                    let display_y = (i - cat_scroll) as i16;
-                    cat_box.insert_text(&text, 1, display_y, false, style);
-                }
-
-                let det_active = active_panel == ActiveSettingsPanel::Details;
-
-                let mut det_box = Box::new(
-                    right_w,
-                    modal_h,
-                    1,
-                    config.get_border(),
-                    Style {
-                        fg: if det_active && use_border_color {
-                            main_view.theme.selected_box
-                        } else {
-                            main_view.theme.settings_options_box
-                        },
-                        bg: Color::None,
-                        md: Modifier::None,
+                        main_view.theme.settings_category_box
                     },
-                );
-
-                crate::panels::apply_indicator(&mut det_box, config, &main_view.theme, det_active);
-
-                det_box.insert_text(
-                    " Settings ",
-                    1,
-                    -1,
-                    false,
-                    Style {
-                        fg: main_view.theme.main_label,
-                        bg: Color::None,
-                        md: Modifier::Bold,
-                    },
-                );
-
-                let current_cat = &categories[cat_selected];
-                let current_settings = &current_cat.settings;
-                let current_det_sel = det_selected[cat_selected];
-                let mut current_det_scroll = det_scroll[cat_selected];
-
-                if current_det_sel < current_det_scroll {
-                    current_det_scroll = current_det_sel;
-                } else if current_det_sel >= current_det_scroll + visible_items && visible_items > 0
-                {
-                    current_det_scroll = current_det_sel.saturating_sub(visible_items - 1);
-                }
-                det_scroll[cat_selected] = current_det_scroll;
-
-                let max_det_len = right_w.saturating_sub(2) as usize;
-
-                for (i, setting) in current_settings
-                    .iter()
-                    .enumerate()
-                    .skip(current_det_scroll)
-                    .take(visible_items)
-                {
-                    let is_selected = i == current_det_sel;
-
-                    let is_action = matches!(setting.kind, SettingType::Action);
-
-                    let (mut fg_color, mut bg_color) = if is_selected && det_active {
-                        (Color::Black, main_view.theme.settings_selected)
-                    } else if is_selected {
-                        (main_view.theme.settings_selected, Color::None)
-                    } else {
-                        (main_view.theme.settings_entry, Color::None)
-                    };
-
-                    if is_action {
-                        if is_selected && det_active {
-                            fg_color = Color::Black;
-                            bg_color = main_view.theme.settings_special;
-                        } else if is_selected {
-                            fg_color = main_view.theme.settings_special;
-                        } else {
-                            fg_color = main_view.theme.settings_entry;
-                        }
-                    }
-
-                    // Swapped Modifier::Bold to Modifier::None here
-                    let style = Style {
-                        fg: fg_color,
-                        bg: bg_color,
-                        md: Modifier::None,
-                    };
-
-                    let mut text = match &setting.kind {
-                        SettingType::Action => setting.name.to_string(),
-                        _ => {
-                            let val_str = match &setting.kind {
-                                SettingType::Choice(opts, idx) => {
-                                    if is_selected && det_active {
-                                        format!("< {} >", opts[*idx])
-                                    } else {
-                                        format!("{}", opts[*idx])
-                                    }
-                                }
-                                SettingType::Custom { value, .. } => {
-                                    if edit_mode && is_selected && det_active {
-                                        format!("[ {}_ ]", edit_buffer)
-                                    } else if is_selected && det_active {
-                                        format!("[ {} ]", value)
-                                    } else {
-                                        format!("{}", value)
-                                    }
-                                }
-                                SettingType::Action => unreachable!(),
-                            };
-                            format!("{}: {}", setting.name, val_str)
-                        }
-                    };
-
-                    let char_count = text.chars().count();
-
-                    if char_count > max_det_len {
-                        text = text.chars().take(max_det_len).collect();
-                    } else {
-                        for _ in 0..(max_det_len.saturating_sub(char_count + 2)) {
-                            text.push(' ');
-                        }
-                    }
-
-                    let display_y = (i - current_det_scroll) as i16;
-                    det_box.insert_text(&text, 1, display_y, false, style);
-                }
-
-                let v_y = det_box.height.saturating_sub(1);
-                let v_start_x = det_box.width.saturating_sub(3 + version_len);
-
-                let det_style = Style {
-                    fg: main_view.theme.settings_options_box,
                     bg: Color::None,
+                    md: Modifier::None,
+                },
+            );
+
+            crate::panels::apply_indicator(&mut cat_box, config, &main_view.theme, cat_active);
+
+            cat_box.insert_text(
+                " Categories ",
+                1,
+                -1,
+                false,
+                Style {
+                    fg: main_view.theme.main_label,
+                    bg: Color::None,
+                    md: Modifier::Bold,
+                },
+            );
+
+            let visible_items = modal_h.saturating_sub(2) as usize;
+
+            if cat_selected < cat_scroll {
+                cat_scroll = cat_selected;
+            } else if cat_selected >= cat_scroll + visible_items && visible_items > 0 {
+                cat_scroll = cat_selected.saturating_sub(visible_items - 1);
+            }
+
+            let max_cat_len = left_w.saturating_sub(2) as usize;
+
+            for (i, cat) in categories
+                .iter()
+                .enumerate()
+                .skip(cat_scroll)
+                .take(visible_items)
+            {
+                let is_selected = i == cat_selected;
+
+                let (fg_color, bg_color) = if is_selected && cat_active {
+                    (Color::Black, main_view.theme.settings_selected)
+                } else if is_selected {
+                    (main_view.theme.settings_selected, Color::None)
+                } else {
+                    (main_view.theme.settings_entry, Color::None)
+                };
+
+                let style = Style {
+                    fg: fg_color,
+                    bg: bg_color,
                     md: Modifier::None,
                 };
 
-                for (i, c) in version_str.chars().enumerate() {
-                    let offset = i as u16;
-                    if v_start_x + offset < det_box.width {
-                        det_box.put_cell(Cell { c, s: det_style }, v_start_x + offset, v_y);
+                let mut text = cat.name.to_string();
+                let char_count = text.chars().count();
+                if char_count > max_cat_len {
+                    text = text.chars().take(max_cat_len).collect();
+                } else {
+                    text.push_str(&" ".repeat(max_cat_len.saturating_sub(char_count + 2)));
+                }
+
+                let display_y = (i - cat_scroll) as i16;
+                cat_box.insert_text(&text, 1, display_y, false, style);
+            }
+
+            let det_active = active_panel == ActiveSettingsPanel::Details;
+
+            let mut det_box = Box::new(
+                right_w,
+                modal_h,
+                1,
+                config.get_border(),
+                Style {
+                    fg: if det_active && use_border_color {
+                        main_view.theme.selected_box
+                    } else {
+                        main_view.theme.settings_options_box
+                    },
+                    bg: Color::None,
+                    md: Modifier::None,
+                },
+            );
+
+            crate::panels::apply_indicator(&mut det_box, config, &main_view.theme, det_active);
+
+            det_box.insert_text(
+                " Settings ",
+                1,
+                -1,
+                false,
+                Style {
+                    fg: main_view.theme.main_label,
+                    bg: Color::None,
+                    md: Modifier::Bold,
+                },
+            );
+
+            let current_cat = &categories[cat_selected];
+            let current_settings = &current_cat.settings;
+            let current_det_sel = det_selected[cat_selected];
+            let mut current_det_scroll = det_scroll[cat_selected];
+
+            if current_det_sel < current_det_scroll {
+                current_det_scroll = current_det_sel;
+            } else if current_det_sel >= current_det_scroll + visible_items && visible_items > 0 {
+                current_det_scroll = current_det_sel.saturating_sub(visible_items - 1);
+            }
+            det_scroll[cat_selected] = current_det_scroll;
+
+            let max_det_len = right_w.saturating_sub(2) as usize;
+
+            for (i, setting) in current_settings
+                .iter()
+                .enumerate()
+                .skip(current_det_scroll)
+                .take(visible_items)
+            {
+                let is_selected = i == current_det_sel;
+
+                let is_action = matches!(setting.kind, SettingType::Action);
+
+                let (mut fg_color, mut bg_color) = if is_selected && det_active {
+                    (Color::Black, main_view.theme.settings_selected)
+                } else if is_selected {
+                    (main_view.theme.settings_selected, Color::None)
+                } else {
+                    (main_view.theme.settings_entry, Color::None)
+                };
+
+                if is_action {
+                    if is_selected && det_active {
+                        fg_color = Color::Black;
+                        bg_color = main_view.theme.settings_special;
+                    } else if is_selected {
+                        fg_color = main_view.theme.settings_special;
+                    } else {
+                        fg_color = main_view.theme.settings_entry;
                     }
                 }
 
-                canvas.put_box_opaque(&cat_box, start_x, start_y);
-                canvas.put_box_opaque(&det_box, start_x + (left_w as i16), start_y);
-                canvas.render();
+                let style = Style {
+                    fg: fg_color,
+                    bg: bg_color,
+                    md: Modifier::None,
+                };
+
+                let mut text = match &setting.kind {
+                    SettingType::Action => setting.name.to_string(),
+                    _ => {
+                        let val_str = match &setting.kind {
+                            SettingType::Choice(opts, idx) => {
+                                if is_selected && det_active {
+                                    format!("< {} >", opts[*idx])
+                                } else {
+                                    format!("{}", opts[*idx])
+                                }
+                            }
+                            SettingType::Custom { value, .. } => {
+                                if edit_mode && is_selected && det_active {
+                                    format!("[ {}_ ]", edit_buffer)
+                                } else if is_selected && det_active {
+                                    format!("[ {} ]", value)
+                                } else {
+                                    format!("{}", value)
+                                }
+                            }
+                            SettingType::Action => unreachable!(),
+                        };
+                        format!("{}: {}", setting.name, val_str)
+                    }
+                };
+
+                let char_count = text.chars().count();
+
+                if char_count > max_det_len {
+                    text = text.chars().take(max_det_len).collect();
+                } else {
+                    for _ in 0..(max_det_len.saturating_sub(char_count + 2)) {
+                        text.push(' ');
+                    }
+                }
+
+                let display_y = (i - current_det_scroll) as i16;
+                det_box.insert_text(&text, 1, display_y, false, style);
             }
+
+            let v_y = det_box.height.saturating_sub(1);
+            let v_start_x = det_box.width.saturating_sub(3 + version_len);
+
+            let det_style = Style {
+                fg: main_view.theme.settings_options_box,
+                bg: Color::None,
+                md: Modifier::None,
+            };
+
+            for (i, c) in version_str.chars().enumerate() {
+                let offset = i as u16;
+                if v_start_x + offset < det_box.width {
+                    det_box.put_cell(Cell { c, s: det_style }, v_start_x + offset, v_y);
+                }
+            }
+
+            canvas.put_box_opaque(&cat_box, start_x, start_y);
+            canvas.put_box_opaque(&det_box, start_x + (left_w as i16), start_y);
+            canvas.render();
             dirty = false;
         }
 

@@ -63,67 +63,70 @@ where
         }
 
         if dirty {
+            if current_w < min_w || current_h < min_h {
+                if !crate::toosmall::run(terminal, canvas, min_w, min_h, border) {
+                    return PanelResult::Quit;
+                }
+                dirty = true;
+                continue;
+            }
+
             canvas.clean();
             draw_background(canvas, current_w, current_h);
+            canvas.apply_dim();
 
-            if current_w < min_w || current_h < min_h {
-                canvas.render();
+            let term_w = canvas.width;
+            let term_h = canvas.height;
+            let pad: u16 = 1;
+
+            let box_w = if width == 0 {
+                (max_msg_len.max(total_opts_len) + (pad as usize * 2) + 4).max(24) as u16
             } else {
-                canvas.apply_dim();
-
-                let term_w = canvas.width;
-                let term_h = canvas.height;
-                let pad: u16 = 1;
-
-                let box_w = if width == 0 {
-                    (max_msg_len.max(total_opts_len) + (pad as usize * 2) + 4).max(24) as u16
-                } else {
-                    width
-                }
-                .min(term_w);
-
-                let box_h = if height == 0 {
-                    (msg_height + (pad as usize * 2) + 3).max(7) as u16
-                } else {
-                    height
-                }
-                .min(term_h);
-
-                let box_x = (term_w.saturating_sub(box_w) / 2) as i16;
-                let box_y = (term_h.saturating_sub(box_h) / 2) as i16;
-
-                let mut err_box = Box::new(box_w, box_h, pad, border, border_style);
-                let inner_w = box_w.saturating_sub(pad * 2);
-                let inner_h = box_h.saturating_sub(pad * 2);
-                let msg_x = (inner_w.saturating_sub(max_msg_len as u16) / 2) as i16;
-
-                err_box.insert_text(msg, msg_x, 0, true, msg_style);
-
-                if !options.is_empty() {
-                    let options_y = inner_h.saturating_sub(1) as i16;
-                    let mut current_x = (inner_w.saturating_sub(total_opts_len as u16) / 2) as i16;
-
-                    for i in 0..options.len() {
-                        let is_selected = i == selected_idx;
-                        let text = if is_selected {
-                            &selected_opts[i]
-                        } else {
-                            &unselected_opts[i]
-                        };
-                        let style = if is_selected {
-                            selected_style
-                        } else {
-                            unselected_style
-                        };
-
-                        err_box.insert_text(text, current_x, options_y, false, style);
-                        current_x += (text.chars().count() + 1) as i16;
-                    }
-                }
-
-                canvas.put_box_opaque(&err_box, box_x, box_y);
-                canvas.render();
+                width
             }
+            .min(term_w);
+
+            let box_h = if height == 0 {
+                (msg_height + (pad as usize * 2) + 3).max(7) as u16
+            } else {
+                height
+            }
+            .min(term_h);
+
+            let box_x = (term_w.saturating_sub(box_w) / 2) as i16;
+            let box_y = (term_h.saturating_sub(box_h) / 2) as i16;
+
+            let mut err_box = Box::new(box_w, box_h, pad, border, border_style);
+            let inner_w = box_w.saturating_sub(pad * 2);
+            let inner_h = box_h.saturating_sub(pad * 2);
+            let msg_x = (inner_w.saturating_sub(max_msg_len as u16) / 2) as i16;
+
+            err_box.insert_text(msg, msg_x, 0, true, msg_style);
+
+            if !options.is_empty() {
+                let options_y = inner_h.saturating_sub(1) as i16;
+                let mut current_x = (inner_w.saturating_sub(total_opts_len as u16) / 2) as i16;
+
+                for i in 0..options.len() {
+                    let is_selected = i == selected_idx;
+                    let text = if is_selected {
+                        &selected_opts[i]
+                    } else {
+                        &unselected_opts[i]
+                    };
+                    let style = if is_selected {
+                        selected_style
+                    } else {
+                        unselected_style
+                    };
+
+                    err_box.insert_text(text, current_x, options_y, false, style);
+                    current_x += (text.chars().count() + 1) as i16;
+                }
+            }
+
+            canvas.put_box_opaque(&err_box, box_x, box_y);
+            canvas.render();
             dirty = false;
         }
 
@@ -207,51 +210,54 @@ pub fn error_box(
         }
 
         if dirty {
+            if current_w < min_w || current_h < min_h {
+                if !crate::toosmall::run(terminal, canvas, min_w, min_h, border) {
+                    return PanelResult::Quit;
+                }
+                dirty = true;
+                continue;
+            }
+
             canvas.clean();
 
-            if current_w < min_w || current_h < min_h {
-                crate::toosmall::render(canvas, current_w, current_h, border);
-                canvas.render();
-            } else {
-                let term_w = canvas.width;
-                let term_h = canvas.height;
+            let term_w = canvas.width;
+            let term_h = canvas.height;
 
-                let pad: u16 = 2;
-                let mut err_box = Box::new(term_w, term_h, pad, border, border_style);
+            let pad: u16 = 2;
+            let mut err_box = Box::new(term_w, term_h, pad, border, border_style);
 
-                let inner_w = term_w.saturating_sub(pad * 2);
-                let inner_h = term_h.saturating_sub(pad * 2);
+            let inner_w = term_w.saturating_sub(pad * 2);
+            let inner_h = term_h.saturating_sub(pad * 2);
 
-                let msg_x = 2;
-                let msg_y = 0;
+            let msg_x = 2;
+            let msg_y = 0;
 
-                err_box.insert_text(msg, msg_x, msg_y, true, msg_style);
+            err_box.insert_text(msg, msg_x, msg_y, true, msg_style);
 
-                if !options.is_empty() {
-                    let options_y = inner_h.saturating_sub(1) as i16;
-                    let mut current_x = (inner_w.saturating_sub(total_opts_len as u16 + 2)) as i16;
+            if !options.is_empty() {
+                let options_y = inner_h.saturating_sub(1) as i16;
+                let mut current_x = (inner_w.saturating_sub(total_opts_len as u16 + 2)) as i16;
 
-                    for i in 0..options.len() {
-                        let is_selected = i == selected_idx;
-                        let text = if is_selected {
-                            &selected_opts[i]
-                        } else {
-                            &unselected_opts[i]
-                        };
-                        let style = if is_selected {
-                            selected_style
-                        } else {
-                            unselected_style
-                        };
+                for i in 0..options.len() {
+                    let is_selected = i == selected_idx;
+                    let text = if is_selected {
+                        &selected_opts[i]
+                    } else {
+                        &unselected_opts[i]
+                    };
+                    let style = if is_selected {
+                        selected_style
+                    } else {
+                        unselected_style
+                    };
 
-                        err_box.insert_text(text, current_x, options_y, false, style);
-                        current_x += (text.chars().count() + 1) as i16;
-                    }
+                    err_box.insert_text(text, current_x, options_y, false, style);
+                    current_x += (text.chars().count() + 1) as i16;
                 }
-
-                canvas.put_box(&err_box, 0, 0);
-                canvas.render();
             }
+
+            canvas.put_box(&err_box, 0, 0);
+            canvas.render();
             dirty = false;
         }
 
