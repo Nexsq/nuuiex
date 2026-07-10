@@ -338,14 +338,22 @@ pub fn refresh(
             Modifier::None
         };
 
-        let indent_prefix = match (item.indent_spaces, item.use_branch_prefix) {
-            (1, true) => "┗".to_string(),
-            (2, true) => "┗ ".to_string(),
-            (n, true) => format!("{}┗", " ".repeat(n.saturating_sub(1))),
-            (n, false) => " ".repeat(n),
-        };
-
-        let mut prefix = indent_prefix;
+        let mut prefix = String::with_capacity(item.indent_spaces + 4);
+        match (item.indent_spaces, item.use_branch_prefix) {
+            (1, true) => prefix.push('┗'),
+            (2, true) => prefix.push_str("┗ "),
+            (n, true) => {
+                for _ in 0..n.saturating_sub(1) {
+                    prefix.push(' ');
+                }
+                prefix.push('┗');
+            }
+            (n, false) => {
+                for _ in 0..n {
+                    prefix.push(' ');
+                }
+            }
+        }
         prefix.push_str(node_symbol);
 
         let mut base_name = if item.is_input {
@@ -388,8 +396,8 @@ pub fn refresh(
             if item.is_input {
                 let skip = name_chars.saturating_sub(allowed_name_len);
                 base_name = base_name.chars().skip(skip).collect();
-            } else {
-                base_name = base_name.chars().take(allowed_name_len).collect();
+            } else if let Some((byte_idx, _)) = base_name.char_indices().nth(allowed_name_len) {
+                base_name.truncate(byte_idx);
             }
         }
 
@@ -398,9 +406,13 @@ pub fn refresh(
 
         let char_count = text.chars().count();
         if char_count > allowed_len {
-            text = text.chars().take(allowed_len).collect();
+            if let Some((byte_idx, _)) = text.char_indices().nth(allowed_len) {
+                text.truncate(byte_idx);
+            }
         } else {
-            for _ in 0..(allowed_len.saturating_sub(char_count)) {
+            let padding = allowed_len.saturating_sub(char_count);
+            text.reserve(padding);
+            for _ in 0..padding {
                 text.push(' ');
             }
         }
