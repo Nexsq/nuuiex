@@ -48,17 +48,14 @@ fn main() {
     let theme = match themecore::init(&config.theme) {
         Ok(t) => t,
         Err(e) => {
-            let msg = format!("Theme Warning:\n{}\n\nWhat would you like to do?", e);
-            let res = error::warning_box(
+            let msg = format!("Theme Error:\n{}\n\nWhat would you like to do?", e);
+            let res = error::error_box(
                 &terminal,
                 &mut canvas,
                 &msg,
                 &["EXIT", "RESET TO DEFAULT THEME"],
                 0,
                 0,
-                min_w,
-                min_h,
-                |_, _, _| {},
             );
             if res == nuui::PanelResult::Ok(1) {
                 config.theme = "default".to_string();

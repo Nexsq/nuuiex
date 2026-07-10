@@ -286,24 +286,19 @@ pub fn refresh(
         if char_count > allowed_len {
             text = text.chars().take(allowed_len).collect();
         } else {
-            text.push_str(&" ".repeat(allowed_len - char_count));
+            for _ in 0..(allowed_len.saturating_sub(char_count)) {
+                text.push(' ');
+            }
         }
 
         if is_editing_this {
             text.push_str(" •");
         }
 
-        list_box.insert_text(
-            &text,
-            1,
-            (display_line - *list_scroll) as i16,
-            false,
-            Style {
-                fg: fg_color,
-                bg: bg_color,
-                md,
-            },
-        );
+        let display_y = (display_line - *list_scroll) as i16;
+        let render_style = Style { fg: fg_color, bg: bg_color, md };
+
+        list_box.insert_text(&text, 1, display_y, false, render_style);
     }
 
     list_box

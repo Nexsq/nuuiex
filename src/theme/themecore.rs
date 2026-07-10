@@ -159,8 +159,13 @@ fn parse_theme_base(content: &str, mut theme: Theme) -> Result<Theme, String> {
             } else {
                 let mut val = String::new();
                 while let Some(&(_, ch)) = chars.peek() {
-                    if ch == '\n' || ch == '#' {
+                    if ch == '\n' {
                         break;
+                    }
+                    if ch == '#' {
+                        if val.ends_with(' ') || val.ends_with('\t') {
+                            break;
+                        }
                     }
                     val.push(ch);
                     chars.next();
@@ -179,37 +184,35 @@ fn parse_theme_base(content: &str, mut theme: Theme) -> Result<Theme, String> {
 
 fn parse_color(val: &str) -> Result<Color, String> {
     let val = val.trim();
-    match val.to_lowercase().as_str() {
-        "none" => Ok(Color::None),
-        "black" => Ok(Color::Black),
-        "red" => Ok(Color::Red),
-        "green" => Ok(Color::Green),
-        "yellow" => Ok(Color::Yellow),
-        "blue" => Ok(Color::Blue),
-        "magenta" => Ok(Color::Magenta),
-        "cyan" => Ok(Color::Cyan),
-        "white" => Ok(Color::White),
-        "darkgray" => Ok(Color::DarkGray),
-        "brightred" => Ok(Color::BrightRed),
-        "brightgreen" => Ok(Color::BrightGreen),
-        "brightyellow" => Ok(Color::BrightYellow),
-        "brightblue" => Ok(Color::BrightBlue),
-        "brightmagenta" => Ok(Color::BrightMagenta),
-        "brightcyan" => Ok(Color::BrightCyan),
-        "brightwhite" => Ok(Color::BrightWhite),
-        _ => {
-            let hex_str = val.trim_start_matches('#');
-            if hex_str.len() == 6 {
-                if let Ok(rgb) = u32::from_str_radix(hex_str, 16) {
-                    let r = ((rgb >> 16) & 0xFF) as u8;
-                    let g = ((rgb >> 8) & 0xFF) as u8;
-                    let b = (rgb & 0xFF) as u8;
-                    return Ok(Color::Rgb(r, g, b));
-                }
-            }
-            Err(format!("Invalid color: {}", val))
+    
+    if val.eq_ignore_ascii_case("none") { return Ok(Color::None); }
+    if val.eq_ignore_ascii_case("black") { return Ok(Color::Black); }
+    if val.eq_ignore_ascii_case("red") { return Ok(Color::Red); }
+    if val.eq_ignore_ascii_case("green") { return Ok(Color::Green); }
+    if val.eq_ignore_ascii_case("yellow") { return Ok(Color::Yellow); }
+    if val.eq_ignore_ascii_case("blue") { return Ok(Color::Blue); }
+    if val.eq_ignore_ascii_case("magenta") { return Ok(Color::Magenta); }
+    if val.eq_ignore_ascii_case("cyan") { return Ok(Color::Cyan); }
+    if val.eq_ignore_ascii_case("white") { return Ok(Color::White); }
+    if val.eq_ignore_ascii_case("darkgray") { return Ok(Color::DarkGray); }
+    if val.eq_ignore_ascii_case("brightred") { return Ok(Color::BrightRed); }
+    if val.eq_ignore_ascii_case("brightgreen") { return Ok(Color::BrightGreen); }
+    if val.eq_ignore_ascii_case("brightyellow") { return Ok(Color::BrightYellow); }
+    if val.eq_ignore_ascii_case("brightblue") { return Ok(Color::BrightBlue); }
+    if val.eq_ignore_ascii_case("brightmagenta") { return Ok(Color::BrightMagenta); }
+    if val.eq_ignore_ascii_case("brightcyan") { return Ok(Color::BrightCyan); }
+    if val.eq_ignore_ascii_case("brightwhite") { return Ok(Color::BrightWhite); }
+
+    let hex_str = val.trim_start_matches('#');
+    if hex_str.len() == 6 {
+        if let Ok(rgb) = u32::from_str_radix(hex_str, 16) {
+            let r = ((rgb >> 16) & 0xFF) as u8;
+            let g = ((rgb >> 8) & 0xFF) as u8;
+            let b = (rgb & 0xFF) as u8;
+            return Ok(Color::Rgb(r, g, b));
         }
     }
+    Err(format!("Invalid color: '{}'", val))
 }
 
 fn parse_title(val: &str) -> Result<Vec<Vec<(String, Color)>>, String> {

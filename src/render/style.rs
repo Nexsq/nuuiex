@@ -1,3 +1,5 @@
+use std::io::Write;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Style {
     pub fg: Color,
@@ -67,50 +69,48 @@ impl Default for Style {
 }
 
 impl Color {
-    pub fn fg_ansi(&self, buf: &mut String) {
-        use std::fmt::Write;
+    pub fn fg_ansi(&self, buf: &mut Vec<u8>) {
         match self {
-            Color::None => buf.write_str("\x1b[39m").unwrap(),
-            Color::Black => buf.write_str("\x1b[30m").unwrap(),
-            Color::Red => buf.write_str("\x1b[31m").unwrap(),
-            Color::Green => buf.write_str("\x1b[32m").unwrap(),
-            Color::Yellow => buf.write_str("\x1b[33m").unwrap(),
-            Color::Blue => buf.write_str("\x1b[34m").unwrap(),
-            Color::Magenta => buf.write_str("\x1b[35m").unwrap(),
-            Color::Cyan => buf.write_str("\x1b[36m").unwrap(),
-            Color::White => buf.write_str("\x1b[37m").unwrap(),
-            Color::DarkGray => buf.write_str("\x1b[90m").unwrap(),
-            Color::BrightRed => buf.write_str("\x1b[91m").unwrap(),
-            Color::BrightGreen => buf.write_str("\x1b[92m").unwrap(),
-            Color::BrightYellow => buf.write_str("\x1b[93m").unwrap(),
-            Color::BrightBlue => buf.write_str("\x1b[94m").unwrap(),
-            Color::BrightMagenta => buf.write_str("\x1b[95m").unwrap(),
-            Color::BrightCyan => buf.write_str("\x1b[96m").unwrap(),
-            Color::BrightWhite => buf.write_str("\x1b[97m").unwrap(),
+            Color::None => buf.write_all(b"\x1b[39m").unwrap(),
+            Color::Black => buf.write_all(b"\x1b[30m").unwrap(),
+            Color::Red => buf.write_all(b"\x1b[31m").unwrap(),
+            Color::Green => buf.write_all(b"\x1b[32m").unwrap(),
+            Color::Yellow => buf.write_all(b"\x1b[33m").unwrap(),
+            Color::Blue => buf.write_all(b"\x1b[34m").unwrap(),
+            Color::Magenta => buf.write_all(b"\x1b[35m").unwrap(),
+            Color::Cyan => buf.write_all(b"\x1b[36m").unwrap(),
+            Color::White => buf.write_all(b"\x1b[37m").unwrap(),
+            Color::DarkGray => buf.write_all(b"\x1b[90m").unwrap(),
+            Color::BrightRed => buf.write_all(b"\x1b[91m").unwrap(),
+            Color::BrightGreen => buf.write_all(b"\x1b[92m").unwrap(),
+            Color::BrightYellow => buf.write_all(b"\x1b[93m").unwrap(),
+            Color::BrightBlue => buf.write_all(b"\x1b[94m").unwrap(),
+            Color::BrightMagenta => buf.write_all(b"\x1b[95m").unwrap(),
+            Color::BrightCyan => buf.write_all(b"\x1b[96m").unwrap(),
+            Color::BrightWhite => buf.write_all(b"\x1b[97m").unwrap(),
             Color::Rgb(r, g, b) => write!(buf, "\x1b[38;2;{};{};{}m", r, g, b).unwrap(),
         }
     }
 
-    pub fn bg_ansi(&self, buf: &mut String) {
-        use std::fmt::Write;
+    pub fn bg_ansi(&self, buf: &mut Vec<u8>) {
         match self {
-            Color::None => buf.write_str("\x1b[49m").unwrap(),
-            Color::Black => buf.write_str("\x1b[40m").unwrap(),
-            Color::Red => buf.write_str("\x1b[41m").unwrap(),
-            Color::Green => buf.write_str("\x1b[42m").unwrap(),
-            Color::Yellow => buf.write_str("\x1b[43m").unwrap(),
-            Color::Blue => buf.write_str("\x1b[44m").unwrap(),
-            Color::Magenta => buf.write_str("\x1b[45m").unwrap(),
-            Color::Cyan => buf.write_str("\x1b[46m").unwrap(),
-            Color::White => buf.write_str("\x1b[47m").unwrap(),
-            Color::DarkGray => buf.write_str("\x1b[100m").unwrap(),
-            Color::BrightRed => buf.write_str("\x1b[101m").unwrap(),
-            Color::BrightGreen => buf.write_str("\x1b[102m").unwrap(),
-            Color::BrightYellow => buf.write_str("\x1b[103m").unwrap(),
-            Color::BrightBlue => buf.write_str("\x1b[104m").unwrap(),
-            Color::BrightMagenta => buf.write_str("\x1b[105m").unwrap(),
-            Color::BrightCyan => buf.write_str("\x1b[106m").unwrap(),
-            Color::BrightWhite => buf.write_str("\x1b[107m").unwrap(),
+            Color::None => buf.write_all(b"\x1b[49m").unwrap(),
+            Color::Black => buf.write_all(b"\x1b[40m").unwrap(),
+            Color::Red => buf.write_all(b"\x1b[41m").unwrap(),
+            Color::Green => buf.write_all(b"\x1b[42m").unwrap(),
+            Color::Yellow => buf.write_all(b"\x1b[43m").unwrap(),
+            Color::Blue => buf.write_all(b"\x1b[44m").unwrap(),
+            Color::Magenta => buf.write_all(b"\x1b[45m").unwrap(),
+            Color::Cyan => buf.write_all(b"\x1b[46m").unwrap(),
+            Color::White => buf.write_all(b"\x1b[47m").unwrap(),
+            Color::DarkGray => buf.write_all(b"\x1b[100m").unwrap(),
+            Color::BrightRed => buf.write_all(b"\x1b[101m").unwrap(),
+            Color::BrightGreen => buf.write_all(b"\x1b[102m").unwrap(),
+            Color::BrightYellow => buf.write_all(b"\x1b[103m").unwrap(),
+            Color::BrightBlue => buf.write_all(b"\x1b[104m").unwrap(),
+            Color::BrightMagenta => buf.write_all(b"\x1b[105m").unwrap(),
+            Color::BrightCyan => buf.write_all(b"\x1b[106m").unwrap(),
+            Color::BrightWhite => buf.write_all(b"\x1b[107m").unwrap(),
             Color::Rgb(r, g, b) => write!(buf, "\x1b[48;2;{};{};{}m", r, g, b).unwrap(),
         }
     }

@@ -308,112 +308,47 @@ pub fn settings_modal(
     let version_str = format!(" v{} ", env!("CARGO_PKG_VERSION"));
     let version_len = version_str.chars().count() as u16;
 
+    macro_rules! apply_setting {
+        ($config:expr, $set:expr, $key:expr, $field:ident) => {
+            if $set.key == $key {
+                if let SettingType::Custom { value, .. } = &$set.kind {
+                    $config.$field = value.chars().next().unwrap_or($config.$field);
+                }
+            }
+        };
+        ($config:expr, $set:expr, choice $key:expr, $field:ident) => {
+            if $set.key == $key {
+                if let SettingType::Choice(opts, idx) = &$set.kind {
+                    $config.$field = opts[*idx].clone();
+                }
+            }
+        };
+    }
+
     let apply_settings = |categories: &[Category], config: &mut Config| {
         for cat in categories {
             for set in &cat.settings {
-                match set.key {
-                    "theme" => {
-                        if let SettingType::Choice(opts, idx) = &set.kind {
-                            config.theme = opts[*idx].clone();
-                        }
-                    }
-                    "indicator_style" => {
-                        if let SettingType::Choice(opts, idx) = &set.kind {
-                            config.indicator_style = opts[*idx].clone();
-                        }
-                    }
-                    "bind_insert" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_insert = value.chars().next().unwrap_or('i');
-                        }
-                    }
-                    "bind_visual" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_visual = value.chars().next().unwrap_or('v');
-                        }
-                    }
-                    "bind_left" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_left = value.chars().next().unwrap_or('h');
-                        }
-                    }
-                    "bind_right" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_right = value.chars().next().unwrap_or('l');
-                        }
-                    }
-                    "bind_up" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_up = value.chars().next().unwrap_or('k');
-                        }
-                    }
-                    "bind_down" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_down = value.chars().next().unwrap_or('j');
-                        }
-                    }
-                    "bind_word_next" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_word_next = value.chars().next().unwrap_or('w');
-                        }
-                    }
-                    "bind_word_prev" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_word_prev = value.chars().next().unwrap_or('b');
-                        }
-                    }
-                    "bind_line_start" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_line_start = value.chars().next().unwrap_or('1');
-                        }
-                    }
-                    "bind_line_end" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_line_end = value.chars().next().unwrap_or('0');
-                        }
-                    }
-                    "bind_select_all" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_select_all = value.chars().next().unwrap_or('a');
-                        }
-                    }
-                    "bind_file_bounds" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_file_bounds = value.chars().next().unwrap_or('g');
-                        }
-                    }
-                    "bind_delete" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_delete = value.chars().next().unwrap_or('d');
-                        }
-                    }
-                    "bind_copy" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_copy = value.chars().next().unwrap_or('y');
-                        }
-                    }
-                    "bind_paste" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_paste = value.chars().next().unwrap_or('p');
-                        }
-                    }
-                    "bind_undo" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_undo = value.chars().next().unwrap_or('u');
-                        }
-                    }
-                    "bind_redo" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_redo = value.chars().next().unwrap_or('r');
-                        }
-                    }
-                    "bind_save" => {
-                        if let SettingType::Custom { value, .. } = &set.kind {
-                            config.bind_save = value.chars().next().unwrap_or('s');
-                        }
-                    }
-                    _ => {}
-                }
+                apply_setting!(config, set, choice "theme", theme);
+                apply_setting!(config, set, choice "indicator_style", indicator_style);
+
+                apply_setting!(config, set, "bind_insert", bind_insert);
+                apply_setting!(config, set, "bind_visual", bind_visual);
+                apply_setting!(config, set, "bind_left", bind_left);
+                apply_setting!(config, set, "bind_right", bind_right);
+                apply_setting!(config, set, "bind_up", bind_up);
+                apply_setting!(config, set, "bind_down", bind_down);
+                apply_setting!(config, set, "bind_word_next", bind_word_next);
+                apply_setting!(config, set, "bind_word_prev", bind_word_prev);
+                apply_setting!(config, set, "bind_line_start", bind_line_start);
+                apply_setting!(config, set, "bind_line_end", bind_line_end);
+                apply_setting!(config, set, "bind_select_all", bind_select_all);
+                apply_setting!(config, set, "bind_file_bounds", bind_file_bounds);
+                apply_setting!(config, set, "bind_delete", bind_delete);
+                apply_setting!(config, set, "bind_copy", bind_copy);
+                apply_setting!(config, set, "bind_paste", bind_paste);
+                apply_setting!(config, set, "bind_undo", bind_undo);
+                apply_setting!(config, set, "bind_redo", bind_redo);
+                apply_setting!(config, set, "bind_save", bind_save);
             }
         }
     };
@@ -700,7 +635,9 @@ pub fn settings_modal(
                     if char_count > max_det_len {
                         text = text.chars().take(max_det_len).collect();
                     } else {
-                        text.push_str(&" ".repeat(max_det_len.saturating_sub(char_count + 2)));
+                        for _ in 0..(max_det_len.saturating_sub(char_count + 2)) {
+                            text.push(' ');
+                        }
                     }
 
                     let display_y = (i - current_det_scroll) as i16;

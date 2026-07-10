@@ -23,7 +23,7 @@ pub struct Token<'a> {
 
 pub struct Lexer<'a> {
     source: &'a str,
-    pos: usize,
+    chars: std::iter::Peekable<std::str::CharIndices<'a>>,
     line: usize,
 }
 
@@ -31,7 +31,7 @@ impl<'a> Lexer<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
             source,
-            pos: 0,
+            chars: source.char_indices().peekable(),
             line: 1,
         }
     }
@@ -49,21 +49,20 @@ impl<'a> Lexer<'a> {
         tokens
     }
 
-    fn is_at_end(&self) -> bool {
-        self.pos >= self.source.len()
+    fn is_at_end(&mut self) -> bool {
+        self.chars.peek().is_none()
     }
 
-    fn peek(&self) -> char {
-        self.source[self.pos..].chars().next().unwrap_or('\0')
+    fn peek(&mut self) -> char {
+        self.chars.peek().map(|&(_, c)| c).unwrap_or('\0')
     }
 
     fn advance(&mut self) -> char {
-        if let Some(c) = self.source[self.pos..].chars().next() {
-            self.pos += c.len_utf8();
-            c
-        } else {
-            '\0'
-        }
+        self.chars.next().map(|(_, c)| c).unwrap_or('\0')
+    }
+
+    fn current_byte_pos(&mut self) -> usize {
+        self.chars.peek().map(|&(i, _)| i).unwrap_or(self.source.len())
     }
 
     fn next_token(&mut self) -> Token<'a> {
@@ -198,7 +197,8 @@ impl<'a> Lexer<'a> {
     }
 
     fn number(&mut self) -> Token<'a> {
-        let start = self.pos;
+        let start = self.current_byte_pos();
+
         while self.peek().is_ascii_digit() {
             self.advance();
         }
@@ -208,7 +208,9 @@ impl<'a> Lexer<'a> {
                 self.advance();
             }
         }
-        let slice = &self.source[start..self.pos];
+
+        let end = self.current_byte_pos();
+        let slice = &self.source[start..end];
         let num: f64 = slice.parse().unwrap_or(0.0);
 
         Token {
@@ -218,12 +220,16 @@ impl<'a> Lexer<'a> {
     }
 
     fn identifier(&mut self) -> Token<'a> {
-        let start = self.pos;
+        let start = self.current_byte_pos();
+
         while self.peek().is_alphanumeric() || self.peek() == '_' {
             self.advance();
         }
+
+        let end = self.current_byte_pos();
+
         Token {
-            kind: TokenKind::Ident(&self.source[start..self.pos]),
+            kind: TokenKind::Ident(&self.source[start..end]),
             line: self.line,
         }
     }

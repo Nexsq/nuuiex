@@ -22,7 +22,7 @@ pub struct Canvas {
     pub height: u16,
     pub old: Vec<Cell>,
     pub new: Vec<Cell>,
-    pub buffer: String,
+    pub buffer: Vec<u8>,
     pub needs_clear: bool,
 }
 
@@ -291,18 +291,12 @@ impl Box {
 impl Canvas {
     pub fn new(width: u16, height: u16) -> Self {
         let size = (width as usize) * (height as usize);
-
-        let imp_cell = Cell {
-            c: '\0',
-            s: Style::default(),
-        };
-
         Self {
             width,
             height,
-            old: vec![imp_cell; size],
+            old: vec![Cell { c: '\0', s: Style::default() }; size],
             new: vec![Cell::default(); size],
-            buffer: String::with_capacity(size * 4),
+            buffer: Vec::with_capacity(size * 16),
             needs_clear: false,
         }
     }
@@ -312,24 +306,19 @@ impl Canvas {
     }
 
     pub fn render(&mut self) {
-        use std::fmt::Write;
-
         self.buffer.clear();
 
         if self.needs_clear {
-            self.buffer.push_str("\x1b[2J\x1b[H");
+            self.buffer.write_all(b"\x1b[2J\x1b[H").unwrap();
             self.needs_clear = false;
         }
 
         let mut cur_fg = Color::None;
         let mut cur_bg = Color::None;
         let mut cur_md = Modifier::None;
-
         let mut cursor_x: u16 = u16::MAX;
         let mut cursor_y: u16 = u16::MAX;
-
         let width = self.width;
-
         let mut x: u16 = 0;
         let mut y: u16 = 0;
 
@@ -341,13 +330,12 @@ impl Canvas {
 
                 if new_cell.s.md != cur_md {
                     if cur_md != Modifier::None {
-                        write!(&mut self.buffer, "\x1b[0m").unwrap();
+                        self.buffer.write_all(b"\x1b[0m").unwrap();
                         cur_fg = Color::None;
                         cur_bg = Color::None;
                     }
-
                     if new_cell.s.md != Modifier::None {
-                        write!(&mut self.buffer, "{}", new_cell.s.md.to_ansi()).unwrap();
+                        self.buffer.write_all(new_cell.s.md.to_ansi().as_bytes()).unwrap();
                     }
                     cur_md = new_cell.s.md;
                 }
@@ -362,15 +350,12 @@ impl Canvas {
                     cur_bg = new_cell.s.bg;
                 }
 
-                self.buffer.push(new_cell.c);
+                let mut char_buf = [0; 4];
+                self.buffer.write_all(new_cell.c.encode_utf8(&mut char_buf).as_bytes()).unwrap();
 
                 cursor_x = x + 1;
                 cursor_y = y;
-
-                if cursor_x >= width {
-                    cursor_x = u16::MAX;
-                }
-
+                if cursor_x >= width { cursor_x = u16::MAX; }
                 *old_cell = *new_cell;
             }
 
@@ -381,10 +366,10 @@ impl Canvas {
             }
         }
 
-        write!(&mut self.buffer, "\x1b[0m").unwrap();
+        self.buffer.write_all(b"\x1b[0m").unwrap();
 
         let mut stdout = io::stdout().lock();
-        stdout.write_all(self.buffer.as_bytes()).unwrap();
+        stdout.write_all(&self.buffer).unwrap();
         stdout.flush().unwrap();
     }
 
