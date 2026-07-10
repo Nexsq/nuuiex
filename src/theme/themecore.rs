@@ -6,7 +6,8 @@ const DEFAULT_THEME: &str = include_str!("themes/default.conf");
 
 pub const BUILTIN_THEMES: &[(&str, &str)] = &[
     ("default", DEFAULT_THEME),
-    ("another", include_str!("themes/another.conf")),
+    ("fern", include_str!("themes/fern.conf")),
+    ("ocean", include_str!("themes/ocean.conf")),
 ];
 
 #[derive(Debug, Clone)]
@@ -27,9 +28,9 @@ pub struct Theme {
     pub settings_entry: Color,
     pub settings_selected: Color,
     pub settings_special: Color,
+    pub editor_ins: Color,
     pub editor_cmd: Color,
     pub editor_vis: Color,
-    pub editor_ins: Color,
 }
 
 impl Theme {
@@ -51,9 +52,9 @@ impl Theme {
             settings_entry: Color::None,
             settings_selected: Color::None,
             settings_special: Color::None,
+            editor_ins: Color::None,
             editor_cmd: Color::None,
             editor_vis: Color::None,
-            editor_ins: Color::None,
         }
     }
 }
@@ -184,24 +185,58 @@ fn parse_theme_base(content: &str, mut theme: Theme) -> Result<Theme, String> {
 
 fn parse_color(val: &str) -> Result<Color, String> {
     let val = val.trim();
-    
-    if val.eq_ignore_ascii_case("none") { return Ok(Color::None); }
-    if val.eq_ignore_ascii_case("black") { return Ok(Color::Black); }
-    if val.eq_ignore_ascii_case("red") { return Ok(Color::Red); }
-    if val.eq_ignore_ascii_case("green") { return Ok(Color::Green); }
-    if val.eq_ignore_ascii_case("yellow") { return Ok(Color::Yellow); }
-    if val.eq_ignore_ascii_case("blue") { return Ok(Color::Blue); }
-    if val.eq_ignore_ascii_case("magenta") { return Ok(Color::Magenta); }
-    if val.eq_ignore_ascii_case("cyan") { return Ok(Color::Cyan); }
-    if val.eq_ignore_ascii_case("white") { return Ok(Color::White); }
-    if val.eq_ignore_ascii_case("darkgray") { return Ok(Color::DarkGray); }
-    if val.eq_ignore_ascii_case("brightred") { return Ok(Color::BrightRed); }
-    if val.eq_ignore_ascii_case("brightgreen") { return Ok(Color::BrightGreen); }
-    if val.eq_ignore_ascii_case("brightyellow") { return Ok(Color::BrightYellow); }
-    if val.eq_ignore_ascii_case("brightblue") { return Ok(Color::BrightBlue); }
-    if val.eq_ignore_ascii_case("brightmagenta") { return Ok(Color::BrightMagenta); }
-    if val.eq_ignore_ascii_case("brightcyan") { return Ok(Color::BrightCyan); }
-    if val.eq_ignore_ascii_case("brightwhite") { return Ok(Color::BrightWhite); }
+
+    if val.eq_ignore_ascii_case("none") {
+        return Ok(Color::None);
+    }
+    if val.eq_ignore_ascii_case("black") {
+        return Ok(Color::Black);
+    }
+    if val.eq_ignore_ascii_case("red") {
+        return Ok(Color::Red);
+    }
+    if val.eq_ignore_ascii_case("green") {
+        return Ok(Color::Green);
+    }
+    if val.eq_ignore_ascii_case("yellow") {
+        return Ok(Color::Yellow);
+    }
+    if val.eq_ignore_ascii_case("blue") {
+        return Ok(Color::Blue);
+    }
+    if val.eq_ignore_ascii_case("magenta") {
+        return Ok(Color::Magenta);
+    }
+    if val.eq_ignore_ascii_case("cyan") {
+        return Ok(Color::Cyan);
+    }
+    if val.eq_ignore_ascii_case("white") {
+        return Ok(Color::White);
+    }
+    if val.eq_ignore_ascii_case("darkgray") {
+        return Ok(Color::DarkGray);
+    }
+    if val.eq_ignore_ascii_case("brightred") {
+        return Ok(Color::BrightRed);
+    }
+    if val.eq_ignore_ascii_case("brightgreen") {
+        return Ok(Color::BrightGreen);
+    }
+    if val.eq_ignore_ascii_case("brightyellow") {
+        return Ok(Color::BrightYellow);
+    }
+    if val.eq_ignore_ascii_case("brightblue") {
+        return Ok(Color::BrightBlue);
+    }
+    if val.eq_ignore_ascii_case("brightmagenta") {
+        return Ok(Color::BrightMagenta);
+    }
+    if val.eq_ignore_ascii_case("brightcyan") {
+        return Ok(Color::BrightCyan);
+    }
+    if val.eq_ignore_ascii_case("brightwhite") {
+        return Ok(Color::BrightWhite);
+    }
 
     let hex_str = val.trim_start_matches('#');
     if hex_str.len() == 6 {
@@ -283,9 +318,9 @@ fn apply_theme_value(theme: &mut Theme, key: &str, val: &str) -> Result<(), Stri
         "settings_entry" => theme.settings_entry = parse_color(val)?,
         "settings_selected" => theme.settings_selected = parse_color(val)?,
         "settings_special" => theme.settings_special = parse_color(val)?,
+        "editor_ins" => theme.editor_ins = parse_color(val)?,
         "editor_cmd" => theme.editor_cmd = parse_color(val)?,
         "editor_vis" => theme.editor_vis = parse_color(val)?,
-        "editor_ins" => theme.editor_ins = parse_color(val)?,
         _ => {}
     }
     Ok(())

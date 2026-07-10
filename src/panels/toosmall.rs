@@ -1,13 +1,13 @@
 use crate::{Border, Box, Canvas, Color, Modifier, Style};
 
-pub fn render(canvas: &mut Canvas, width: u16, height: u16) {
+pub fn render(canvas: &mut Canvas, width: u16, height: u16, border: Border) {
     canvas.clean();
 
     let mut warning_box = Box::new(
         width,
         height,
         0,
-        Border::Heavy,
+        border,
         Style {
             fg: Color::Red,
             bg: Color::None,

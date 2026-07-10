@@ -184,7 +184,7 @@ impl MainView {
     pub fn refresh_all(&mut self, config: &Config) {
         self.refresh_main(config);
         self.refresh_list(config);
-        self.refresh_static_boxes();
+        self.refresh_static_boxes(config);
     }
 
     pub fn refresh_main(&mut self, config: &Config) {
@@ -219,9 +219,9 @@ impl MainView {
         );
     }
 
-    pub fn refresh_static_boxes(&mut self) {
+    pub fn refresh_static_boxes(&mut self, config: &Config) {
         let header_h = self.theme.title.len().max(1) as u16;
-        self.tabs_box = r#static::refresh_tabs(self.term_h, header_h, &self.theme);
+        self.tabs_box = r#static::refresh_tabs(self.term_h, header_h, &self.theme, config);
         self.title_box = r#static::refresh_title(&self.theme);
         self.deck_box = r#static::refresh_deck(self.term_w, header_h, &self.theme);
     }

@@ -1,12 +1,12 @@
 use super::layout::{LIST_W, TABS_W};
-use crate::{Border, Box, Color, Modifier, Style, theme::themecore::Theme};
+use crate::{Box, Color, Modifier, Style, conf::Config, theme::themecore::Theme};
 
-pub fn refresh_tabs(term_h: u16, header_h: u16, theme: &Theme) -> Box {
+pub fn refresh_tabs(term_h: u16, header_h: u16, theme: &Theme, config: &Config) -> Box {
     let mut tabs_box = Box::new(
         TABS_W,
         term_h.saturating_sub(header_h),
         1,
-        Border::Rounded,
+        config.get_border(),
         Style {
             fg: theme.tabs_box,
             bg: Color::None,
@@ -33,7 +33,7 @@ pub fn refresh_title(theme: &Theme) -> Box {
         TABS_W + LIST_W,
         header_h,
         0,
-        Border::None,
+        crate::Border::None,
         Style {
             fg: theme.title_box,
             bg: Color::None,
@@ -64,7 +64,7 @@ pub fn refresh_title(theme: &Theme) -> Box {
                 Style {
                     fg: *color,
                     bg: Color::None,
-                    md: Modifier::Bold,
+                    md: Modifier::None,
                 },
             );
             current_x += display_text.chars().count() as u16;
@@ -78,7 +78,7 @@ pub fn refresh_deck(term_w: u16, header_h: u16, theme: &Theme) -> Box {
         term_w.saturating_sub(TABS_W + LIST_W),
         header_h,
         0,
-        Border::None,
+        crate::Border::None,
         Style {
             fg: theme.deck_box,
             bg: Color::None,

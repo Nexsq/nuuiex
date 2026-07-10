@@ -1,8 +1,6 @@
 use super::ActivePanel;
 use super::layout::LIST_W;
-use crate::{
-    Border, Box, Color, Modifier, Style, conf::Config, lib::MacroNode, theme::themecore::Theme,
-};
+use crate::{Box, Color, Modifier, Style, conf::Config, lib::MacroNode, theme::themecore::Theme};
 
 pub fn resolve_view(
     expanded_path: &[usize],
@@ -37,26 +35,20 @@ pub fn refresh(
     theme: &Theme,
 ) -> Box {
     let list_h = term_h.saturating_sub(header_h);
-
     let is_active = active == ActivePanel::List;
-    let use_corner = config.indicator_style == "corner";
+    let use_border_color = config.indicator_style == "border";
 
-    let list_color = if is_active && !use_corner {
+    let list_color = if is_active && use_border_color {
         theme.selected_box
     } else {
         theme.list_box
-    };
-    let list_border = if is_active && !use_corner {
-        Border::Heavy
-    } else {
-        Border::Light
     };
 
     let mut list_box = Box::new(
         LIST_W,
         list_h,
         1,
-        list_border,
+        config.get_border(),
         Style {
             fg: list_color,
             bg: Color::None,
@@ -64,22 +56,7 @@ pub fn refresh(
         },
     );
 
-    if is_active && use_corner {
-        if LIST_W > 0 {
-            list_box.put_cell(
-                crate::Cell {
-                    c: '■',
-                    s: Style {
-                        fg: theme.selected_box,
-                        bg: Color::None,
-                        md: Modifier::None,
-                    },
-                },
-                LIST_W - 1,
-                0,
-            );
-        }
-    }
+    crate::panels::apply_indicator(&mut list_box, config, theme, is_active);
 
     let (view_path, empty_child_idx) = resolve_view(expanded_path, library_tree);
 
@@ -296,7 +273,11 @@ pub fn refresh(
         }
 
         let display_y = (display_line - *list_scroll) as i16;
-        let render_style = Style { fg: fg_color, bg: bg_color, md };
+        let render_style = Style {
+            fg: fg_color,
+            bg: bg_color,
+            md,
+        };
 
         list_box.insert_text(&text, 1, display_y, false, render_style);
     }

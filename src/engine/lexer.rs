@@ -62,7 +62,10 @@ impl<'a> Lexer<'a> {
     }
 
     fn current_byte_pos(&mut self) -> usize {
-        self.chars.peek().map(|&(i, _)| i).unwrap_or(self.source.len())
+        self.chars
+            .peek()
+            .map(|&(i, _)| i)
+            .unwrap_or(self.source.len())
     }
 
     fn next_token(&mut self) -> Token<'a> {

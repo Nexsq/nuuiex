@@ -7,6 +7,7 @@ const DEFAULT_CONFIG: &str = include_str!("template.conf");
 #[derive(Debug, Clone)]
 pub struct Config {
     pub indicator_style: String,
+    pub border_style: String,
     pub theme: String,
 
     pub bind_insert: char,
@@ -33,6 +34,7 @@ impl Default for Config {
     fn default() -> Self {
         let mut config = Self {
             indicator_style: String::new(),
+            border_style: String::new(),
             theme: String::new(),
 
             bind_insert: '\0',
@@ -60,6 +62,14 @@ impl Default for Config {
 }
 
 impl Config {
+    pub fn get_border(&self) -> crate::Border {
+        match self.border_style.as_str() {
+            "round" => crate::Border::Rounded,
+            "heavy" => crate::Border::Heavy,
+            _ => crate::Border::Light,
+        }
+    }
+
     fn parse_str(&mut self, contents: &str) -> Result<(), String> {
         for line in contents.lines() {
             let trimmed = line.trim();
@@ -76,6 +86,7 @@ impl Config {
 
                 match key {
                     "indicator_style" => self.indicator_style = val.to_string(),
+                    "border_style" => self.border_style = val.to_string(),
                     "theme" => self.theme = val.to_string(),
 
                     "bind_insert" => {
@@ -214,6 +225,7 @@ impl Config {
     pub fn reset_appearance(&mut self) {
         let default = Config::default();
         self.indicator_style = default.indicator_style;
+        self.border_style = default.border_style;
         self.theme = default.theme;
     }
 
@@ -271,6 +283,12 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.indicator_style, comment
+                    )
+                    .unwrap(),
+                    "border_style" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.border_style, comment
                     )
                     .unwrap(),
                     "theme" => {

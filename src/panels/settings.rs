@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::conf::Config;
-use crate::{Border, Box, Canvas, Cell, Color, Key, Modifier, Style, Terminal};
+use crate::{Box, Canvas, Cell, Color, Key, Modifier, Style, Terminal};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ActiveSettingsPanel {
@@ -66,14 +66,34 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     kind: SettingType::Choice(themes.to_vec(), theme_idx),
                 },
                 Setting {
+                    name: "Border",
+                    key: "border_style",
+                    kind: SettingType::Choice(
+                        vec![
+                            "round".to_string(),
+                            "squared".to_string(),
+                            "heavy".to_string(),
+                        ],
+                        match config.border_style.as_str() {
+                            "round" => 0,
+                            "heavy" => 2,
+                            _ => 1,
+                        },
+                    ),
+                },
+                Setting {
                     name: "Selected Indicator",
                     key: "indicator_style",
                     kind: SettingType::Choice(
-                        vec!["border".to_string(), "corner".to_string()],
-                        if config.indicator_style == "corner" {
-                            1
-                        } else {
-                            0
+                        vec![
+                            "border".to_string(),
+                            "corner".to_string(),
+                            "corners".to_string(),
+                        ],
+                        match config.indicator_style.as_str() {
+                            "corner" => 1,
+                            "corners" => 2,
+                            _ => 0,
                         },
                     ),
                 },
@@ -329,6 +349,7 @@ pub fn settings_modal(
         for cat in categories {
             for set in &cat.settings {
                 apply_setting!(config, set, choice "theme", theme);
+                apply_setting!(config, set, choice "border_style", border_style);
                 apply_setting!(config, set, choice "indicator_style", indicator_style);
 
                 apply_setting!(config, set, "bind_insert", bind_insert);
@@ -377,7 +398,7 @@ pub fn settings_modal(
             let current_min_h = main_view.min_h;
 
             if current_w < current_min_w || current_h < current_min_h {
-                crate::toosmall::render(canvas, current_w, current_h);
+                crate::toosmall::render(canvas, current_w, current_h, config.get_border());
                 canvas.render();
             } else {
                 if current_w != main_view.term_w || current_h != main_view.term_h {
@@ -400,21 +421,16 @@ pub fn settings_modal(
                 let left_w = modal_w / 3;
                 let right_w = modal_w.saturating_sub(left_w);
 
-                let use_corner = config.indicator_style == "corner";
-
+                let use_border_color = config.indicator_style == "border";
                 let cat_active = active_panel == ActiveSettingsPanel::Categories;
-                let cat_border = if cat_active && !use_corner {
-                    Border::Heavy
-                } else {
-                    Border::Light
-                };
+
                 let mut cat_box = Box::new(
                     left_w,
                     modal_h,
                     1,
-                    cat_border,
+                    config.get_border(),
                     Style {
-                        fg: if cat_active && !use_corner {
+                        fg: if cat_active && use_border_color {
                             main_view.theme.selected_box
                         } else {
                             main_view.theme.settings_category_box
@@ -423,6 +439,9 @@ pub fn settings_modal(
                         md: Modifier::None,
                     },
                 );
+
+                crate::panels::apply_indicator(&mut cat_box, config, &main_view.theme, cat_active);
+
                 cat_box.insert_text(
                     " Categories ",
                     1,
@@ -434,23 +453,6 @@ pub fn settings_modal(
                         md: Modifier::Bold,
                     },
                 );
-
-                if cat_active && use_corner {
-                    if cat_box.width > 0 {
-                        cat_box.put_cell(
-                            Cell {
-                                c: '■',
-                                s: Style {
-                                    fg: main_view.theme.selected_box,
-                                    bg: Color::None,
-                                    md: Modifier::None,
-                                },
-                            },
-                            cat_box.width - 1,
-                            0,
-                        );
-                    }
-                }
 
                 let visible_items = modal_h.saturating_sub(2) as usize;
 
@@ -478,14 +480,11 @@ pub fn settings_modal(
                         (main_view.theme.settings_entry, Color::None)
                     };
 
+                    // Swapped Modifier::Bold to Modifier::None here
                     let style = Style {
                         fg: fg_color,
                         bg: bg_color,
-                        md: if is_selected && cat_active {
-                            Modifier::Bold
-                        } else {
-                            Modifier::None
-                        },
+                        md: Modifier::None,
                     };
 
                     let mut text = cat.name.to_string();
@@ -501,18 +500,14 @@ pub fn settings_modal(
                 }
 
                 let det_active = active_panel == ActiveSettingsPanel::Details;
-                let det_border = if det_active && !use_corner {
-                    Border::Heavy
-                } else {
-                    Border::Light
-                };
+
                 let mut det_box = Box::new(
                     right_w,
                     modal_h,
                     1,
-                    det_border,
+                    config.get_border(),
                     Style {
-                        fg: if det_active && !use_corner {
+                        fg: if det_active && use_border_color {
                             main_view.theme.selected_box
                         } else {
                             main_view.theme.settings_options_box
@@ -521,6 +516,9 @@ pub fn settings_modal(
                         md: Modifier::None,
                     },
                 );
+
+                crate::panels::apply_indicator(&mut det_box, config, &main_view.theme, det_active);
+
                 det_box.insert_text(
                     " Settings ",
                     1,
@@ -532,23 +530,6 @@ pub fn settings_modal(
                         md: Modifier::Bold,
                     },
                 );
-
-                if det_active && use_corner {
-                    if det_box.width > 0 {
-                        det_box.put_cell(
-                            Cell {
-                                c: '■',
-                                s: Style {
-                                    fg: main_view.theme.selected_box,
-                                    bg: Color::None,
-                                    md: Modifier::None,
-                                },
-                            },
-                            det_box.width - 1,
-                            0,
-                        );
-                    }
-                }
 
                 let current_cat = &categories[cat_selected];
                 let current_settings = &current_cat.settings;
@@ -594,14 +575,11 @@ pub fn settings_modal(
                         }
                     }
 
+                    // Swapped Modifier::Bold to Modifier::None here
                     let style = Style {
                         fg: fg_color,
                         bg: bg_color,
-                        md: if is_selected && det_active {
-                            Modifier::Bold
-                        } else {
-                            Modifier::None
-                        },
+                        md: Modifier::None,
                     };
 
                     let mut text = match &setting.kind {
@@ -879,6 +857,7 @@ pub fn settings_modal(
                                                 0,
                                                 main_view.min_w,
                                                 main_view.min_h,
+                                                config.get_border(),
                                                 |cvs, w, h| {
                                                     if w != main_view.term_w
                                                         || h != main_view.term_h
@@ -950,6 +929,7 @@ pub fn settings_modal(
                         0,
                         main_view.min_w,
                         main_view.min_h,
+                        config.get_border(),
                         |cvs, w, h| {
                             if w != main_view.term_w || h != main_view.term_h {
                                 main_view.resize(w, h, config);

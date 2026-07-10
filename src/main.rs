@@ -25,6 +25,7 @@ fn main() {
                 &["EXIT", "RESET CONFIG"],
                 min_w,
                 min_h,
+                nuui::Border::Heavy,
             );
             if res == nuui::PanelResult::Ok(1) {
                 if let Err(err) = conf::reset_to_default() {
@@ -35,6 +36,7 @@ fn main() {
                         &["EXIT"],
                         min_w,
                         min_h,
+                        nuui::Border::Heavy,
                     );
                     return;
                 }
@@ -56,6 +58,7 @@ fn main() {
                 &["EXIT", "RESET TO DEFAULT THEME"],
                 0,
                 0,
+                config.get_border(),
             );
             if res == nuui::PanelResult::Ok(1) {
                 config.theme = "default".to_string();
@@ -77,6 +80,7 @@ fn main() {
                 &["EXIT"],
                 min_w,
                 min_h,
+                config.get_border(),
             );
             return;
         }
@@ -110,7 +114,7 @@ fn main() {
 
         if dirty {
             if term_w < main_view.min_w || term_h < main_view.min_h {
-                toosmall::render(&mut canvas, term_w, term_h);
+                toosmall::render(&mut canvas, term_w, term_h, config.get_border());
             } else {
                 canvas.clean();
                 main_view.render(&mut canvas);
@@ -183,6 +187,7 @@ fn main() {
                                     &["EXIT"],
                                     min_w,
                                     min_h,
+                                    config.get_border(),
                                 );
                                 break;
                             }
@@ -207,6 +212,7 @@ fn main() {
                             0,
                             main_view.min_w,
                             main_view.min_h,
+                            config.get_border(),
                             |cvs, w, h| {
                                 if w != term_w || h != term_h {
                                     term_w = w;
@@ -221,7 +227,7 @@ fn main() {
                                 }
 
                                 if term_w < main_view.min_w || term_h < main_view.min_h {
-                                    toosmall::render(cvs, term_w, term_h);
+                                    toosmall::render(cvs, term_w, term_h, config.get_border());
                                 } else {
                                     main_view.render(cvs);
                                 }
@@ -240,6 +246,7 @@ fn main() {
                             &["CANCEL", "CONFIRM"],
                             main_view.min_w,
                             main_view.min_h,
+                            config.get_border(),
                         );
 
                         if result == nuui::PanelResult::Quit {

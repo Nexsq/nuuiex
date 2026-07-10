@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::conf::Config;
-use crate::{Border, Box, Color, Key, Modifier, Style, theme::themecore::Theme};
+use crate::{Box, Color, Key, Modifier, Style, theme::themecore::Theme};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Mode {
@@ -956,19 +956,15 @@ impl Editor {
         config: &Config,
         theme: &Theme,
     ) -> Box {
-        let use_corner = config.indicator_style == "corner";
+        let use_border_color = config.indicator_style == "border";
 
         let mut b = Box::new(
             width,
             height,
             1,
-            if is_active && !use_corner {
-                Border::Heavy
-            } else {
-                Border::Light
-            },
+            config.get_border(),
             Style {
-                fg: if is_active && !use_corner {
+                fg: if is_active && use_border_color {
                     theme.selected_box
                 } else {
                     theme.main_box
@@ -977,6 +973,8 @@ impl Editor {
                 md: Modifier::None,
             },
         );
+
+        crate::panels::apply_indicator(&mut b, config, theme, is_active);
 
         if self.is_editing {
             let (mode_str, mode_color) = match self.mode {
@@ -1013,23 +1011,6 @@ impl Editor {
                 );
             } else {
                 b.insert_text(" ", 2 + mode_str.len() as i16, -1, false, default_style);
-            }
-        }
-
-        if is_active && use_corner {
-            if width > 0 {
-                b.put_cell(
-                    crate::Cell {
-                        c: '■',
-                        s: Style {
-                            fg: theme.selected_box,
-                            bg: Color::None,
-                            md: Modifier::None,
-                        },
-                    },
-                    width - 1,
-                    0,
-                );
             }
         }
 

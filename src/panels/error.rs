@@ -11,6 +11,7 @@ pub fn warning_box<F>(
     height: u16,
     min_w: u16,
     min_h: u16,
+    border: Border,
     mut draw_background: F,
 ) -> PanelResult
 where
@@ -91,7 +92,7 @@ where
                 let box_x = (term_w.saturating_sub(box_w) / 2) as i16;
                 let box_y = (term_h.saturating_sub(box_h) / 2) as i16;
 
-                let mut err_box = Box::new(box_w, box_h, pad, Border::Heavy, border_style);
+                let mut err_box = Box::new(box_w, box_h, pad, border, border_style);
                 let inner_w = box_w.saturating_sub(pad * 2);
                 let inner_h = box_h.saturating_sub(pad * 2);
                 let msg_x = (inner_w.saturating_sub(max_msg_len as u16) / 2) as i16;
@@ -162,6 +163,7 @@ pub fn error_box(
     options: &[&str],
     min_w: u16,
     min_h: u16,
+    border: Border,
 ) -> PanelResult {
     let total_opts_len = options
         .iter()
@@ -208,14 +210,14 @@ pub fn error_box(
             canvas.clean();
 
             if current_w < min_w || current_h < min_h {
-                crate::toosmall::render(canvas, current_w, current_h);
+                crate::toosmall::render(canvas, current_w, current_h, border);
                 canvas.render();
             } else {
                 let term_w = canvas.width;
                 let term_h = canvas.height;
 
                 let pad: u16 = 2;
-                let mut err_box = Box::new(term_w, term_h, pad, Border::Heavy, border_style);
+                let mut err_box = Box::new(term_w, term_h, pad, border, border_style);
 
                 let inner_w = term_w.saturating_sub(pad * 2);
                 let inner_h = term_h.saturating_sub(pad * 2);

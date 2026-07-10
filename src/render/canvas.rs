@@ -294,7 +294,13 @@ impl Canvas {
         Self {
             width,
             height,
-            old: vec![Cell { c: '\0', s: Style::default() }; size],
+            old: vec![
+                Cell {
+                    c: '\0',
+                    s: Style::default()
+                };
+                size
+            ],
             new: vec![Cell::default(); size],
             buffer: Vec::with_capacity(size * 16),
             needs_clear: false,
@@ -335,7 +341,9 @@ impl Canvas {
                         cur_bg = Color::None;
                     }
                     if new_cell.s.md != Modifier::None {
-                        self.buffer.write_all(new_cell.s.md.to_ansi().as_bytes()).unwrap();
+                        self.buffer
+                            .write_all(new_cell.s.md.to_ansi().as_bytes())
+                            .unwrap();
                     }
                     cur_md = new_cell.s.md;
                 }
@@ -351,11 +359,15 @@ impl Canvas {
                 }
 
                 let mut char_buf = [0; 4];
-                self.buffer.write_all(new_cell.c.encode_utf8(&mut char_buf).as_bytes()).unwrap();
+                self.buffer
+                    .write_all(new_cell.c.encode_utf8(&mut char_buf).as_bytes())
+                    .unwrap();
 
                 cursor_x = x + 1;
                 cursor_y = y;
-                if cursor_x >= width { cursor_x = u16::MAX; }
+                if cursor_x >= width {
+                    cursor_x = u16::MAX;
+                }
                 *old_cell = *new_cell;
             }
 
