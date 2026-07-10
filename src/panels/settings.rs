@@ -837,7 +837,7 @@ pub fn settings_modal(
                                             let (msg, is_config, is_appearance) = match setting.key
                                             {
                                                 "reset_config" => (
-                                                    "Reset all configurations to default?\n\nAre you sure?",
+                                                    "Reset all settings to default?\n\nAre you sure?",
                                                     true,
                                                     false,
                                                 ),

@@ -17,7 +17,7 @@ fn main() {
     let mut config = match conf::init() {
         Ok(c) => c,
         Err(e) => {
-            let msg = format!("Configuration Error:\n{}\n\nWhat would you like to do?", e);
+            let msg = format!("Configuration Error:\n{}\n\nReset config?", e);
             let res = error::error_box(
                 &terminal,
                 &mut canvas,
@@ -50,7 +50,7 @@ fn main() {
     let theme = match themecore::init(&config.theme) {
         Ok(t) => t,
         Err(e) => {
-            let msg = format!("Theme Error:\n{}\n\nWhat would you like to do?", e);
+            let msg = format!("Theme Error:\n{}\n\nReset to default theme?", e);
             let res = error::error_box(
                 &terminal,
                 &mut canvas,
@@ -76,7 +76,7 @@ fn main() {
             error::error_box(
                 &terminal,
                 &mut canvas,
-                &format!("Library Error:\n{}\n\nCannot proceed.", e),
+                &format!("Library Error:\n{}\n\nCannot proceed", e),
                 &["EXIT"],
                 min_w,
                 min_h,
@@ -193,7 +193,7 @@ fn main() {
                                 error::error_box(
                                     &terminal,
                                     &mut canvas,
-                                    &format!("Library Error:\n{}\n\nCannot proceed.", e),
+                                    &format!("Library Error:\n{}\n\nCannot proceed", e),
                                     &["EXIT"],
                                     min_w,
                                     min_h,
@@ -216,7 +216,7 @@ fn main() {
                         let result = error::warning_box(
                             &terminal,
                             &mut canvas,
-                            "This is a test warning\n\nDo you want to proceed",
+                            "This is a test warning\n\nDo you want to proceed?",
                             &["CANCEL", "CONFIRM"],
                             0,
                             0,
@@ -247,7 +247,7 @@ fn main() {
                         let result = error::error_box(
                             &terminal,
                             &mut canvas,
-                            "This is a test warning\n\nDo you want to proceed",
+                            "This is a test warning\n\nDo you want to proceed?",
                             &["CANCEL", "CONFIRM"],
                             main_view.min_w,
                             main_view.min_h,
