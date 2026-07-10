@@ -105,14 +105,6 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
             ],
         },
         Category {
-            name: "General",
-            settings: vec![Setting {
-                name: "Reset Config",
-                key: "reset_config",
-                kind: SettingType::Action,
-            }],
-        },
-        Category {
             name: "Editor Keybinds",
             settings: vec![
                 Setting {
@@ -283,6 +275,14 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     kind: SettingType::Action,
                 },
             ],
+        },
+        Category {
+            name: "Advanced",
+            settings: vec![Setting {
+                name: "Reset Config",
+                key: "reset_config",
+                kind: SettingType::Action,
+            }],
         },
     ]
 }

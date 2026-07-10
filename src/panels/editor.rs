@@ -282,7 +282,7 @@ impl Editor {
                     self.state = state;
                 }
             }
-            k if k == Key::Ctrl(config.bind_redo) => {
+            k if k == Key::Char(config.bind_redo) => {
                 if let Some(state) = self.redo_stack.pop() {
                     self.undo_stack.push(self.state.clone());
                     self.state = state;
