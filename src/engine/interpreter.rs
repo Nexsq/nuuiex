@@ -16,6 +16,12 @@ pub struct Interpreter {
     pub env: Environment,
 }
 
+#[derive(PartialEq)]
+pub enum Signal {
+    None,
+    Break,
+}
+
 impl Interpreter {
     pub fn new(tx: std::sync::mpsc::Sender<Vec<String>>) -> Self {
         Self {
@@ -32,6 +38,11 @@ impl Interpreter {
     }
 
     fn send_output(&mut self) {
+        if self.output.len() > 1000 {
+            let excess = self.output.len() - 1000;
+            self.output.drain(0..excess);
+        }
+
         let mut res = self.output.clone();
         if !self.current_line.is_empty() {
             if res.is_empty() {
@@ -58,23 +69,32 @@ impl Interpreter {
     }
 
     pub fn exec(&mut self, stmts: &[Stmt]) {
+        let _ = self.exec_block(stmts);
+        self.send_output();
+    }
+
+    fn exec_block(&mut self, stmts: &[Stmt]) -> Result<Signal, String> {
         for stmt in stmts {
             if self.should_exit {
                 break;
             }
-            if let Err(err) = self.execute_stmt(stmt) {
-                self.errors.push(err);
-                break;
+            match self.execute_stmt(stmt) {
+                Ok(Signal::Break) => return Ok(Signal::Break),
+                Ok(Signal::None) => continue,
+                Err(err) => {
+                    self.errors.push(err);
+                    return Ok(Signal::None);
+                }
             }
         }
-        self.send_output();
+        Ok(Signal::None)
     }
 
-    fn execute_stmt(&mut self, stmt: &Stmt) -> Result<(), String> {
+    fn execute_stmt(&mut self, stmt: &Stmt) -> Result<Signal, String> {
         match stmt {
             Stmt::Expr(expr) => {
                 self.eval_expr(expr)?;
-                Ok(())
+                Ok(Signal::None)
             }
             Stmt::Let(name, expr, line) => {
                 let val = self.eval_expr(expr)?;
@@ -85,7 +105,7 @@ impl Interpreter {
                     ));
                 }
                 self.env.values.insert(name.clone(), val);
-                Ok(())
+                Ok(Signal::None)
             }
             Stmt::Const(name, expr, line) => {
                 let val = self.eval_expr(expr)?;
@@ -97,7 +117,7 @@ impl Interpreter {
                 }
                 self.env.values.insert(name.clone(), val);
                 self.env.constants.insert(name.clone());
-                Ok(())
+                Ok(Signal::None)
             }
             Stmt::Assign(name, expr, line) => {
                 if self.env.constants.contains(name) {
@@ -111,7 +131,121 @@ impl Interpreter {
                 }
                 let val = self.eval_expr(expr)?;
                 self.env.values.insert(name.clone(), val);
-                Ok(())
+                Ok(Signal::None)
+            }
+            Stmt::AssignOp(name, op, expr, line) => {
+                if self.env.constants.contains(name) {
+                    return Err(format!("Line {}: Cannot modify constant '{}'", line, name));
+                }
+                if !self.env.values.contains_key(name) {
+                    return Err(format!("Line {}: Undefined variable '{}'", line, name));
+                }
+                let right_val = self.eval_expr(expr)?;
+                let left_val = self.env.values.get(name).unwrap().clone();
+                let new_val = self.eval_binary_op(&left_val, op, &right_val, *line)?;
+                self.env.values.insert(name.clone(), new_val);
+                Ok(Signal::None)
+            }
+            Stmt::If(cond, then_b, elifs, else_b) => {
+                let cond_val = self.eval_expr(cond)?;
+                if cond_val.is_truthy() {
+                    return self.exec_block(then_b);
+                }
+                for (elif_cond, elif_b) in elifs {
+                    let elif_val = self.eval_expr(elif_cond)?;
+                    if elif_val.is_truthy() {
+                        return self.exec_block(elif_b);
+                    }
+                }
+                if let Some(e_b) = else_b {
+                    return self.exec_block(e_b);
+                }
+                Ok(Signal::None)
+            }
+            Stmt::Loop(body) => {
+                loop {
+                    if self.should_exit {
+                        break;
+                    }
+                    match self.exec_block(body)? {
+                        Signal::Break => break,
+                        Signal::None => continue,
+                    }
+                }
+                Ok(Signal::None)
+            }
+            Stmt::Break(_) => Ok(Signal::Break),
+        }
+    }
+
+    fn eval_binary_op(
+        &mut self,
+        left: &Value,
+        op: &BinaryOp,
+        right: &Value,
+        line: usize,
+    ) -> Result<Value, String> {
+        match (left, right) {
+            (Value::Number(ln), Value::Number(rn)) => match op {
+                BinaryOp::Add => Ok(Value::Number(ln + rn)),
+                BinaryOp::Sub => Ok(Value::Number(ln - rn)),
+                BinaryOp::Mul => Ok(Value::Number(ln * rn)),
+                BinaryOp::Div => {
+                    if *rn == 0.0 {
+                        Err(format!("Line {}: Division by zero", line))
+                    } else {
+                        Ok(Value::Number(ln / rn))
+                    }
+                }
+                BinaryOp::EqEq => Ok(Value::Number(if ln == rn { 1.0 } else { 0.0 })),
+                BinaryOp::NotEq => Ok(Value::Number(if ln != rn { 1.0 } else { 0.0 })),
+                BinaryOp::Less => Ok(Value::Number(if ln < rn { 1.0 } else { 0.0 })),
+                BinaryOp::Greater => Ok(Value::Number(if ln > rn { 1.0 } else { 0.0 })),
+                BinaryOp::LessEq => Ok(Value::Number(if ln <= rn { 1.0 } else { 0.0 })),
+                BinaryOp::GreaterEq => Ok(Value::Number(if ln >= rn { 1.0 } else { 0.0 })),
+            },
+            (Value::String(ls), Value::String(rs)) => match op {
+                BinaryOp::Add => Ok(Value::String(format!("{}{}", ls, rs))),
+                BinaryOp::EqEq => Ok(Value::Number(if ls == rs { 1.0 } else { 0.0 })),
+                BinaryOp::NotEq => Ok(Value::Number(if ls != rs { 1.0 } else { 0.0 })),
+                _ => Err(format!("Line {}: Unsupported string operation", line)),
+            },
+            (Value::String(ls), Value::Number(rn)) => match op {
+                BinaryOp::Add => Ok(Value::String(format!("{}{}", ls, rn))),
+                BinaryOp::Mul => {
+                    let count = *rn as i64;
+                    if count < 0 {
+                        return Err(format!(
+                            "Line {}: Cannot multiply string by a negative number",
+                            line
+                        ));
+                    }
+                    Ok(Value::String(ls.repeat(count as usize)))
+                }
+                _ => Err(format!("Line {}: Unsupported string operation", line)),
+            },
+            (Value::Number(ln), Value::String(rs)) => match op {
+                BinaryOp::Add => Ok(Value::String(format!("{}{}", ln, rs))),
+                BinaryOp::Mul => {
+                    let count = *ln as i64;
+                    if count < 0 {
+                        return Err(format!(
+                            "Line {}: Cannot multiply string by a negative number",
+                            line
+                        ));
+                    }
+                    Ok(Value::String(rs.repeat(count as usize)))
+                }
+                _ => Err(format!("Line {}: Unsupported string operation", line)),
+            },
+            _ => {
+                if *op == BinaryOp::EqEq {
+                    Ok(Value::Number(if left == right { 1.0 } else { 0.0 }))
+                } else if *op == BinaryOp::NotEq {
+                    Ok(Value::Number(if left != right { 1.0 } else { 0.0 }))
+                } else {
+                    Err(format!("Line {}: Unsupported operands for {:?}", line, op))
+                }
             }
         }
     }
@@ -143,51 +277,7 @@ impl Interpreter {
             Expr::Binary(left, op, right, line) => {
                 let l = self.eval_expr(left)?;
                 let r = self.eval_expr(right)?;
-
-                match (l, r) {
-                    (Value::Number(ln), Value::Number(rn)) => match op {
-                        BinaryOp::Add => Ok(Value::Number(ln + rn)),
-                        BinaryOp::Sub => Ok(Value::Number(ln - rn)),
-                        BinaryOp::Mul => Ok(Value::Number(ln * rn)),
-                        BinaryOp::Div => {
-                            if rn == 0.0 {
-                                Err(format!("Line {}: Division by zero", line))
-                            } else {
-                                Ok(Value::Number(ln / rn))
-                            }
-                        }
-                    },
-                    (Value::String(ls), Value::String(rs)) if *op == BinaryOp::Add => {
-                        Ok(Value::String(format!("{}{}", ls, rs)))
-                    }
-                    (Value::String(ls), Value::Number(rn)) if *op == BinaryOp::Add => {
-                        Ok(Value::String(format!("{}{}", ls, rn)))
-                    }
-                    (Value::Number(ln), Value::String(rs)) if *op == BinaryOp::Add => {
-                        Ok(Value::String(format!("{}{}", ln, rs)))
-                    }
-                    (Value::String(ls), Value::Number(rn)) if *op == BinaryOp::Mul => {
-                        let count = rn as i64;
-                        if count < 0 {
-                            return Err(format!(
-                                "Line {}: Cannot multiply string by a negative number",
-                                line
-                            ));
-                        }
-                        Ok(Value::String(ls.repeat(count as usize)))
-                    }
-                    (Value::Number(ln), Value::String(rs)) if *op == BinaryOp::Mul => {
-                        let count = ln as i64;
-                        if count < 0 {
-                            return Err(format!(
-                                "Line {}: Cannot multiply string by a negative number",
-                                line
-                            ));
-                        }
-                        Ok(Value::String(rs.repeat(count as usize)))
-                    }
-                    _ => Err(format!("Line {}: Unsupported operands for {:?}", line, op)),
-                }
+                self.eval_binary_op(&l, op, &r, *line)
             }
             Expr::Call(name, args, line) => {
                 let mut eval_args = Vec::with_capacity(args.len());

@@ -1,4 +1,5 @@
 use arboard::Clipboard;
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
@@ -38,6 +39,9 @@ pub struct Editor {
     pub last_key_delete: bool,
     pub last_key_copy: bool,
 
+    pub error_count: usize,
+    pub error_lines: HashSet<usize>,
+
     pub process_rx: Option<std::sync::mpsc::Receiver<Vec<String>>>,
 }
 
@@ -70,6 +74,8 @@ impl Editor {
             last_key_file_bounds: false,
             last_key_delete: false,
             last_key_copy: false,
+            error_count: 0,
+            error_lines: HashSet::new(),
             process_rx: None,
         }
     }
@@ -114,12 +120,36 @@ impl Editor {
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.reset_keys();
+        if self.is_editing {
+            self.refresh_analysis();
+        }
     }
 
-    pub fn save(&self) {
+    pub fn reload_file(&mut self) {
+        if let Some(path) = &self.file_path {
+            if let Ok(content) = fs::read_to_string(path) {
+                let lines: Vec<String> = if content.is_empty() {
+                    vec![String::new()]
+                } else {
+                    content
+                        .split('\n')
+                        .map(|s| s.strip_suffix('\r').unwrap_or(s).to_string())
+                        .collect()
+                };
+                self.state.lines = lines;
+                self.clamp_cursor();
+                if self.is_editing {
+                    self.refresh_analysis();
+                }
+            }
+        }
+    }
+
+    pub fn save(&mut self) {
         if let Some(path) = &self.file_path {
             let content = self.state.lines.join("\n");
             let _ = fs::write(path, content);
+            self.refresh_analysis();
         }
     }
 
@@ -135,282 +165,306 @@ impl Editor {
         self.redo_stack.clear();
     }
 
-    pub fn handle_key(&mut self, key: Key, config: &Config) {
+    pub fn refresh_analysis(&mut self) {
+        let source = self.state.lines.join("\n");
+        let (count, lines) = crate::engine::core::analyze_code(&source);
+        self.error_count = count;
+        self.error_lines = lines;
+    }
+
+    pub fn handle_key(&mut self, key: Key, config: &Config) -> bool {
+        let mut saved = false;
+        let mut needs_analysis = false;
+
         match self.mode {
-            Mode::Command => self.handle_command_key(key, config),
-            Mode::Insert => self.handle_insert_key(key, config),
-        }
-    }
+            Mode::Command => {
+                let mut reset_select_all = true;
+                let mut reset_file_bounds = true;
+                let mut reset_delete = true;
+                let mut reset_copy = true;
 
-    fn handle_command_key(&mut self, key: Key, config: &Config) {
-        let mut reset_select_all = true;
-        let mut reset_file_bounds = true;
-        let mut reset_delete = true;
-        let mut reset_copy = true;
+                match key {
+                    Key::Esc => {
+                        self.visual_mode = false;
+                        self.state.selection_start = None;
+                        self.mode = Mode::Insert;
+                    }
+                    k if k == Key::Char(config.bind_edit_insert) => {
+                        self.visual_mode = false;
+                        self.state.selection_start = None;
+                        self.mode = Mode::Insert;
+                    }
+                    k if k == Key::Char(config.bind_edit_visual) => {
+                        if self.visual_mode {
+                            self.visual_mode = false;
+                            self.state.selection_start = None;
+                        } else {
+                            self.visual_mode = true;
+                            self.state.selection_start =
+                                Some((self.state.cursor_x, self.state.cursor_y));
+                        }
+                    }
+                    k if k == Key::Left || k == Key::Char(config.bind_edit_left) => {
+                        self.move_cursor(-1, 0, self.visual_mode)
+                    }
+                    k if k == Key::Right || k == Key::Char(config.bind_edit_right) => {
+                        self.move_cursor(1, 0, self.visual_mode)
+                    }
+                    k if k == Key::Up || k == Key::Char(config.bind_edit_up) => {
+                        self.move_cursor(0, -1, self.visual_mode)
+                    }
+                    k if k == Key::Down || k == Key::Char(config.bind_edit_down) => {
+                        self.move_cursor(0, 1, self.visual_mode)
+                    }
+                    k if k == Key::CtrlLeft
+                        || k == Key::Ctrl(config.bind_edit_left)
+                        || k == Key::Char(config.bind_edit_word_prev)
+                        || k == Key::CtrlBackspace =>
+                    {
+                        self.jump_word_backward(self.visual_mode)
+                    }
+                    k if k == Key::CtrlRight
+                        || k == Key::Ctrl(config.bind_edit_right)
+                        || k == Key::Char(config.bind_edit_word_next) =>
+                    {
+                        self.jump_word_forward(self.visual_mode)
+                    }
+                    k if k == Key::CtrlUp || k == Key::Ctrl(config.bind_edit_up) => {
+                        self.jump_block_backward(self.visual_mode)
+                    }
+                    k if k == Key::CtrlDown || k == Key::Ctrl(config.bind_edit_down) => {
+                        self.jump_block_forward(self.visual_mode)
+                    }
+                    k if k == Key::Char(config.bind_edit_line_start) => {
+                        if !self.visual_mode {
+                            self.state.selection_start = None;
+                        }
+                        self.state.cursor_x = 0;
+                    }
+                    k if k == Key::Char(config.bind_edit_line_end) => {
+                        if !self.visual_mode {
+                            self.state.selection_start = None;
+                        }
+                        self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
+                    }
+                    k if k == Key::Char(config.bind_edit_select_all) => {
+                        if self.last_key_select_all {
+                            self.visual_mode = true;
+                            self.state.selection_start = Some((0, 0));
+                            self.state.cursor_y = self.state.lines.len().saturating_sub(1);
+                            self.state.cursor_x =
+                                self.state.lines[self.state.cursor_y].chars().count();
+                        } else {
+                            reset_select_all = false;
+                            self.last_key_select_all = true;
+                        }
+                    }
+                    Key::Delete => {
+                        self.push_undo();
+                        if self.state.selection_start.is_some() {
+                            self.delete_selection();
+                        } else {
+                            self.delete_char_after();
+                        }
+                        needs_analysis = true;
+                    }
+                    k if k == Key::Char(config.bind_edit_file_bounds) => {
+                        if !self.visual_mode {
+                            self.state.selection_start = None;
+                        }
+                        if self.last_key_file_bounds {
+                            self.state.cursor_y = 0;
+                            self.state.cursor_x = 0;
+                        } else {
+                            reset_file_bounds = false;
+                            self.last_key_file_bounds = true;
+                        }
+                    }
+                    k if k == Key::Shift(config.bind_edit_file_bounds) => {
+                        if !self.visual_mode {
+                            self.state.selection_start = None;
+                        }
+                        self.state.cursor_y = self.state.lines.len().saturating_sub(1);
+                        self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
+                    }
+                    k if k == Key::Char(config.bind_edit_delete) => {
+                        if self.state.selection_start.is_some() {
+                            self.push_undo();
+                            self.delete_selection();
+                            reset_delete = true;
+                            needs_analysis = true;
+                        } else if self.last_key_delete {
+                            self.push_undo();
+                            self.delete_current_line();
+                            needs_analysis = true;
+                        } else {
+                            reset_delete = false;
+                            self.last_key_delete = true;
+                        }
+                    }
+                    k if k == Key::Char(config.bind_edit_copy) => {
+                        if self.state.selection_start.is_some() {
+                            self.copy_selection();
+                            reset_copy = true;
+                        } else if self.last_key_copy {
+                            self.copy_current_line();
+                        } else {
+                            reset_copy = false;
+                            self.last_key_copy = true;
+                        }
+                    }
+                    k if k == Key::Char(config.bind_edit_paste) => {
+                        self.push_undo();
+                        self.paste_from_clipboard();
+                        needs_analysis = true;
+                    }
+                    k if k == Key::Char(config.bind_edit_undo) => {
+                        if let Some(state) = self.undo_stack.pop() {
+                            self.redo_stack.push(self.state.clone());
+                            self.state = state;
+                            needs_analysis = true;
+                        }
+                    }
+                    k if k == Key::Char(config.bind_edit_redo) => {
+                        if let Some(state) = self.redo_stack.pop() {
+                            self.undo_stack.push(self.state.clone());
+                            self.state = state;
+                            needs_analysis = true;
+                        }
+                    }
+                    k if k == Key::Char(config.bind_edit_save) => {
+                        self.save();
+                        saved = true;
+                    }
+                    _ => {}
+                }
 
-        match key {
-            Key::Esc => {
-                self.visual_mode = false;
-                self.state.selection_start = None;
-                self.mode = Mode::Insert;
-            }
-            k if k == Key::Char(config.bind_edit_insert) => {
-                self.visual_mode = false;
-                self.state.selection_start = None;
-                self.mode = Mode::Insert;
-            }
-            k if k == Key::Char(config.bind_edit_visual) => {
-                if self.visual_mode {
-                    self.visual_mode = false;
-                    self.state.selection_start = None;
-                } else {
-                    self.visual_mode = true;
-                    self.state.selection_start = Some((self.state.cursor_x, self.state.cursor_y));
+                if reset_select_all {
+                    self.last_key_select_all = false;
                 }
-            }
-            k if k == Key::Left || k == Key::Char(config.bind_edit_left) => {
-                self.move_cursor(-1, 0, self.visual_mode)
-            }
-            k if k == Key::Right || k == Key::Char(config.bind_edit_right) => {
-                self.move_cursor(1, 0, self.visual_mode)
-            }
-            k if k == Key::Up || k == Key::Char(config.bind_edit_up) => {
-                self.move_cursor(0, -1, self.visual_mode)
-            }
-            k if k == Key::Down || k == Key::Char(config.bind_edit_down) => {
-                self.move_cursor(0, 1, self.visual_mode)
-            }
-
-            k if k == Key::CtrlLeft
-                || k == Key::Ctrl(config.bind_edit_left)
-                || k == Key::Char(config.bind_edit_word_prev)
-                || k == Key::CtrlBackspace =>
-            {
-                self.jump_word_backward(self.visual_mode)
-            }
-            k if k == Key::CtrlRight
-                || k == Key::Ctrl(config.bind_edit_right)
-                || k == Key::Char(config.bind_edit_word_next) =>
-            {
-                self.jump_word_forward(self.visual_mode)
-            }
-            k if k == Key::CtrlUp || k == Key::Ctrl(config.bind_edit_up) => {
-                self.jump_block_backward(self.visual_mode)
-            }
-            k if k == Key::CtrlDown || k == Key::Ctrl(config.bind_edit_down) => {
-                self.jump_block_forward(self.visual_mode)
-            }
-
-            k if k == Key::Char(config.bind_edit_line_start) => {
-                if !self.visual_mode {
-                    self.state.selection_start = None;
+                if reset_file_bounds {
+                    self.last_key_file_bounds = false;
                 }
-                self.state.cursor_x = 0;
-            }
-            k if k == Key::Char(config.bind_edit_line_end) => {
-                if !self.visual_mode {
-                    self.state.selection_start = None;
+                if reset_delete {
+                    self.last_key_delete = false;
                 }
-                self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
-            }
-            k if k == Key::Char(config.bind_edit_select_all) => {
-                if self.last_key_select_all {
-                    self.visual_mode = true;
-                    self.state.selection_start = Some((0, 0));
-                    self.state.cursor_y = self.state.lines.len().saturating_sub(1);
-                    self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
-                } else {
-                    reset_select_all = false;
-                    self.last_key_select_all = true;
+                if reset_copy {
+                    self.last_key_copy = false;
                 }
-            }
-            Key::Delete => {
-                self.push_undo();
-                if self.state.selection_start.is_some() {
-                    self.delete_selection();
-                } else {
-                    self.delete_char_after();
-                }
-            }
-            k if k == Key::Char(config.bind_edit_file_bounds) => {
-                if !self.visual_mode {
-                    self.state.selection_start = None;
-                }
-                if self.last_key_file_bounds {
-                    self.state.cursor_y = 0;
-                    self.state.cursor_x = 0;
-                } else {
-                    reset_file_bounds = false;
-                    self.last_key_file_bounds = true;
-                }
-            }
-            k if k == Key::Shift(config.bind_edit_file_bounds) => {
-                if !self.visual_mode {
-                    self.state.selection_start = None;
-                }
-                self.state.cursor_y = self.state.lines.len().saturating_sub(1);
-                self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
-            }
-            k if k == Key::Char(config.bind_edit_delete) => {
-                if self.state.selection_start.is_some() {
-                    self.push_undo();
-                    self.delete_selection();
-                    reset_delete = true;
-                } else if self.last_key_delete {
-                    self.push_undo();
-                    self.delete_current_line();
-                } else {
-                    reset_delete = false;
-                    self.last_key_delete = true;
-                }
-            }
-            k if k == Key::Char(config.bind_edit_copy) => {
-                if self.state.selection_start.is_some() {
-                    self.copy_selection();
-                    reset_copy = true;
-                } else if self.last_key_copy {
-                    self.copy_current_line();
-                } else {
-                    reset_copy = false;
-                    self.last_key_copy = true;
-                }
-            }
-            k if k == Key::Char(config.bind_edit_paste) => {
-                self.push_undo();
-                self.paste_from_clipboard();
-            }
-            k if k == Key::Char(config.bind_edit_undo) => {
-                if let Some(state) = self.undo_stack.pop() {
-                    self.redo_stack.push(self.state.clone());
-                    self.state = state;
-                }
-            }
-            k if k == Key::Char(config.bind_edit_redo) => {
-                if let Some(state) = self.redo_stack.pop() {
-                    self.undo_stack.push(self.state.clone());
-                    self.state = state;
-                }
-            }
-            k if k == Key::Char(config.bind_edit_save) => self.save(),
-            _ => {}
-        }
-
-        if reset_select_all {
-            self.last_key_select_all = false;
-        }
-        if reset_file_bounds {
-            self.last_key_file_bounds = false;
-        }
-        if reset_delete {
-            self.last_key_delete = false;
-        }
-        if reset_copy {
-            self.last_key_copy = false;
-        }
-
-        self.clamp_cursor();
-    }
-
-    fn handle_insert_key(&mut self, key: Key, _config: &Config) {
-        match key {
-            Key::Esc => {
-                self.mode = Mode::Command;
-                self.visual_mode = false;
-                self.state.selection_start = None;
                 self.clamp_cursor();
             }
-            Key::Char(c) => {
-                if c.is_control() {
-                    return;
+            Mode::Insert => match key {
+                Key::Esc => {
+                    self.mode = Mode::Command;
+                    self.visual_mode = false;
+                    self.state.selection_start = None;
+                    self.clamp_cursor();
                 }
-                self.push_undo();
-                if self.state.selection_start.is_some() {
-                    self.delete_selection();
+                Key::Char(c) => {
+                    if !c.is_control() {
+                        self.push_undo();
+                        if self.state.selection_start.is_some() {
+                            self.delete_selection();
+                        }
+                        let caps = crate::Terminal::is_caps_lock_on();
+                        let mut final_c = c;
+                        if caps && c.is_ascii_alphabetic() {
+                            final_c = c.to_ascii_uppercase();
+                        }
+                        self.insert_char(final_c);
+                        needs_analysis = true;
+                    }
                 }
-                let caps = crate::Terminal::is_caps_lock_on();
-                let mut final_c = c;
-                if caps && c.is_ascii_alphabetic() {
-                    final_c = c.to_ascii_uppercase();
+                Key::Shift(c) => {
+                    if !c.is_control() {
+                        self.push_undo();
+                        if self.state.selection_start.is_some() {
+                            self.delete_selection();
+                        }
+                        let caps = crate::Terminal::is_caps_lock_on();
+                        let mut final_c = c.to_ascii_uppercase();
+                        if caps && final_c.is_ascii_alphabetic() {
+                            final_c = final_c.to_ascii_lowercase();
+                        }
+                        self.insert_char(final_c);
+                        needs_analysis = true;
+                    }
                 }
-                self.insert_char(final_c);
-            }
-            Key::Shift(c) => {
-                if c.is_control() {
-                    return;
+                Key::Enter => {
+                    self.push_undo();
+                    if self.state.selection_start.is_some() {
+                        self.delete_selection();
+                    }
+                    self.insert_newline();
+                    needs_analysis = true;
                 }
-                self.push_undo();
-                if self.state.selection_start.is_some() {
-                    self.delete_selection();
+                Key::CtrlLeft => self.jump_word_backward(false),
+                Key::CtrlRight => self.jump_word_forward(false),
+                Key::CtrlUp => self.jump_block_backward(false),
+                Key::CtrlDown => self.jump_block_forward(false),
+                Key::Backspace => {
+                    self.push_undo();
+                    if self.state.selection_start.is_some() {
+                        self.delete_selection();
+                    } else {
+                        self.delete_char_before();
+                    }
+                    needs_analysis = true;
                 }
-                let caps = crate::Terminal::is_caps_lock_on();
-                let mut final_c = c.to_ascii_uppercase();
-                if caps && final_c.is_ascii_alphabetic() {
-                    final_c = final_c.to_ascii_lowercase();
+                Key::Delete => {
+                    self.push_undo();
+                    if self.state.selection_start.is_some() {
+                        self.delete_selection();
+                    } else {
+                        self.delete_char_after();
+                    }
+                    needs_analysis = true;
                 }
-                self.insert_char(final_c);
-            }
-            Key::Enter => {
-                self.push_undo();
-                if self.state.selection_start.is_some() {
-                    self.delete_selection();
+                Key::CtrlBackspace | Key::Ctrl('w') | Key::Ctrl('h') => {
+                    self.push_undo();
+                    if self.state.selection_start.is_some() {
+                        self.delete_selection();
+                    } else {
+                        self.delete_word_before();
+                    }
+                    needs_analysis = true;
                 }
-                self.insert_newline();
-            }
-            Key::CtrlLeft => self.jump_word_backward(false),
-            Key::CtrlRight => self.jump_word_forward(false),
-            Key::CtrlUp => self.jump_block_backward(false),
-            Key::CtrlDown => self.jump_block_forward(false),
-            Key::Backspace => {
-                self.push_undo();
-                if self.state.selection_start.is_some() {
-                    self.delete_selection();
-                } else {
-                    self.delete_char_before();
+                Key::CtrlDelete => {
+                    self.push_undo();
+                    if self.state.selection_start.is_some() {
+                        self.delete_selection();
+                    } else {
+                        self.delete_word_after();
+                    }
+                    needs_analysis = true;
                 }
-            }
-            Key::Delete => {
-                self.push_undo();
-                if self.state.selection_start.is_some() {
-                    self.delete_selection();
-                } else {
-                    self.delete_char_after();
+                Key::Tab => {
+                    self.push_undo();
+                    if self.state.selection_start.is_some() {
+                        self.delete_selection();
+                    }
+                    for _ in 0..4 {
+                        self.insert_char(' ');
+                    }
+                    needs_analysis = true;
                 }
-            }
-            Key::CtrlBackspace | Key::Ctrl('w') | Key::Ctrl('h') => {
-                self.push_undo();
-                if self.state.selection_start.is_some() {
-                    self.delete_selection();
-                } else {
-                    self.delete_word_before();
-                }
-            }
-            Key::CtrlDelete => {
-                self.push_undo();
-                if self.state.selection_start.is_some() {
-                    self.delete_selection();
-                } else {
-                    self.delete_word_after();
-                }
-            }
-            Key::Tab => {
-                self.push_undo();
-                if self.state.selection_start.is_some() {
-                    self.delete_selection();
-                }
-                for _ in 0..4 {
-                    self.insert_char(' ');
-                }
-            }
-            Key::Left => self.move_cursor(-1, 0, false),
-            Key::Right => self.move_cursor(1, 0, false),
-            Key::Up => self.move_cursor(0, -1, false),
-            Key::Down => self.move_cursor(0, 1, false),
-            Key::ShiftLeft => self.move_cursor(-1, 0, true),
-            Key::ShiftRight => self.move_cursor(1, 0, true),
-            Key::ShiftUp => self.move_cursor(0, -1, true),
-            Key::ShiftDown => self.move_cursor(0, 1, true),
-            _ => {}
+                Key::Left => self.move_cursor(-1, 0, false),
+                Key::Right => self.move_cursor(1, 0, false),
+                Key::Up => self.move_cursor(0, -1, false),
+                Key::Down => self.move_cursor(0, 1, false),
+                Key::ShiftLeft => self.move_cursor(-1, 0, true),
+                Key::ShiftRight => self.move_cursor(1, 0, true),
+                Key::ShiftUp => self.move_cursor(0, -1, true),
+                Key::ShiftDown => self.move_cursor(0, 1, true),
+                _ => {}
+            },
         }
+
+        if needs_analysis && (saved || self.error_count > 0) {
+            self.refresh_analysis();
+        }
+
+        saved
     }
 
     fn move_cursor(&mut self, dx: isize, dy: isize, select: bool) {
@@ -1086,8 +1140,99 @@ impl Editor {
                 }
             }
 
-            for (j, c) in line
-                .chars()
+            let is_error_line = self.is_editing && self.error_lines.contains(&(i + 1));
+
+            let line_chars: Vec<char> = line.chars().collect();
+            let mut syntax_colors = Vec::with_capacity(line_chars.len());
+
+            if self.is_editing {
+                let mut idx = 0;
+                while idx < line_chars.len() {
+                    let c = line_chars[idx];
+                    if c == '#' {
+                        for _ in idx..line_chars.len() {
+                            syntax_colors.push(theme.editor_comments);
+                        }
+                        break;
+                    } else if c == '"' {
+                        syntax_colors.push(theme.editor_strings);
+                        idx += 1;
+                        while idx < line_chars.len() {
+                            let sc = line_chars[idx];
+                            syntax_colors.push(theme.editor_strings);
+                            idx += 1;
+                            if sc == '\\' && idx < line_chars.len() {
+                                syntax_colors.push(theme.editor_strings);
+                                idx += 1;
+                            } else if sc == '"' {
+                                break;
+                            }
+                        }
+                    } else if c.is_ascii_digit() {
+                        syntax_colors.push(theme.editor_numbers);
+                        idx += 1;
+                        while idx < line_chars.len()
+                            && (line_chars[idx].is_ascii_digit() || line_chars[idx] == '.')
+                        {
+                            syntax_colors.push(theme.editor_numbers);
+                            idx += 1;
+                        }
+                    } else if c.is_alphabetic() || c == '_' {
+                        let start = idx;
+                        while idx < line_chars.len()
+                            && (line_chars[idx].is_alphanumeric() || line_chars[idx] == '_')
+                        {
+                            idx += 1;
+                        }
+                        let word_chars = &line_chars[start..idx];
+
+                        let is_kw = matches!(
+                            word_chars,
+                            ['l', 'e', 't']
+                                | ['c', 'o', 'n', 's', 't']
+                                | ['l', 'o', 'o', 'p']
+                                | ['i', 'f']
+                                | ['e', 'l', 'i', 'f']
+                                | ['e', 'l', 's', 'e']
+                                | ['b', 'r', 'e', 'a', 'k']
+                        );
+                        let is_bool =
+                            matches!(word_chars, ['t', 'r', 'u', 'e'] | ['f', 'a', 'l', 's', 'e']);
+
+                        let mut j = idx;
+                        while j < line_chars.len() && line_chars[j].is_whitespace() {
+                            j += 1;
+                        }
+                        let is_func = j < line_chars.len() && line_chars[j] == '(';
+
+                        let color = if is_kw {
+                            theme.editor_keywords
+                        } else if is_bool {
+                            theme.editor_bool
+                        } else if is_func {
+                            theme.editor_functions
+                        } else {
+                            theme.editor_variables
+                        };
+
+                        for _ in start..idx {
+                            syntax_colors.push(color);
+                        }
+                    } else if "+-=*/<>!".contains(c) {
+                        syntax_colors.push(theme.editor_operators);
+                        idx += 1;
+                    } else if "()[]{}".contains(c) {
+                        syntax_colors.push(theme.editor_brackets);
+                        idx += 1;
+                    } else {
+                        syntax_colors.push(theme.main_label);
+                        idx += 1;
+                    }
+                }
+            }
+
+            for (j, &c) in line_chars
+                .iter()
                 .enumerate()
                 .skip(self.scroll_x)
                 .take(text_inner_w)
@@ -1103,9 +1248,15 @@ impl Editor {
                 };
 
                 let mut style = Style {
-                    fg: Color::White,
+                    fg: if self.is_editing && j < syntax_colors.len() {
+                        syntax_colors[j]
+                    } else {
+                        Color::White
+                    },
                     bg: if is_selected {
                         Color::DarkGray
+                    } else if is_error_line {
+                        theme.editor_errors
                     } else {
                         Color::None
                     },
@@ -1136,7 +1287,7 @@ impl Editor {
             }
 
             if self.is_editing && i == self.state.cursor_y {
-                let line_len = line.chars().count();
+                let line_len = line_chars.len();
                 if self.state.cursor_x == line_len {
                     if self.state.cursor_x >= self.scroll_x {
                         let display_x = self.state.cursor_x - self.scroll_x + prefix_width;
@@ -1162,6 +1313,29 @@ impl Editor {
                 }
             }
         }
+
+        if self.is_editing && self.error_count > 0 {
+            let err_str = format!(" ERR {} ", self.error_count);
+            let mut x = 2;
+            for c in err_str.chars() {
+                if x < width.saturating_sub(1) {
+                    b.put_cell(
+                        crate::Cell {
+                            c,
+                            s: Style {
+                                fg: theme.editor_errors,
+                                bg: Color::None,
+                                md: Modifier::Bold,
+                            },
+                        },
+                        x,
+                        height.saturating_sub(1),
+                    );
+                    x += 1;
+                }
+            }
+        }
+
         b
     }
 }

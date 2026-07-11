@@ -33,6 +33,17 @@ pub struct Theme {
     pub editor_ins: Color,
     pub editor_cmd: Color,
     pub editor_vis: Color,
+
+    pub editor_keywords: Color,
+    pub editor_functions: Color,
+    pub editor_strings: Color,
+    pub editor_numbers: Color,
+    pub editor_bool: Color,
+    pub editor_comments: Color,
+    pub editor_variables: Color,
+    pub editor_operators: Color,
+    pub editor_brackets: Color,
+    pub editor_errors: Color,
 }
 
 impl Theme {
@@ -59,6 +70,17 @@ impl Theme {
             editor_ins: Color::None,
             editor_cmd: Color::None,
             editor_vis: Color::None,
+
+            editor_keywords: Color::None,
+            editor_functions: Color::None,
+            editor_strings: Color::None,
+            editor_numbers: Color::None,
+            editor_bool: Color::None,
+            editor_comments: Color::None,
+            editor_variables: Color::None,
+            editor_operators: Color::None,
+            editor_brackets: Color::None,
+            editor_errors: Color::None,
         }
     }
 }
@@ -327,6 +349,17 @@ fn apply_theme_value(theme: &mut Theme, key: &str, val: &str) -> Result<(), Stri
         "editor_ins" => theme.editor_ins = parse_color(val)?,
         "editor_cmd" => theme.editor_cmd = parse_color(val)?,
         "editor_vis" => theme.editor_vis = parse_color(val)?,
+
+        "editor_keywords" => theme.editor_keywords = parse_color(val)?,
+        "editor_functions" => theme.editor_functions = parse_color(val)?,
+        "editor_strings" => theme.editor_strings = parse_color(val)?,
+        "editor_numbers" => theme.editor_numbers = parse_color(val)?,
+        "editor_bool" => theme.editor_bool = parse_color(val)?,
+        "editor_comments" => theme.editor_comments = parse_color(val)?,
+        "editor_variables" => theme.editor_variables = parse_color(val)?,
+        "editor_operators" => theme.editor_operators = parse_color(val)?,
+        "editor_brackets" => theme.editor_brackets = parse_color(val)?,
+        "editor_errors" => theme.editor_errors = parse_color(val)?,
         _ => {}
     }
     Ok(())

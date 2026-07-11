@@ -120,6 +120,8 @@ fn main() {
                     match rx.try_recv() {
                         Ok(lines) => {
                             main_view.editors[i].state.lines = lines;
+                            main_view.editors[i].error_count = 0;
+                            main_view.editors[i].error_lines.clear();
                             tabs_updated[i] = true;
                         }
                         Err(std::sync::mpsc::TryRecvError::Empty) => break,
@@ -202,7 +204,21 @@ fn main() {
                         continue;
                     }
 
-                    main_view.editors[main_view.current_tab].handle_key(key, &config);
+                    let saved = main_view.editors[main_view.current_tab].handle_key(key, &config);
+                    if saved {
+                        if let Some(path) =
+                            main_view.editors[main_view.current_tab].file_path.clone()
+                        {
+                            for i in 0..6 {
+                                if i != main_view.current_tab
+                                    && main_view.editors[i].file_path == Some(path.clone())
+                                {
+                                    main_view.editors[i].reload_file();
+                                }
+                            }
+                        }
+                    }
+
                     main_view.refresh_main(&config);
                     dirty = true;
                     continue;

@@ -8,8 +8,26 @@ pub enum TokenKind {
     Star,
     Slash,
     Eq,
+    PlusEq,
+    MinusEq,
+    StarEq,
+    SlashEq,
+    EqEq,
+    NotEq,
+    Less,
+    Greater,
+    LessEq,
+    GreaterEq,
     Let,
     Const,
+    Loop,
+    If,
+    Elif,
+    Else,
+    Break,
+    Colon,
+    Indent,
+    Dedent,
     LParen,
     RParen,
     Comma,
@@ -40,14 +58,95 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn tokenize(&mut self) -> Vec<Token> {
+        let mut indents = vec![0];
         let mut tokens = Vec::new();
+        let mut is_bol = true;
+
         while !self.is_at_end() {
-            let token = self.next_token();
-            let is_eof = token.kind == TokenKind::EOF;
-            tokens.push(token);
-            if is_eof {
+            if is_bol {
+                let mut spaces = 0;
+                let mut has_tabs = false;
+                while self.peek() == ' ' || self.peek() == '\t' {
+                    if self.peek() == '\t' {
+                        has_tabs = true;
+                    }
+                    spaces += 1;
+                    self.advance();
+                }
+
+                let peek = self.peek();
+                if peek == '\n' || peek == '\r' || peek == '#' || self.is_at_end() {
+                } else {
+                    if has_tabs {
+                        tokens.push(Token {
+                            kind: TokenKind::Error("Use spaces, not tabs, for indentation".into()),
+                            line: self.line,
+                        });
+                    }
+                    let current = *indents.last().unwrap();
+                    if spaces > current {
+                        if spaces % 4 != 0 {
+                            tokens.push(Token {
+                                kind: TokenKind::Error(
+                                    "Indentation must be a multiple of 4 spaces".into(),
+                                ),
+                                line: self.line,
+                            });
+                        }
+                        indents.push(spaces);
+                        tokens.push(Token {
+                            kind: TokenKind::Indent,
+                            line: self.line,
+                        });
+                    } else if spaces < current {
+                        while spaces < *indents.last().unwrap() {
+                            indents.pop();
+                            tokens.push(Token {
+                                kind: TokenKind::Dedent,
+                                line: self.line,
+                            });
+                        }
+                        if spaces != *indents.last().unwrap() {
+                            tokens.push(Token {
+                                kind: TokenKind::Error("Inconsistent indentation".into()),
+                                line: self.line,
+                            });
+                        }
+                    }
+                    is_bol = false;
+                }
+            }
+
+            if self.is_at_end() {
                 break;
             }
+
+            if !is_bol || (self.peek() != '\n' && self.peek() != '\r' && self.peek() != '#') {
+                let token = self.next_token(&mut is_bol);
+                let is_eof = token.kind == TokenKind::EOF;
+                tokens.push(token);
+                if is_eof {
+                    break;
+                }
+            } else {
+                let token = self.next_token(&mut is_bol);
+                tokens.push(token);
+            }
+        }
+
+        while indents.len() > 1 {
+            indents.pop();
+            tokens.push(Token {
+                kind: TokenKind::Dedent,
+                line: self.line,
+            });
+        }
+
+        if tokens.last().map(|t| &t.kind) != Some(&TokenKind::EOF) {
+            tokens.push(Token {
+                kind: TokenKind::EOF,
+                line: self.line,
+            });
         }
         tokens
     }
@@ -71,7 +170,7 @@ impl<'a> Lexer<'a> {
             .unwrap_or(self.source.len())
     }
 
-    fn next_token(&mut self) -> Token {
+    fn next_token(&mut self, is_bol: &mut bool) -> Token {
         while !self.is_at_end() {
             let c = self.peek();
             match c {
@@ -85,6 +184,7 @@ impl<'a> Lexer<'a> {
                 }
                 '\n' => {
                     self.advance();
+                    *is_bol = true;
                     let tok = Token {
                         kind: TokenKind::Newline,
                         line: self.line,
@@ -94,6 +194,13 @@ impl<'a> Lexer<'a> {
                 }
                 '+' => {
                     self.advance();
+                    if self.peek() == '=' {
+                        self.advance();
+                        return Token {
+                            kind: TokenKind::PlusEq,
+                            line: self.line,
+                        };
+                    }
                     return Token {
                         kind: TokenKind::Plus,
                         line: self.line,
@@ -101,6 +208,13 @@ impl<'a> Lexer<'a> {
                 }
                 '-' => {
                     self.advance();
+                    if self.peek() == '=' {
+                        self.advance();
+                        return Token {
+                            kind: TokenKind::MinusEq,
+                            line: self.line,
+                        };
+                    }
                     return Token {
                         kind: TokenKind::Minus,
                         line: self.line,
@@ -108,6 +222,13 @@ impl<'a> Lexer<'a> {
                 }
                 '*' => {
                     self.advance();
+                    if self.peek() == '=' {
+                        self.advance();
+                        return Token {
+                            kind: TokenKind::StarEq,
+                            line: self.line,
+                        };
+                    }
                     return Token {
                         kind: TokenKind::Star,
                         line: self.line,
@@ -115,6 +236,13 @@ impl<'a> Lexer<'a> {
                 }
                 '/' => {
                     self.advance();
+                    if self.peek() == '=' {
+                        self.advance();
+                        return Token {
+                            kind: TokenKind::SlashEq,
+                            line: self.line,
+                        };
+                    }
                     return Token {
                         kind: TokenKind::Slash,
                         line: self.line,
@@ -122,8 +250,64 @@ impl<'a> Lexer<'a> {
                 }
                 '=' => {
                     self.advance();
+                    if self.peek() == '=' {
+                        self.advance();
+                        return Token {
+                            kind: TokenKind::EqEq,
+                            line: self.line,
+                        };
+                    }
                     return Token {
                         kind: TokenKind::Eq,
+                        line: self.line,
+                    };
+                }
+                '<' => {
+                    self.advance();
+                    if self.peek() == '=' {
+                        self.advance();
+                        return Token {
+                            kind: TokenKind::LessEq,
+                            line: self.line,
+                        };
+                    }
+                    return Token {
+                        kind: TokenKind::Less,
+                        line: self.line,
+                    };
+                }
+                '>' => {
+                    self.advance();
+                    if self.peek() == '=' {
+                        self.advance();
+                        return Token {
+                            kind: TokenKind::GreaterEq,
+                            line: self.line,
+                        };
+                    }
+                    return Token {
+                        kind: TokenKind::Greater,
+                        line: self.line,
+                    };
+                }
+                '!' => {
+                    self.advance();
+                    if self.peek() == '=' {
+                        self.advance();
+                        return Token {
+                            kind: TokenKind::NotEq,
+                            line: self.line,
+                        };
+                    }
+                    return Token {
+                        kind: TokenKind::Error("Unexpected character: !".into()),
+                        line: self.line,
+                    };
+                }
+                ':' => {
+                    self.advance();
+                    return Token {
+                        kind: TokenKind::Colon,
                         line: self.line,
                     };
                 }
@@ -173,8 +357,10 @@ impl<'a> Lexer<'a> {
 
         while !self.is_at_end() && self.peek() != '"' {
             if self.peek() == '\n' {
-                self.line += 1;
-                val.push(self.advance());
+                return Token {
+                    kind: TokenKind::Error("Unterminated string (newlines not allowed)".into()),
+                    line: start_line,
+                };
             } else if self.peek() == '\\' {
                 self.advance();
                 if self.is_at_end() {
@@ -244,6 +430,11 @@ impl<'a> Lexer<'a> {
         let kind = match text {
             "let" => TokenKind::Let,
             "const" => TokenKind::Const,
+            "loop" => TokenKind::Loop,
+            "if" => TokenKind::If,
+            "elif" => TokenKind::Elif,
+            "else" => TokenKind::Else,
+            "break" => TokenKind::Break,
             _ => TokenKind::Ident(text.to_string()),
         };
 

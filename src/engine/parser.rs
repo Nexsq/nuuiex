@@ -1,10 +1,12 @@
 use super::ast::{BinaryOp, Expr, Stmt, StringPart};
 use super::lexer::{Token, TokenKind};
+use std::collections::HashSet;
 
 pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
     pub errors: Vec<String>,
+    pub error_lines: HashSet<usize>,
 }
 
 impl Parser {
@@ -13,6 +15,7 @@ impl Parser {
             tokens,
             current: 0,
             errors: Vec::new(),
+            error_lines: HashSet::new(),
         }
     }
 
@@ -34,23 +37,57 @@ impl Parser {
 
     fn parse_statement(&mut self) -> Option<Stmt> {
         if self.check(&TokenKind::Let) {
-            return self.parse_let_declaration();
+            return self.parse_variable_declaration(false);
         }
         if self.check(&TokenKind::Const) {
-            return self.parse_const_declaration();
+            return self.parse_variable_declaration(true);
+        }
+        if self.check(&TokenKind::Loop) {
+            return self.parse_loop();
+        }
+        if self.check(&TokenKind::If) {
+            return self.parse_if();
+        }
+        if self.check(&TokenKind::Break) {
+            let token = self.advance().clone();
+            if self.check(&TokenKind::Newline) || self.is_at_end() {
+                if !self.is_at_end() {
+                    self.advance();
+                }
+                return Some(Stmt::Break(token.line));
+            } else {
+                self.error("Expected newline after break.");
+                return None;
+            }
         }
 
         let expr = self.parse_expression()?;
 
-        if self.check(&TokenKind::Eq) {
-            let eq_token = self.advance().clone();
+        if self.check(&TokenKind::Eq)
+            || self.check(&TokenKind::PlusEq)
+            || self.check(&TokenKind::MinusEq)
+            || self.check(&TokenKind::StarEq)
+            || self.check(&TokenKind::SlashEq)
+        {
+            let op_token = self.advance().clone();
             if let Expr::Ident(name, _) = expr {
                 let value = self.parse_expression()?;
                 if self.check(&TokenKind::Newline) || self.is_at_end() {
                     if !self.is_at_end() {
                         self.advance();
                     }
-                    return Some(Stmt::Assign(name, value, eq_token.line));
+                    if op_token.kind == TokenKind::Eq {
+                        return Some(Stmt::Assign(name, value, op_token.line));
+                    } else {
+                        let bin_op = match op_token.kind {
+                            TokenKind::PlusEq => BinaryOp::Add,
+                            TokenKind::MinusEq => BinaryOp::Sub,
+                            TokenKind::StarEq => BinaryOp::Mul,
+                            TokenKind::SlashEq => BinaryOp::Div,
+                            _ => unreachable!(),
+                        };
+                        return Some(Stmt::AssignOp(name, bin_op, value, op_token.line));
+                    }
                 } else {
                     self.error("Expected newline after assignment.");
                     return None;
@@ -72,44 +109,115 @@ impl Parser {
         }
     }
 
-    fn parse_let_declaration(&mut self) -> Option<Stmt> {
-        let token = self.advance().clone();
-        let name = if let TokenKind::Ident(ref n) = self.peek().kind {
-            let name_str = n.clone();
-            self.advance();
-            name_str
-        } else {
-            self.error("Expected variable name after 'let'.");
-            return None;
-        };
-
-        if !self.check(&TokenKind::Eq) {
-            self.error("Expected '=' after variable name.");
+    fn parse_block(&mut self) -> Option<Vec<Stmt>> {
+        if !self.check(&TokenKind::Indent) {
+            self.error("Expected indentation block.");
             return None;
         }
         self.advance();
 
-        let value = self.parse_expression()?;
-
-        if self.check(&TokenKind::Newline) || self.is_at_end() {
-            if !self.is_at_end() {
+        let mut stmts = Vec::new();
+        while !self.is_at_end() && !self.check(&TokenKind::Dedent) {
+            if self.check(&TokenKind::Newline) {
                 self.advance();
+                continue;
             }
-            Some(Stmt::Let(name, value, token.line))
-        } else {
-            self.error("Expected newline after variable declaration.");
-            None
+            if let Some(stmt) = self.parse_statement() {
+                stmts.push(stmt);
+            } else {
+                self.synchronize();
+            }
         }
+
+        if self.check(&TokenKind::Dedent) {
+            self.advance();
+        } else {
+            self.error("Expected dedent.");
+        }
+        Some(stmts)
     }
 
-    fn parse_const_declaration(&mut self) -> Option<Stmt> {
+    fn parse_loop(&mut self) -> Option<Stmt> {
+        self.advance();
+        if !self.check(&TokenKind::Colon) {
+            self.error("Expected ':' after loop.");
+            return None;
+        }
+        self.advance();
+        if !self.check(&TokenKind::Newline) && !self.is_at_end() {
+            self.error("Expected newline after ':'.");
+            return None;
+        }
+        self.advance();
+
+        let body = self.parse_block()?;
+        Some(Stmt::Loop(body))
+    }
+
+    fn parse_if(&mut self) -> Option<Stmt> {
+        self.advance();
+        let cond = self.parse_expression()?;
+        if !self.check(&TokenKind::Colon) {
+            self.error("Expected ':' after if condition.");
+            return None;
+        }
+        self.advance();
+        if !self.check(&TokenKind::Newline) && !self.is_at_end() {
+            self.error("Expected newline after ':'.");
+            return None;
+        }
+        self.advance();
+
+        let then_branch = self.parse_block()?;
+
+        let mut elifs = Vec::new();
+        while self.check(&TokenKind::Elif) {
+            self.advance();
+            let elif_cond = self.parse_expression()?;
+            if !self.check(&TokenKind::Colon) {
+                self.error("Expected ':' after elif condition.");
+                return None;
+            }
+            self.advance();
+            if !self.check(&TokenKind::Newline) && !self.is_at_end() {
+                self.error("Expected newline after ':'.");
+                return None;
+            }
+            self.advance();
+
+            let elif_branch = self.parse_block()?;
+            elifs.push((elif_cond, elif_branch));
+        }
+
+        let mut else_branch = None;
+        if self.check(&TokenKind::Else) {
+            self.advance();
+            if !self.check(&TokenKind::Colon) {
+                self.error("Expected ':' after else.");
+                return None;
+            }
+            self.advance();
+            if !self.check(&TokenKind::Newline) && !self.is_at_end() {
+                self.error("Expected newline after ':'.");
+                return None;
+            }
+            self.advance();
+
+            else_branch = Some(self.parse_block()?);
+        }
+
+        Some(Stmt::If(cond, then_branch, elifs, else_branch))
+    }
+
+    fn parse_variable_declaration(&mut self, is_const: bool) -> Option<Stmt> {
         let token = self.advance().clone();
+        let keyword = if is_const { "const" } else { "let" };
         let name = if let TokenKind::Ident(ref n) = self.peek().kind {
             let name_str = n.clone();
             self.advance();
             name_str
         } else {
-            self.error("Expected variable name after 'const'.");
+            self.error(&format!("Expected variable name after '{}'.", keyword));
             return None;
         };
 
@@ -125,7 +233,11 @@ impl Parser {
             if !self.is_at_end() {
                 self.advance();
             }
-            Some(Stmt::Const(name, value, token.line))
+            if is_const {
+                Some(Stmt::Const(name, value, token.line))
+            } else {
+                Some(Stmt::Let(name, value, token.line))
+            }
         } else {
             self.error("Expected newline after variable declaration.");
             None
@@ -133,7 +245,33 @@ impl Parser {
     }
 
     fn parse_expression(&mut self) -> Option<Expr> {
-        self.parse_term()
+        self.parse_equality()
+    }
+
+    fn parse_equality(&mut self) -> Option<Expr> {
+        let mut expr = self.parse_relational()?;
+        while self.check(&TokenKind::EqEq) || self.check(&TokenKind::NotEq) {
+            let token = self.advance().clone();
+            let op = BinaryOp::from_token(&token.kind).unwrap();
+            let right = self.parse_relational()?;
+            expr = Expr::Binary(Box::new(expr), op, Box::new(right), token.line);
+        }
+        Some(expr)
+    }
+
+    fn parse_relational(&mut self) -> Option<Expr> {
+        let mut expr = self.parse_term()?;
+        while self.check(&TokenKind::Less)
+            || self.check(&TokenKind::Greater)
+            || self.check(&TokenKind::LessEq)
+            || self.check(&TokenKind::GreaterEq)
+        {
+            let token = self.advance().clone();
+            let op = BinaryOp::from_token(&token.kind).unwrap();
+            let right = self.parse_term()?;
+            expr = Expr::Binary(Box::new(expr), op, Box::new(right), token.line);
+        }
+        Some(expr)
     }
 
     fn parse_term(&mut self) -> Option<Expr> {
@@ -150,16 +288,31 @@ impl Parser {
     }
 
     fn parse_factor(&mut self) -> Option<Expr> {
-        let mut expr = self.parse_primary()?;
+        let mut expr = self.parse_unary()?;
 
         while self.check(&TokenKind::Star) || self.check(&TokenKind::Slash) {
             let token = self.advance().clone();
             let op = BinaryOp::from_token(&token.kind).unwrap();
-            let right = self.parse_primary()?;
+            let right = self.parse_unary()?;
             expr = Expr::Binary(Box::new(expr), op, Box::new(right), token.line);
         }
 
         Some(expr)
+    }
+
+    fn parse_unary(&mut self) -> Option<Expr> {
+        if self.check(&TokenKind::Minus) || self.check(&TokenKind::Plus) {
+            let token = self.advance().clone();
+            let op = BinaryOp::from_token(&token.kind).unwrap();
+            let right = self.parse_unary()?;
+            return Some(Expr::Binary(
+                Box::new(Expr::Number(0.0, token.line)),
+                op,
+                Box::new(right),
+                token.line,
+            ));
+        }
+        self.parse_primary()
     }
 
     fn parse_primary(&mut self) -> Option<Expr> {
@@ -232,12 +385,16 @@ impl Parser {
                             parts.push(StringPart::Expr(expr));
                             has_expr = true;
                             self.errors.extend(parser.errors);
+                            self.error_lines
+                                .extend(parser.error_lines.iter().map(|_| line));
                         } else {
                             self.error(&format!(
                                 "Invalid expression in interpolation: {}",
                                 expr_str
                             ));
                             self.errors.extend(parser.errors);
+                            self.error_lines
+                                .extend(parser.error_lines.iter().map(|_| line));
                         }
                     } else {
                         current_text.push(c);
@@ -350,6 +507,7 @@ impl Parser {
         } else {
             self.peek().line
         };
+        self.error_lines.insert(line);
         self.errors.push(format!("Line {}: {}", line, msg));
     }
 
@@ -357,6 +515,9 @@ impl Parser {
         while !self.is_at_end() {
             if self.peek().kind == TokenKind::Newline {
                 self.advance();
+                return;
+            }
+            if matches!(self.peek().kind, TokenKind::Dedent | TokenKind::EOF) {
                 return;
             }
             self.advance();

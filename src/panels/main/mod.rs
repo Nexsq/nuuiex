@@ -168,23 +168,32 @@ impl MainView {
             is_folder = true;
         }
 
+        let should_edit = self.active == ActivePanel::Main;
         let editor = &mut self.editors[self.current_tab];
 
         if let Some((path, rp)) = to_load {
             if editor.file_path.as_deref() != Some(path.as_path()) {
-                editor.load_file(path, false, rp);
+                editor.load_file(path, should_edit, rp);
+            } else if should_edit && !editor.is_editing {
+                editor.is_editing = true;
+                editor.refresh_analysis();
             }
         } else if is_folder {
             editor.file_path = None;
             editor.rel_path.clear();
             editor.state.lines = vec![String::new()];
             editor.is_editing = false;
+            editor.error_count = 0;
+            editor.error_lines.clear();
         }
     }
 
     pub fn switch_tab(&mut self, tab: usize, config: &Config) {
         if tab >= config.tabs_num.clamp(2, 6) || tab == self.current_tab {
             return;
+        }
+        if self.editors[self.current_tab].is_editing {
+            self.editors[self.current_tab].save();
         }
         self.current_tab = tab;
         self.auto_load();
@@ -273,9 +282,7 @@ impl MainView {
         } else {
             self.active = ActivePanel::Main;
             self.list_input = ListInputMode::None;
-            if editor.file_path.is_some() {
-                editor.is_editing = true;
-            }
+            self.auto_load();
         }
         self.refresh_main(config);
         self.refresh_list(config);
@@ -522,6 +529,8 @@ impl MainView {
             self.running_macros[self.current_tab] = Some(path);
             self.active = ActivePanel::Main;
             self.editors[self.current_tab].is_editing = false;
+            self.editors[self.current_tab].error_count = 0;
+            self.editors[self.current_tab].error_lines.clear();
             self.refresh_main(config);
             self.refresh_list(config);
             self.refresh_static_boxes(config);
@@ -912,6 +921,8 @@ pub fn handle_list_action(
                             view.running_macros[i] = None;
                             view.editors[i].process_rx = None;
                             view.editors[i].state.lines = vec![String::new()];
+                            view.editors[i].error_count = 0;
+                            view.editors[i].error_lines.clear();
                         }
                     }
 
@@ -1010,6 +1021,8 @@ pub fn handle_list_action(
                         view.running_macros[i] = None;
                         view.editors[i].process_rx = None;
                         view.editors[i].state.lines = vec![String::new()];
+                        view.editors[i].error_count = 0;
+                        view.editors[i].error_lines.clear();
                     }
                 }
 

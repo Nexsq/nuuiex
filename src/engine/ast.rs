@@ -35,6 +35,12 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    EqEq,
+    NotEq,
+    Less,
+    Greater,
+    LessEq,
+    GreaterEq,
 }
 
 impl BinaryOp {
@@ -44,6 +50,12 @@ impl BinaryOp {
             TokenKind::Minus => Some(Self::Sub),
             TokenKind::Star => Some(Self::Mul),
             TokenKind::Slash => Some(Self::Div),
+            TokenKind::EqEq => Some(Self::EqEq),
+            TokenKind::NotEq => Some(Self::NotEq),
+            TokenKind::Less => Some(Self::Less),
+            TokenKind::Greater => Some(Self::Greater),
+            TokenKind::LessEq => Some(Self::LessEq),
+            TokenKind::GreaterEq => Some(Self::GreaterEq),
             _ => None,
         }
     }
@@ -55,4 +67,8 @@ pub enum Stmt {
     Let(String, Expr, usize),
     Const(String, Expr, usize),
     Assign(String, Expr, usize),
+    AssignOp(String, BinaryOp, Expr, usize),
+    If(Expr, Vec<Stmt>, Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
+    Loop(Vec<Stmt>),
+    Break(usize),
 }
