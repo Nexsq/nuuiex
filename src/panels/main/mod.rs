@@ -533,7 +533,7 @@ impl MainView {
             }
 
             if let Ok(source) = std::fs::read_to_string(&path) {
-                let (tx, rx) = std::sync::mpsc::channel();
+                let (tx, rx) = std::sync::mpsc::sync_channel(1024);
                 let cancel_token = Arc::new(AtomicBool::new(false));
                 let thread_cancel_token = Arc::clone(&cancel_token);
                 std::thread::spawn(move || {

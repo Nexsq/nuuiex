@@ -5,6 +5,7 @@ use super::parser;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::mpsc::SyncSender;
 
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>) {
     let mut lexer = lexer::Lexer::new(source);
@@ -25,11 +26,7 @@ pub fn analyze_code(source: &str) -> (usize, HashSet<usize>) {
     (errors_count, error_lines)
 }
 
-pub fn run_in_thread(
-    source: &str,
-    tx: std::sync::mpsc::Sender<Vec<String>>,
-    cancel_token: Arc<AtomicBool>,
-) {
+pub fn run_in_thread(source: &str, tx: SyncSender<Vec<String>>, cancel_token: Arc<AtomicBool>) {
     let mut lexer = lexer::Lexer::new(source);
     let tokens = lexer.tokenize();
 

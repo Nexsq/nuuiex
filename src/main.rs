@@ -116,6 +116,7 @@ fn main() {
         for i in 0..6 {
             if let Some(rx) = &main_view.editors[i].process_rx {
                 let mut disconnected = false;
+                let mut processed = 0;
                 loop {
                     match rx.try_recv() {
                         Ok(lines) => {
@@ -123,6 +124,10 @@ fn main() {
                             main_view.editors[i].error_count = 0;
                             main_view.editors[i].error_lines.clear();
                             tabs_updated[i] = true;
+                            processed += 1;
+                            if processed > 500 {
+                                break;
+                            }
                         }
                         Err(std::sync::mpsc::TryRecvError::Empty) => break,
                         Err(std::sync::mpsc::TryRecvError::Disconnected) => {

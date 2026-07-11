@@ -3,6 +3,7 @@ use super::value::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::SyncSender;
 
 pub struct Environment {
     pub scopes: Vec<HashMap<String, Value>>,
@@ -66,7 +67,7 @@ pub struct Interpreter {
     pub output: Vec<String>,
     pub errors: Vec<String>,
     current_line: String,
-    tx: std::sync::mpsc::Sender<Vec<String>>,
+    tx: SyncSender<Vec<String>>,
     pub should_exit: bool,
     pub env: Environment,
     cancel_token: Arc<AtomicBool>,
@@ -79,7 +80,7 @@ pub enum Signal {
 }
 
 impl Interpreter {
-    pub fn new(tx: std::sync::mpsc::Sender<Vec<String>>, cancel_token: Arc<AtomicBool>) -> Self {
+    pub fn new(tx: SyncSender<Vec<String>>, cancel_token: Arc<AtomicBool>) -> Self {
         Self {
             output: Vec::new(),
             errors: Vec::new(),
