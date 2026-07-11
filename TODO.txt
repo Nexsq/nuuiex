@@ -1,1 +1,0 @@
-add error messages and code analysis when editing
