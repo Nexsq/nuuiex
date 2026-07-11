@@ -536,6 +536,7 @@ pub fn settings_modal(
                     current_min_w,
                     current_min_h,
                     config.get_border(),
+                    main_view.theme.warning_color,
                 ) {
                     return true;
                 }
@@ -1036,6 +1037,7 @@ pub fn settings_modal(
                                                 main_view.min_w,
                                                 main_view.min_h,
                                                 config.get_border(),
+                                                main_view.theme.warning_color,
                                                 |cvs, w, h| {
                                                     if w != main_view.term_w
                                                         || h != main_view.term_h
@@ -1157,6 +1159,7 @@ pub fn settings_modal(
                             main_view.min_w,
                             main_view.min_h,
                             config.get_border(),
+                            main_view.theme.warning_color,
                             |cvs, w, h| {
                                 if w != main_view.term_w || h != main_view.term_h {
                                     main_view.resize(w, h, config);

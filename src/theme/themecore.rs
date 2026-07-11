@@ -15,6 +15,7 @@ pub struct Theme {
     pub name: String,
     pub title: Vec<Vec<(String, Color)>>,
     pub main_label: Color,
+    pub warning_color: Color,
     pub main_box: Color,
     pub list_box: Color,
     pub tabs_box: Color,
@@ -54,6 +55,7 @@ impl Theme {
             name: String::new(),
             title: Vec::new(),
             main_label: Color::None,
+            warning_color: Color::None,
             main_box: Color::None,
             list_box: Color::None,
             tabs_box: Color::None,
@@ -335,6 +337,7 @@ fn apply_theme_value(theme: &mut Theme, key: &str, val: &str) -> Result<(), Stri
     match key {
         "title" => theme.title = parse_title(val)?,
         "main_label" => theme.main_label = parse_color(val)?,
+        "warning_color" => theme.warning_color = parse_color(val)?,
         "main_box" => theme.main_box = parse_color(val)?,
         "list_box" => theme.list_box = parse_color(val)?,
         "tabs_box" => theme.tabs_box = parse_color(val)?,

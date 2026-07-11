@@ -7,6 +7,7 @@ pub fn run(
     min_w: u16,
     min_h: u16,
     border: Border,
+    warning_color: Color,
 ) -> bool {
     let mut dirty = true;
 
@@ -31,7 +32,7 @@ pub fn run(
                 0,
                 border,
                 Style {
-                    fg: Color::Yellow,
+                    fg: warning_color,
                     bg: Color::None,
                     md: Modifier::Bold,
                 },
@@ -60,7 +61,7 @@ pub fn run(
                 start_y as i16,
                 false,
                 Style {
-                    fg: Color::Yellow,
+                    fg: warning_color,
                     bg: Color::None,
                     md: Modifier::Bold,
                 },
@@ -71,19 +72,19 @@ pub fn run(
                 bg: Color::None,
                 md: Modifier::None,
             };
-            let dark_gray_bg = Style {
+            let base_bg = Style {
                 fg: Color::White,
                 bg: Color::DarkGray,
                 md: Modifier::None,
             };
-            let green_bg = Style {
+            let correct_bg = Style {
                 fg: Color::White,
-                bg: Color::Green,
+                bg: Color::DarkGray,
                 md: Modifier::None,
             };
-            let yellow_bg = Style {
-                fg: Color::White,
-                bg: Color::Yellow,
+            let incorrect_bg = Style {
+                fg: Color::Black,
+                bg: warning_color,
                 md: Modifier::None,
             };
             let arrow_style = Style {
@@ -98,20 +99,20 @@ pub fn run(
             cur_x += 9;
 
             let cw_style = if current_w >= min_w {
-                green_bg
+                correct_bg
             } else {
-                yellow_bg
+                incorrect_bg
             };
             warning_box.insert_text(&cw_str, cur_x as i16, line1_y as i16, false, cw_style);
             cur_x += w_len as u16;
 
-            warning_box.insert_text("x", cur_x as i16, line1_y as i16, false, dark_gray_bg);
+            warning_box.insert_text("x", cur_x as i16, line1_y as i16, false, base_bg);
             cur_x += 1;
 
             let ch_style = if current_h >= min_h {
-                green_bg
+                correct_bg
             } else {
-                yellow_bg
+                incorrect_bg
             };
             warning_box.insert_text(&ch_str, cur_x as i16, line1_y as i16, false, ch_style);
 
@@ -120,13 +121,13 @@ pub fn run(
             warning_box.insert_text("Needed:  ", cur_x as i16, line2_y as i16, false, base_style);
             cur_x += 9;
 
-            warning_box.insert_text(&mw_str, cur_x as i16, line2_y as i16, false, dark_gray_bg);
+            warning_box.insert_text(&mw_str, cur_x as i16, line2_y as i16, false, base_bg);
             cur_x += w_len as u16;
 
-            warning_box.insert_text("x", cur_x as i16, line2_y as i16, false, dark_gray_bg);
+            warning_box.insert_text("x", cur_x as i16, line2_y as i16, false, base_bg);
             cur_x += 1;
 
-            warning_box.insert_text(&mh_str, cur_x as i16, line2_y as i16, false, dark_gray_bg);
+            warning_box.insert_text(&mh_str, cur_x as i16, line2_y as i16, false, base_bg);
 
             if current_w < min_w && start_x >= 3 {
                 let left_arr_x = start_x / 2;

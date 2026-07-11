@@ -639,6 +639,7 @@ pub fn handle_list_input(
                             view.min_w,
                             view.min_h,
                             config.get_border(),
+                            view.theme.warning_color,
                             |cvs, w, h| {
                                 if w != view.term_w || h != view.term_h {
                                     if w >= view.min_w && h >= view.min_h {
@@ -743,6 +744,7 @@ pub fn handle_list_input(
                         view.min_w,
                         view.min_h,
                         config.get_border(),
+                        view.theme.warning_color,
                         |cvs, w, h| {
                             if w != view.term_w || h != view.term_h {
                                 if w >= view.min_w && h >= view.min_h {
@@ -921,6 +923,7 @@ pub fn handle_list_action(
                     view.min_w,
                     view.min_h,
                     config.get_border(),
+                    view.theme.warning_color,
                     |cvs, w, h| {
                         if w != view.term_w || h != view.term_h {
                             if w >= view.min_w && h >= view.min_h {
@@ -992,6 +995,7 @@ pub fn handle_list_action(
                         view.min_w,
                         view.min_h,
                         config.get_border(),
+                        view.theme.warning_color,
                         |cvs, w, h| {
                             if w != view.term_w || h != view.term_h {
                                 if w >= view.min_w && h >= view.min_h {
@@ -1021,6 +1025,7 @@ pub fn handle_list_action(
                         view.min_w,
                         view.min_h,
                         config.get_border(),
+                        view.theme.warning_color,
                         |cvs, w, h| {
                             if w != view.term_w || h != view.term_h {
                                 if w >= view.min_w && h >= view.min_h {

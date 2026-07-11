@@ -26,6 +26,7 @@ fn main() {
                 min_w,
                 min_h,
                 nuui::Border::Heavy,
+                nuui::Color::BrightYellow,
             );
             if res == nuui::PanelResult::Ok(1) {
                 if let Err(err) = conf::reset_to_default() {
@@ -37,6 +38,7 @@ fn main() {
                         min_w,
                         min_h,
                         nuui::Border::Heavy,
+                        nuui::Color::BrightYellow,
                     );
                     return;
                 }
@@ -59,6 +61,7 @@ fn main() {
                 0,
                 0,
                 config.get_border(),
+                nuui::Color::BrightYellow,
             );
             if res == nuui::PanelResult::Ok(1) {
                 config.theme = "default".to_string();
@@ -81,6 +84,7 @@ fn main() {
                 min_w,
                 min_h,
                 config.get_border(),
+                theme.warning_color,
             );
             return;
         }
@@ -166,6 +170,7 @@ fn main() {
                     main_view.min_w,
                     main_view.min_h,
                     config.get_border(),
+                    main_view.theme.warning_color,
                 ) {
                     break;
                 }
@@ -251,6 +256,7 @@ fn main() {
                                 min_w,
                                 min_h,
                                 config.get_border(),
+                                main_view.theme.warning_color,
                             );
                             break;
                         }
@@ -291,6 +297,7 @@ fn main() {
                                 min_w,
                                 min_h,
                                 config.get_border(),
+                                main_view.theme.warning_color,
                             );
                             break;
                         }

@@ -12,6 +12,7 @@ pub fn warning_box<F>(
     min_w: u16,
     min_h: u16,
     border: Border,
+    warning_color: Color,
     mut draw_background: F,
 ) -> PanelResult
 where
@@ -35,8 +36,8 @@ where
         md: Modifier::Bold,
     };
     let unselected_style = Style {
-        fg: Color::White,
-        bg: Color::Red,
+        fg: Color::Black,
+        bg: warning_color,
         md: Modifier::None,
     };
     let msg_style = Style {
@@ -45,7 +46,7 @@ where
         md: Modifier::None,
     };
     let border_style = Style {
-        fg: Color::Red,
+        fg: warning_color,
         bg: Color::None,
         md: Modifier::Bold,
     };
@@ -64,7 +65,7 @@ where
 
         if dirty {
             if current_w < min_w || current_h < min_h {
-                if !crate::toosmall::run(terminal, canvas, min_w, min_h, border) {
+                if !crate::toosmall::run(terminal, canvas, min_w, min_h, border, warning_color) {
                     return PanelResult::Quit;
                 }
                 dirty = true;
@@ -167,6 +168,7 @@ pub fn error_box(
     min_w: u16,
     min_h: u16,
     border: Border,
+    warning_color: Color,
 ) -> PanelResult {
     let total_opts_len = options
         .iter()
@@ -211,7 +213,7 @@ pub fn error_box(
 
         if dirty {
             if current_w < min_w || current_h < min_h {
-                if !crate::toosmall::run(terminal, canvas, min_w, min_h, border) {
+                if !crate::toosmall::run(terminal, canvas, min_w, min_h, border, warning_color) {
                     return PanelResult::Quit;
                 }
                 dirty = true;
