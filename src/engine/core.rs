@@ -3,7 +3,7 @@ use super::interpreter;
 use super::lexer;
 use super::parser;
 
-pub fn run(source: &str) -> Vec<String> {
+pub fn run_in_thread(source: &str, tx: std::sync::mpsc::Sender<Vec<String>>) {
     let mut lexer = lexer::Lexer::new(source);
     let tokens = lexer.tokenize();
 
@@ -13,7 +13,8 @@ pub fn run(source: &str) -> Vec<String> {
     if !parser.errors.is_empty() {
         let mut res = vec!["--- Syntax Errors ---".to_string()];
         res.extend(parser.errors);
-        return res;
+        let _ = tx.send(res);
+        return;
     }
 
     let mut analyzer = analyzer::Analyzer::new();
@@ -22,25 +23,10 @@ pub fn run(source: &str) -> Vec<String> {
     if !analyzer.errors.is_empty() {
         let mut res = vec!["--- Analysis Errors ---".to_string()];
         res.extend(analyzer.errors);
-        return res;
+        let _ = tx.send(res);
+        return;
     }
 
-    let mut interpreter = interpreter::Interpreter::new();
+    let mut interpreter = interpreter::Interpreter::new(tx);
     interpreter.exec(&ast);
-
-    let mut res = interpreter.output;
-
-    if !interpreter.errors.is_empty() {
-        if !res.is_empty() {
-            res.push("".to_string());
-        }
-        res.push("--- Runtime Errors ---".to_string());
-        res.extend(interpreter.errors);
-    }
-
-    if res.is_empty() {
-        res.push("Execution finished with no output.".to_string());
-    }
-
-    res
 }

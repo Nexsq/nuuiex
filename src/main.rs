@@ -112,6 +112,45 @@ fn main() {
             dirty = true;
         }
 
+        let mut tabs_updated = [false; 6];
+        for i in 0..6 {
+            if let Some(rx) = &main_view.editors[i].process_rx {
+                let mut disconnected = false;
+                loop {
+                    match rx.try_recv() {
+                        Ok(lines) => {
+                            main_view.editors[i].state.lines = lines;
+                            tabs_updated[i] = true;
+                        }
+                        Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                            disconnected = true;
+                            break;
+                        }
+                    }
+                }
+                if disconnected {
+                    main_view.editors[i].process_rx = None;
+                    main_view.running_macros[i] = None;
+                    tabs_updated[i] = true;
+                }
+            }
+        }
+
+        let mut any_tab_updated = false;
+        for i in 0..6 {
+            if tabs_updated[i] {
+                any_tab_updated = true;
+                if main_view.current_tab == i {
+                    main_view.refresh_main(&config);
+                }
+            }
+        }
+        if any_tab_updated {
+            main_view.refresh_static_boxes(&config);
+            dirty = true;
+        }
+
         if dirty {
             if term_w < main_view.min_w || term_h < main_view.min_h {
                 if !toosmall::run(

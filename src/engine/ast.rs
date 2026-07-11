@@ -1,19 +1,27 @@
 use super::lexer::TokenKind;
 
 #[derive(Debug, Clone)]
-pub enum Expr<'a> {
-    Number(f64, usize),
-    String(String, usize),
-    Ident(&'a str, usize),
-    Binary(Box<Expr<'a>>, BinaryOp, Box<Expr<'a>>, usize),
-    Call(&'a str, Vec<Expr<'a>>, usize),
+pub enum StringPart {
+    Text(String),
+    Expr(Expr),
 }
 
-impl<'a> Expr<'a> {
+#[derive(Debug, Clone)]
+pub enum Expr {
+    Number(f64, usize),
+    String(String, usize),
+    FormatString(Vec<StringPart>, usize),
+    Ident(String, usize),
+    Binary(Box<Expr>, BinaryOp, Box<Expr>, usize),
+    Call(String, Vec<Expr>, usize),
+}
+
+impl Expr {
     pub fn line(&self) -> usize {
         match self {
             Expr::Number(_, l) => *l,
             Expr::String(_, l) => *l,
+            Expr::FormatString(_, l) => *l,
             Expr::Ident(_, l) => *l,
             Expr::Binary(_, _, _, l) => *l,
             Expr::Call(_, _, l) => *l,
@@ -42,6 +50,9 @@ impl BinaryOp {
 }
 
 #[derive(Debug, Clone)]
-pub enum Stmt<'a> {
-    Expr(Expr<'a>),
+pub enum Stmt {
+    Expr(Expr),
+    Let(String, Expr, usize),
+    Const(String, Expr, usize),
+    Assign(String, Expr, usize),
 }

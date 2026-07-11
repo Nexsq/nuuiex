@@ -37,6 +37,8 @@ pub struct Editor {
     pub last_key_file_bounds: bool,
     pub last_key_delete: bool,
     pub last_key_copy: bool,
+
+    pub process_rx: Option<std::sync::mpsc::Receiver<Vec<String>>>,
 }
 
 impl Default for Editor {
@@ -68,6 +70,7 @@ impl Editor {
             last_key_file_bounds: false,
             last_key_delete: false,
             last_key_copy: false,
+            process_rx: None,
         }
     }
 

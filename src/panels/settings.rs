@@ -1045,6 +1045,8 @@ pub fn settings_modal(
                                                                     .clear();
                                                                 main_view.editors[i].state.lines =
                                                                     vec![String::new()];
+                                                                main_view.editors[i].process_rx =
+                                                                    None;
                                                                 main_view.running_macros[i] = None;
                                                             }
                                                         }

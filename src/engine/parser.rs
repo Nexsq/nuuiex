@@ -1,14 +1,14 @@
-use super::ast::{BinaryOp, Expr, Stmt};
+use super::ast::{BinaryOp, Expr, Stmt, StringPart};
 use super::lexer::{Token, TokenKind};
 
-pub struct Parser<'a> {
-    tokens: Vec<Token<'a>>,
+pub struct Parser {
+    tokens: Vec<Token>,
     current: usize,
     pub errors: Vec<String>,
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(tokens: Vec<Token<'a>>) -> Self {
+impl Parser {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Self {
             tokens,
             current: 0,
@@ -16,7 +16,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Vec<Stmt<'a>> {
+    pub fn parse(&mut self) -> Vec<Stmt> {
         let mut stmts = Vec::new();
         while !self.is_at_end() {
             if self.check(&TokenKind::Newline) {
@@ -32,8 +32,35 @@ impl<'a> Parser<'a> {
         stmts
     }
 
-    fn parse_statement(&mut self) -> Option<Stmt<'a>> {
+    fn parse_statement(&mut self) -> Option<Stmt> {
+        if self.check(&TokenKind::Let) {
+            return self.parse_let_declaration();
+        }
+        if self.check(&TokenKind::Const) {
+            return self.parse_const_declaration();
+        }
+
         let expr = self.parse_expression()?;
+
+        if self.check(&TokenKind::Eq) {
+            let eq_token = self.advance().clone();
+            if let Expr::Ident(name, _) = expr {
+                let value = self.parse_expression()?;
+                if self.check(&TokenKind::Newline) || self.is_at_end() {
+                    if !self.is_at_end() {
+                        self.advance();
+                    }
+                    return Some(Stmt::Assign(name, value, eq_token.line));
+                } else {
+                    self.error("Expected newline after assignment.");
+                    return None;
+                }
+            } else {
+                self.error("Invalid assignment target.");
+                return None;
+            }
+        }
+
         if self.check(&TokenKind::Newline) || self.is_at_end() {
             if !self.is_at_end() {
                 self.advance();
@@ -45,11 +72,71 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expression(&mut self) -> Option<Expr<'a>> {
+    fn parse_let_declaration(&mut self) -> Option<Stmt> {
+        let token = self.advance().clone();
+        let name = if let TokenKind::Ident(ref n) = self.peek().kind {
+            let name_str = n.clone();
+            self.advance();
+            name_str
+        } else {
+            self.error("Expected variable name after 'let'.");
+            return None;
+        };
+
+        if !self.check(&TokenKind::Eq) {
+            self.error("Expected '=' after variable name.");
+            return None;
+        }
+        self.advance();
+
+        let value = self.parse_expression()?;
+
+        if self.check(&TokenKind::Newline) || self.is_at_end() {
+            if !self.is_at_end() {
+                self.advance();
+            }
+            Some(Stmt::Let(name, value, token.line))
+        } else {
+            self.error("Expected newline after variable declaration.");
+            None
+        }
+    }
+
+    fn parse_const_declaration(&mut self) -> Option<Stmt> {
+        let token = self.advance().clone();
+        let name = if let TokenKind::Ident(ref n) = self.peek().kind {
+            let name_str = n.clone();
+            self.advance();
+            name_str
+        } else {
+            self.error("Expected variable name after 'const'.");
+            return None;
+        };
+
+        if !self.check(&TokenKind::Eq) {
+            self.error("Expected '=' after variable name.");
+            return None;
+        }
+        self.advance();
+
+        let value = self.parse_expression()?;
+
+        if self.check(&TokenKind::Newline) || self.is_at_end() {
+            if !self.is_at_end() {
+                self.advance();
+            }
+            Some(Stmt::Const(name, value, token.line))
+        } else {
+            self.error("Expected newline after variable declaration.");
+            None
+        }
+    }
+
+    fn parse_expression(&mut self) -> Option<Expr> {
         self.parse_term()
     }
 
-    fn parse_term(&mut self) -> Option<Expr<'a>> {
+    fn parse_term(&mut self) -> Option<Expr> {
         let mut expr = self.parse_factor()?;
 
         while self.check(&TokenKind::Plus) || self.check(&TokenKind::Minus) {
@@ -62,7 +149,7 @@ impl<'a> Parser<'a> {
         Some(expr)
     }
 
-    fn parse_factor(&mut self) -> Option<Expr<'a>> {
+    fn parse_factor(&mut self) -> Option<Expr> {
         let mut expr = self.parse_primary()?;
 
         while self.check(&TokenKind::Star) || self.check(&TokenKind::Slash) {
@@ -75,7 +162,7 @@ impl<'a> Parser<'a> {
         Some(expr)
     }
 
-    fn parse_primary(&mut self) -> Option<Expr<'a>> {
+    fn parse_primary(&mut self) -> Option<Expr> {
         if self.is_at_end() {
             self.error("Unexpected end of input.");
             return None;
@@ -85,7 +172,94 @@ impl<'a> Parser<'a> {
         let line = token.line;
         match token.kind {
             TokenKind::Number(n) => Some(Expr::Number(n, line)),
-            TokenKind::String(s) => Some(Expr::String(s, line)),
+            TokenKind::String(s) => {
+                let mut parts = Vec::new();
+                let mut current_text = String::new();
+                let mut chars = s.chars().peekable();
+                let mut has_expr = false;
+
+                while let Some(c) = chars.next() {
+                    if c == '\\' {
+                        if let Some(&next) = chars.peek() {
+                            if next == '{' {
+                                current_text.push('{');
+                                chars.next();
+                                continue;
+                            } else if next == '\\' {
+                                current_text.push('\\');
+                                chars.next();
+                                continue;
+                            }
+                        }
+                        current_text.push('\\');
+                    } else if c == '{' {
+                        if !current_text.is_empty() {
+                            parts.push(StringPart::Text(current_text.clone()));
+                            current_text.clear();
+                        }
+                        let mut expr_str = String::new();
+                        let mut depth = 1;
+                        while let Some(ec) = chars.next() {
+                            if ec == '{' {
+                                depth += 1;
+                                expr_str.push(ec);
+                            } else if ec == '}' {
+                                depth -= 1;
+                                if depth == 0 {
+                                    break;
+                                } else {
+                                    expr_str.push(ec);
+                                }
+                            } else {
+                                expr_str.push(ec);
+                            }
+                        }
+
+                        let mut lexer = crate::engine::lexer::Lexer::new(&expr_str);
+                        let tokens = lexer.tokenize();
+                        let mut parser = Parser::new(tokens);
+
+                        if let Some(expr) = parser.parse_expression() {
+                            while parser.check(&TokenKind::Newline) {
+                                parser.advance();
+                            }
+                            if !parser.is_at_end() {
+                                self.error(&format!(
+                                    "Unexpected extra tokens in interpolation: {}",
+                                    expr_str
+                                ));
+                            }
+                            parts.push(StringPart::Expr(expr));
+                            has_expr = true;
+                            self.errors.extend(parser.errors);
+                        } else {
+                            self.error(&format!(
+                                "Invalid expression in interpolation: {}",
+                                expr_str
+                            ));
+                            self.errors.extend(parser.errors);
+                        }
+                    } else {
+                        current_text.push(c);
+                    }
+                }
+
+                if !current_text.is_empty() {
+                    parts.push(StringPart::Text(current_text));
+                }
+
+                if has_expr {
+                    Some(Expr::FormatString(parts, line))
+                } else {
+                    let mut final_str = String::new();
+                    for part in parts {
+                        if let StringPart::Text(t) = part {
+                            final_str.push_str(&t);
+                        }
+                    }
+                    Some(Expr::String(final_str, line))
+                }
+            }
             TokenKind::Ident(name) => {
                 let func_name = name;
 
@@ -140,11 +314,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn peek(&self) -> &Token<'a> {
+    fn peek(&self) -> &Token {
         &self.tokens[self.current]
     }
 
-    fn previous(&self) -> &Token<'a> {
+    fn previous(&self) -> &Token {
         &self.tokens[self.current - 1]
     }
 
@@ -159,7 +333,7 @@ impl<'a> Parser<'a> {
         std::mem::discriminant(&self.peek().kind) == std::mem::discriminant(kind)
     }
 
-    fn advance(&mut self) -> &Token<'a> {
+    fn advance(&mut self) -> &Token {
         if !self.is_at_end() {
             self.current += 1;
         }

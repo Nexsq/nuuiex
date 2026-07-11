@@ -1,12 +1,15 @@
 #[derive(Debug, Clone, PartialEq)]
-pub enum TokenKind<'a> {
-    Ident(&'a str),
+pub enum TokenKind {
+    Ident(String),
     Number(f64),
     String(String),
     Plus,
     Minus,
     Star,
     Slash,
+    Eq,
+    Let,
+    Const,
     LParen,
     RParen,
     Comma,
@@ -16,8 +19,8 @@ pub enum TokenKind<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Token<'a> {
-    pub kind: TokenKind<'a>,
+pub struct Token {
+    pub kind: TokenKind,
     pub line: usize,
 }
 
@@ -36,7 +39,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn tokenize(&mut self) -> Vec<Token<'a>> {
+    pub fn tokenize(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
         while !self.is_at_end() {
             let token = self.next_token();
@@ -68,7 +71,7 @@ impl<'a> Lexer<'a> {
             .unwrap_or(self.source.len())
     }
 
-    fn next_token(&mut self) -> Token<'a> {
+    fn next_token(&mut self) -> Token {
         while !self.is_at_end() {
             let c = self.peek();
             match c {
@@ -117,6 +120,13 @@ impl<'a> Lexer<'a> {
                         line: self.line,
                     };
                 }
+                '=' => {
+                    self.advance();
+                    return Token {
+                        kind: TokenKind::Eq,
+                        line: self.line,
+                    };
+                }
                 '(' => {
                     self.advance();
                     return Token {
@@ -156,7 +166,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn string(&mut self) -> Token<'a> {
+    fn string(&mut self) -> Token {
         let start_line = self.line;
         self.advance();
         let mut val = String::new();
@@ -199,7 +209,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn number(&mut self) -> Token<'a> {
+    fn number(&mut self) -> Token {
         let start = self.current_byte_pos();
 
         while self.peek().is_ascii_digit() {
@@ -222,7 +232,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn identifier(&mut self) -> Token<'a> {
+    fn identifier(&mut self) -> Token {
         let start = self.current_byte_pos();
 
         while self.peek().is_alphanumeric() || self.peek() == '_' {
@@ -230,9 +240,15 @@ impl<'a> Lexer<'a> {
         }
 
         let end = self.current_byte_pos();
+        let text = &self.source[start..end];
+        let kind = match text {
+            "let" => TokenKind::Let,
+            "const" => TokenKind::Const,
+            _ => TokenKind::Ident(text.to_string()),
+        };
 
         Token {
-            kind: TokenKind::Ident(&self.source[start..end]),
+            kind,
             line: self.line,
         }
     }

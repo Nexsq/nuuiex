@@ -483,6 +483,7 @@ impl MainView {
 
         if let Some((path, rp)) = target {
             self.running_macros[self.current_tab] = None;
+            self.editors[self.current_tab].process_rx = None;
             self.editors[self.current_tab].load_file(path, true, rp);
             self.active = ActivePanel::Main;
             self.list_input = ListInputMode::None;
@@ -506,8 +507,12 @@ impl MainView {
 
         if let Some((name, path)) = target {
             if let Ok(source) = std::fs::read_to_string(&path) {
-                let output = crate::engine::core::run(&source);
-                self.editors[self.current_tab].state.lines = output;
+                let (tx, rx) = std::sync::mpsc::channel();
+                std::thread::spawn(move || {
+                    crate::engine::core::run_in_thread(&source, tx);
+                });
+                self.editors[self.current_tab].process_rx = Some(rx);
+                self.editors[self.current_tab].state.lines = vec![String::new()];
             } else {
                 self.editors[self.current_tab].state.lines =
                     vec![format!("Failed to read script '{}'", name)];
@@ -905,6 +910,7 @@ pub fn handle_list_action(
                         {
                             view.editors[i].file_path = None;
                             view.running_macros[i] = None;
+                            view.editors[i].process_rx = None;
                             view.editors[i].state.lines = vec![String::new()];
                         }
                     }
@@ -1002,6 +1008,7 @@ pub fn handle_list_action(
                     {
                         view.editors[i].file_path = None;
                         view.running_macros[i] = None;
+                        view.editors[i].process_rx = None;
                         view.editors[i].state.lines = vec![String::new()];
                     }
                 }
