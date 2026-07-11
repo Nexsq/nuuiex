@@ -226,7 +226,7 @@ pub fn error_box(
             let term_h = canvas.height;
 
             let pad: u16 = 2;
-            let mut err_box = Box::new(term_w, term_h, pad, border, border_style);
+            let mut err_box = Box::new(term_w, term_h, pad, Border::Heavy, border_style);
 
             let inner_w = term_w.saturating_sub(pad * 2);
             let inner_h = term_h.saturating_sub(pad * 2);
