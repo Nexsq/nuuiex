@@ -4,6 +4,8 @@ pub mod mainbox;
 pub mod r#static;
 
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{
     Border, Box, Canvas, Color, Key, Modifier, Style, conf::Config, editor::Editor, lib::MacroNode,
@@ -36,6 +38,7 @@ pub struct MainView {
     pub current_tab: usize,
     pub editors: [Editor; 6],
     pub running_macros: [Option<PathBuf>; 6],
+    pub cancellation_tokens: [Option<Arc<AtomicBool>>; 6],
     pub main_box: Box,
     pub main_x: i16,
     pub main_y: i16,
@@ -91,6 +94,7 @@ impl MainView {
 
         let editors = std::array::from_fn(|_| Editor::new());
         let running_macros = std::array::from_fn(|_| None);
+        let cancellation_tokens = std::array::from_fn(|_| None);
 
         let mut view = Self {
             term_w,
@@ -106,6 +110,7 @@ impl MainView {
             current_tab: 0,
             editors,
             running_macros,
+            cancellation_tokens,
             main_box: dummy(),
             main_x: 0,
             main_y: 0,
@@ -185,6 +190,12 @@ impl MainView {
             editor.is_editing = false;
             editor.error_count = 0;
             editor.error_lines.clear();
+
+            editor.scroll_x = 0;
+            editor.scroll_y = 0;
+            editor.state.cursor_x = 0;
+            editor.state.cursor_y = 0;
+            editor.state.selection_start = None;
         }
     }
 
@@ -489,8 +500,12 @@ impl MainView {
         }
 
         if let Some((path, rp)) = target {
+            if let Some(token) = self.cancellation_tokens[self.current_tab].take() {
+                token.store(true, Ordering::SeqCst);
+            }
             self.running_macros[self.current_tab] = None;
             self.editors[self.current_tab].process_rx = None;
+
             self.editors[self.current_tab].load_file(path, true, rp);
             self.active = ActivePanel::Main;
             self.list_input = ListInputMode::None;
@@ -513,17 +528,31 @@ impl MainView {
         }
 
         if let Some((name, path)) = target {
+            if let Some(token) = self.cancellation_tokens[self.current_tab].take() {
+                token.store(true, Ordering::SeqCst);
+            }
+
             if let Ok(source) = std::fs::read_to_string(&path) {
                 let (tx, rx) = std::sync::mpsc::channel();
+                let cancel_token = Arc::new(AtomicBool::new(false));
+                let thread_cancel_token = Arc::clone(&cancel_token);
                 std::thread::spawn(move || {
-                    crate::engine::core::run_in_thread(&source, tx);
+                    crate::engine::core::run_in_thread(&source, tx, thread_cancel_token);
                 });
+
                 self.editors[self.current_tab].process_rx = Some(rx);
                 self.editors[self.current_tab].state.lines = vec![String::new()];
+                self.cancellation_tokens[self.current_tab] = Some(cancel_token);
             } else {
                 self.editors[self.current_tab].state.lines =
                     vec![format!("Failed to read script '{}'", name)];
             }
+
+            self.editors[self.current_tab].scroll_x = 0;
+            self.editors[self.current_tab].scroll_y = 0;
+            self.editors[self.current_tab].state.cursor_x = 0;
+            self.editors[self.current_tab].state.cursor_y = 0;
+            self.editors[self.current_tab].state.selection_start = None;
 
             self.editors[self.current_tab].file_path = None;
             self.running_macros[self.current_tab] = Some(path);
@@ -917,6 +946,9 @@ pub fn handle_list_action(
                         if view.editors[i].file_path.as_ref() == Some(&path)
                             || view.running_macros[i].as_ref() == Some(&path)
                         {
+                            if let Some(token) = view.cancellation_tokens[i].take() {
+                                token.store(true, std::sync::atomic::Ordering::SeqCst);
+                            }
                             view.editors[i].file_path = None;
                             view.running_macros[i] = None;
                             view.editors[i].process_rx = None;
@@ -1017,6 +1049,9 @@ pub fn handle_list_action(
                     if view.editors[i].file_path.as_ref() == Some(&path)
                         || view.running_macros[i].as_ref() == Some(&path)
                     {
+                        if let Some(token) = view.cancellation_tokens[i].take() {
+                            token.store(true, std::sync::atomic::Ordering::SeqCst);
+                        }
                         view.editors[i].file_path = None;
                         view.running_macros[i] = None;
                         view.editors[i].process_rx = None;

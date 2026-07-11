@@ -35,6 +35,16 @@ impl Parser {
         stmts
     }
 
+    fn check_statement_end(&self) -> bool {
+        self.check(&TokenKind::Newline) || self.is_at_end() || self.check(&TokenKind::Dedent)
+    }
+
+    fn consume_statement_end(&mut self) {
+        if self.check(&TokenKind::Newline) {
+            self.advance();
+        }
+    }
+
     fn parse_statement(&mut self) -> Option<Stmt> {
         if self.check(&TokenKind::Let) {
             return self.parse_variable_declaration(false);
@@ -50,10 +60,8 @@ impl Parser {
         }
         if self.check(&TokenKind::Break) {
             let token = self.advance().clone();
-            if self.check(&TokenKind::Newline) || self.is_at_end() {
-                if !self.is_at_end() {
-                    self.advance();
-                }
+            if self.check_statement_end() {
+                self.consume_statement_end();
                 return Some(Stmt::Break(token.line));
             } else {
                 self.error("Expected newline after break.");
@@ -68,14 +76,13 @@ impl Parser {
             || self.check(&TokenKind::MinusEq)
             || self.check(&TokenKind::StarEq)
             || self.check(&TokenKind::SlashEq)
+            || self.check(&TokenKind::PercentEq)
         {
             let op_token = self.advance().clone();
             if let Expr::Ident(name, _) = expr {
                 let value = self.parse_expression()?;
-                if self.check(&TokenKind::Newline) || self.is_at_end() {
-                    if !self.is_at_end() {
-                        self.advance();
-                    }
+                if self.check_statement_end() {
+                    self.consume_statement_end();
                     if op_token.kind == TokenKind::Eq {
                         return Some(Stmt::Assign(name, value, op_token.line));
                     } else {
@@ -84,6 +91,7 @@ impl Parser {
                             TokenKind::MinusEq => BinaryOp::Sub,
                             TokenKind::StarEq => BinaryOp::Mul,
                             TokenKind::SlashEq => BinaryOp::Div,
+                            TokenKind::PercentEq => BinaryOp::Mod,
                             _ => unreachable!(),
                         };
                         return Some(Stmt::AssignOp(name, bin_op, value, op_token.line));
@@ -98,10 +106,8 @@ impl Parser {
             }
         }
 
-        if self.check(&TokenKind::Newline) || self.is_at_end() {
-            if !self.is_at_end() {
-                self.advance();
-            }
+        if self.check_statement_end() {
+            self.consume_statement_end();
             Some(Stmt::Expr(expr))
         } else {
             self.error("Expected newline after expression.");
@@ -144,11 +150,11 @@ impl Parser {
             return None;
         }
         self.advance();
-        if !self.check(&TokenKind::Newline) && !self.is_at_end() {
+        if !self.check_statement_end() {
             self.error("Expected newline after ':'.");
             return None;
         }
-        self.advance();
+        self.consume_statement_end();
 
         let body = self.parse_block()?;
         Some(Stmt::Loop(body))
@@ -162,11 +168,11 @@ impl Parser {
             return None;
         }
         self.advance();
-        if !self.check(&TokenKind::Newline) && !self.is_at_end() {
+        if !self.check_statement_end() {
             self.error("Expected newline after ':'.");
             return None;
         }
-        self.advance();
+        self.consume_statement_end();
 
         let then_branch = self.parse_block()?;
 
@@ -179,11 +185,11 @@ impl Parser {
                 return None;
             }
             self.advance();
-            if !self.check(&TokenKind::Newline) && !self.is_at_end() {
+            if !self.check_statement_end() {
                 self.error("Expected newline after ':'.");
                 return None;
             }
-            self.advance();
+            self.consume_statement_end();
 
             let elif_branch = self.parse_block()?;
             elifs.push((elif_cond, elif_branch));
@@ -197,11 +203,11 @@ impl Parser {
                 return None;
             }
             self.advance();
-            if !self.check(&TokenKind::Newline) && !self.is_at_end() {
+            if !self.check_statement_end() {
                 self.error("Expected newline after ':'.");
                 return None;
             }
-            self.advance();
+            self.consume_statement_end();
 
             else_branch = Some(self.parse_block()?);
         }
@@ -229,10 +235,8 @@ impl Parser {
 
         let value = self.parse_expression()?;
 
-        if self.check(&TokenKind::Newline) || self.is_at_end() {
-            if !self.is_at_end() {
-                self.advance();
-            }
+        if self.check_statement_end() {
+            self.consume_statement_end();
             if is_const {
                 Some(Stmt::Const(name, value, token.line))
             } else {
@@ -290,7 +294,10 @@ impl Parser {
     fn parse_factor(&mut self) -> Option<Expr> {
         let mut expr = self.parse_unary()?;
 
-        while self.check(&TokenKind::Star) || self.check(&TokenKind::Slash) {
+        while self.check(&TokenKind::Star)
+            || self.check(&TokenKind::Slash)
+            || self.check(&TokenKind::Percent)
+        {
             let token = self.advance().clone();
             let op = BinaryOp::from_token(&token.kind).unwrap();
             let right = self.parse_unary()?;
@@ -325,6 +332,8 @@ impl Parser {
         let line = token.line;
         match token.kind {
             TokenKind::Number(n) => Some(Expr::Number(n, line)),
+            TokenKind::True => Some(Expr::Bool(true, line)),
+            TokenKind::False => Some(Expr::Bool(false, line)),
             TokenKind::String(s) => {
                 let mut parts = Vec::new();
                 let mut current_text = String::new();

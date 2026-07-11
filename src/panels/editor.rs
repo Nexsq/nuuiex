@@ -10,6 +10,7 @@ use crate::{Box, Color, Key, Modifier, Style, theme::themecore::Theme};
 pub enum Mode {
     Command,
     Insert,
+    Search,
 }
 
 #[derive(Clone)]
@@ -38,6 +39,9 @@ pub struct Editor {
     pub last_key_file_bounds: bool,
     pub last_key_delete: bool,
     pub last_key_copy: bool,
+
+    pub search_query: String,
+    pub last_search: String,
 
     pub error_count: usize,
     pub error_lines: HashSet<usize>,
@@ -74,6 +78,8 @@ impl Editor {
             last_key_file_bounds: false,
             last_key_delete: false,
             last_key_copy: false,
+            search_query: String::new(),
+            last_search: String::new(),
             error_count: 0,
             error_lines: HashSet::new(),
             process_rx: None,
@@ -177,6 +183,38 @@ impl Editor {
         let mut needs_analysis = false;
 
         match self.mode {
+            Mode::Search => match key {
+                Key::Esc => {
+                    self.mode = Mode::Command;
+                }
+                Key::Enter => {
+                    if !self.search_query.is_empty() {
+                        self.last_search = self.search_query.clone();
+                        self.find_next();
+                    }
+                }
+                Key::Backspace => {
+                    self.search_query.pop();
+                }
+                Key::Char(c) | Key::Shift(c) => {
+                    if !c.is_control() {
+                        let caps = crate::Terminal::is_caps_lock_on();
+                        let mut final_c = c;
+                        if let Key::Shift(_) = key {
+                            final_c = c.to_ascii_uppercase();
+                            if caps && final_c.is_ascii_alphabetic() {
+                                final_c = final_c.to_ascii_lowercase();
+                            }
+                        } else {
+                            if caps && final_c.is_ascii_alphabetic() {
+                                final_c = final_c.to_ascii_uppercase();
+                            }
+                        }
+                        self.search_query.push(final_c);
+                    }
+                }
+                _ => {}
+            },
             Mode::Command => {
                 let mut reset_select_all = true;
                 let mut reset_file_bounds = true;
@@ -187,7 +225,17 @@ impl Editor {
                     Key::Esc => {
                         self.visual_mode = false;
                         self.state.selection_start = None;
-                        self.mode = Mode::Insert;
+                        self.last_search.clear();
+                    }
+                    Key::Enter => {
+                        if !self.last_search.is_empty() {
+                            self.find_next();
+                        }
+                    }
+                    k if k == Key::Char(config.bind_edit_search) => {
+                        self.mode = Mode::Search;
+                        self.visual_mode = false;
+                        self.state.selection_start = None;
                     }
                     k if k == Key::Char(config.bind_edit_insert) => {
                         self.visual_mode = false;
@@ -339,19 +387,21 @@ impl Editor {
                     _ => {}
                 }
 
-                if reset_select_all {
-                    self.last_key_select_all = false;
+                if self.mode != Mode::Search {
+                    if reset_select_all {
+                        self.last_key_select_all = false;
+                    }
+                    if reset_file_bounds {
+                        self.last_key_file_bounds = false;
+                    }
+                    if reset_delete {
+                        self.last_key_delete = false;
+                    }
+                    if reset_copy {
+                        self.last_key_copy = false;
+                    }
+                    self.clamp_cursor();
                 }
-                if reset_file_bounds {
-                    self.last_key_file_bounds = false;
-                }
-                if reset_delete {
-                    self.last_key_delete = false;
-                }
-                if reset_copy {
-                    self.last_key_copy = false;
-                }
-                self.clamp_cursor();
             }
             Mode::Insert => match key {
                 Key::Esc => {
@@ -465,6 +515,44 @@ impl Editor {
         }
 
         saved
+    }
+
+    fn find_next(&mut self) {
+        if self.last_search.is_empty() {
+            return;
+        }
+        let query = &self.last_search;
+        let query_char_count = query.chars().count();
+
+        let num_lines = self.state.lines.len();
+        let start_y = self.state.cursor_y;
+        let mut start_x = self.state.cursor_x;
+
+        for i in 0..=num_lines {
+            let y = (start_y + i) % num_lines;
+            let line = &self.state.lines[y];
+
+            let offset = if i == 0 { start_x } else { 0 };
+
+            let byte_offset = line
+                .char_indices()
+                .nth(offset)
+                .map(|(b, _)| b)
+                .unwrap_or(line.len());
+
+            if let Some(match_byte_idx) = line[byte_offset..].find(query) {
+                let absolute_byte_idx = byte_offset + match_byte_idx;
+                let match_char_idx = line[..absolute_byte_idx].chars().count();
+
+                self.state.cursor_y = y;
+                self.state.cursor_x = match_char_idx + query_char_count;
+                self.state.selection_start = Some((match_char_idx, y));
+                self.visual_mode = true;
+                self.clamp_cursor();
+                return;
+            }
+            start_x = 0;
+        }
     }
 
     fn move_cursor(&mut self, dx: isize, dy: isize, select: bool) {
@@ -1042,6 +1130,7 @@ impl Editor {
                         ("[CMD]", theme.editor_cmd)
                     }
                 }
+                Mode::Search => ("[SRC]", theme.editor_src),
                 Mode::Insert => ("[INS]", theme.editor_ins),
             };
 
@@ -1074,6 +1163,12 @@ impl Editor {
         let inner_w = width.saturating_sub(2) as usize;
         let inner_h = height.saturating_sub(2) as usize;
 
+        let text_inner_h = if self.mode == Mode::Search {
+            inner_h.saturating_sub(1)
+        } else {
+            inner_h
+        };
+
         let show_line_numbers = self.file_path.is_some();
         let line_count = self.state.lines.len();
         let max_num_width = if line_count < 10 {
@@ -1099,8 +1194,8 @@ impl Editor {
 
         if self.state.cursor_y < self.scroll_y {
             self.scroll_y = self.state.cursor_y;
-        } else if self.state.cursor_y >= self.scroll_y + inner_h && inner_h > 0 {
-            self.scroll_y = self.state.cursor_y - inner_h + 1;
+        } else if self.state.cursor_y >= self.scroll_y + text_inner_h && text_inner_h > 0 {
+            self.scroll_y = self.state.cursor_y - text_inner_h + 1;
         }
 
         if self.state.cursor_x < self.scroll_x {
@@ -1117,7 +1212,7 @@ impl Editor {
             .iter()
             .enumerate()
             .skip(self.scroll_y)
-            .take(inner_h)
+            .take(text_inner_h)
         {
             let display_y = (i - self.scroll_y) as i16;
 
@@ -1141,7 +1236,6 @@ impl Editor {
             }
 
             let is_error_line = self.is_editing && self.error_lines.contains(&(i + 1));
-
             let line_chars: Vec<char> = line.chars().collect();
             let mut syntax_colors = Vec::with_capacity(line_chars.len());
 
@@ -1267,7 +1361,11 @@ impl Editor {
                     },
                 };
 
-                if self.is_editing && i == self.state.cursor_y && j == self.state.cursor_x {
+                if self.mode != Mode::Search
+                    && self.is_editing
+                    && i == self.state.cursor_y
+                    && j == self.state.cursor_x
+                {
                     style.bg = Color::White;
                     style.fg = Color::Black;
                 }
@@ -1286,7 +1384,7 @@ impl Editor {
                 }
             }
 
-            if self.is_editing && i == self.state.cursor_y {
+            if self.mode != Mode::Search && self.is_editing && i == self.state.cursor_y {
                 let line_len = line_chars.len();
                 if self.state.cursor_x == line_len {
                     if self.state.cursor_x >= self.scroll_x {
@@ -1311,6 +1409,32 @@ impl Editor {
                         }
                     }
                 }
+            }
+        }
+
+        if self.mode == Mode::Search {
+            let bar_y = text_inner_h as u16 + 1;
+            let mut bar_text = format!(":{}", self.search_query);
+
+            let char_count = bar_text.chars().count();
+            if char_count < inner_w {
+                bar_text.push('_');
+                let spaces = inner_w.saturating_sub(char_count + 1);
+                bar_text.push_str(&" ".repeat(spaces));
+            } else {
+                let skip = char_count.saturating_sub(inner_w) + 1;
+                bar_text = bar_text.chars().skip(skip).collect();
+                bar_text.push('_');
+            }
+
+            let bar_style = Style {
+                fg: Color::Black,
+                bg: theme.editor_src_bg,
+                md: Modifier::None,
+            };
+
+            for (x, c) in bar_text.chars().enumerate().take(inner_w) {
+                b.put_cell(crate::Cell { c, s: bar_style }, x as u16 + 1, bar_y);
             }
         }
 

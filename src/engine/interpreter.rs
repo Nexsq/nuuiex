@@ -1,10 +1,65 @@
 use super::ast::{BinaryOp, Expr, Stmt, StringPart};
 use super::value::Value;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub struct Environment {
-    pub values: HashMap<String, Value>,
-    pub constants: HashSet<String>,
+    pub scopes: Vec<HashMap<String, Value>>,
+    pub constants: Vec<HashSet<String>>,
+}
+
+impl Environment {
+    pub fn new() -> Self {
+        Self {
+            scopes: vec![HashMap::new()],
+            constants: vec![HashSet::new()],
+        }
+    }
+
+    pub fn push(&mut self) {
+        self.scopes.push(HashMap::new());
+        self.constants.push(HashSet::new());
+    }
+
+    pub fn pop(&mut self) {
+        self.scopes.pop();
+        self.constants.pop();
+    }
+
+    pub fn define(&mut self, name: String, val: Value, is_const: bool) -> Result<(), String> {
+        let last_scope = self.scopes.last_mut().unwrap();
+        if last_scope.contains_key(&name) {
+            return Err(format!("Variable '{}' already defined in this scope", name));
+        }
+        last_scope.insert(name.clone(), val);
+        if is_const {
+            self.constants.last_mut().unwrap().insert(name);
+        }
+        Ok(())
+    }
+
+    pub fn assign(&mut self, name: &str, val: Value) -> Result<(), String> {
+        for (scope, consts) in self.scopes.iter_mut().zip(self.constants.iter()).rev() {
+            if scope.contains_key(name) {
+                if consts.contains(name) {
+                    return Err(format!("Cannot modify constant '{}'", name));
+                }
+                scope.insert(name.to_string(), val);
+                return Ok(());
+            }
+        }
+        Err(format!("Undefined variable '{}'", name))
+    }
+
+    pub fn get(&self, name: &str) -> Option<Value> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(val) = scope.get(name) {
+                return Some(val.clone());
+            }
+        }
+        None
+    }
 }
 
 pub struct Interpreter {
@@ -14,6 +69,7 @@ pub struct Interpreter {
     tx: std::sync::mpsc::Sender<Vec<String>>,
     pub should_exit: bool,
     pub env: Environment,
+    cancel_token: Arc<AtomicBool>,
 }
 
 #[derive(PartialEq)]
@@ -23,17 +79,15 @@ pub enum Signal {
 }
 
 impl Interpreter {
-    pub fn new(tx: std::sync::mpsc::Sender<Vec<String>>) -> Self {
+    pub fn new(tx: std::sync::mpsc::Sender<Vec<String>>, cancel_token: Arc<AtomicBool>) -> Self {
         Self {
             output: Vec::new(),
             errors: Vec::new(),
             current_line: String::new(),
             tx,
             should_exit: false,
-            env: Environment {
-                values: HashMap::new(),
-                constants: HashSet::new(),
-            },
+            env: Environment::new(),
+            cancel_token,
         }
     }
 
@@ -74,20 +128,31 @@ impl Interpreter {
     }
 
     fn exec_block(&mut self, stmts: &[Stmt]) -> Result<Signal, String> {
+        self.env.push();
+        let mut res = Ok(Signal::None);
+
         for stmt in stmts {
-            if self.should_exit {
+            if self.should_exit || self.cancel_token.load(Ordering::SeqCst) {
+                self.should_exit = true;
                 break;
             }
             match self.execute_stmt(stmt) {
-                Ok(Signal::Break) => return Ok(Signal::Break),
+                Ok(Signal::Break) => {
+                    res = Ok(Signal::Break);
+                    break;
+                }
                 Ok(Signal::None) => continue,
                 Err(err) => {
                     self.errors.push(err);
-                    return Ok(Signal::None);
+                    self.should_exit = true;
+                    res = Ok(Signal::None);
+                    break;
                 }
             }
         }
-        Ok(Signal::None)
+
+        self.env.pop();
+        res
     }
 
     fn execute_stmt(&mut self, stmt: &Stmt) -> Result<Signal, String> {
@@ -98,52 +163,35 @@ impl Interpreter {
             }
             Stmt::Let(name, expr, line) => {
                 let val = self.eval_expr(expr)?;
-                if self.env.values.contains_key(name) {
-                    return Err(format!(
-                        "Line {}: Variable '{}' already defined",
-                        line, name
-                    ));
+                if let Err(e) = self.env.define(name.clone(), val, false) {
+                    return Err(format!("Line {}: {}", line, e));
                 }
-                self.env.values.insert(name.clone(), val);
                 Ok(Signal::None)
             }
             Stmt::Const(name, expr, line) => {
                 let val = self.eval_expr(expr)?;
-                if self.env.values.contains_key(name) {
-                    return Err(format!(
-                        "Line {}: Variable '{}' already defined",
-                        line, name
-                    ));
+                if let Err(e) = self.env.define(name.clone(), val, true) {
+                    return Err(format!("Line {}: {}", line, e));
                 }
-                self.env.values.insert(name.clone(), val);
-                self.env.constants.insert(name.clone());
                 Ok(Signal::None)
             }
             Stmt::Assign(name, expr, line) => {
-                if self.env.constants.contains(name) {
-                    return Err(format!(
-                        "Line {}: Cannot reassign constant '{}'",
-                        line, name
-                    ));
-                }
-                if !self.env.values.contains_key(name) {
-                    return Err(format!("Line {}: Undefined variable '{}'", line, name));
-                }
                 let val = self.eval_expr(expr)?;
-                self.env.values.insert(name.clone(), val);
+                if let Err(e) = self.env.assign(name, val) {
+                    return Err(format!("Line {}: {}", line, e));
+                }
                 Ok(Signal::None)
             }
             Stmt::AssignOp(name, op, expr, line) => {
-                if self.env.constants.contains(name) {
-                    return Err(format!("Line {}: Cannot modify constant '{}'", line, name));
-                }
-                if !self.env.values.contains_key(name) {
-                    return Err(format!("Line {}: Undefined variable '{}'", line, name));
-                }
                 let right_val = self.eval_expr(expr)?;
-                let left_val = self.env.values.get(name).unwrap().clone();
+                let left_val = self
+                    .env
+                    .get(name)
+                    .ok_or_else(|| format!("Line {}: Undefined variable '{}'", line, name))?;
                 let new_val = self.eval_binary_op(&left_val, op, &right_val, *line)?;
-                self.env.values.insert(name.clone(), new_val);
+                if let Err(e) = self.env.assign(name, new_val) {
+                    return Err(format!("Line {}: {}", line, e));
+                }
                 Ok(Signal::None)
             }
             Stmt::If(cond, then_b, elifs, else_b) => {
@@ -164,7 +212,8 @@ impl Interpreter {
             }
             Stmt::Loop(body) => {
                 loop {
-                    if self.should_exit {
+                    if self.should_exit || self.cancel_token.load(Ordering::SeqCst) {
+                        self.should_exit = true;
                         break;
                     }
                     match self.exec_block(body)? {
@@ -197,21 +246,37 @@ impl Interpreter {
                         Ok(Value::Number(ln / rn))
                     }
                 }
-                BinaryOp::EqEq => Ok(Value::Number(if ln == rn { 1.0 } else { 0.0 })),
-                BinaryOp::NotEq => Ok(Value::Number(if ln != rn { 1.0 } else { 0.0 })),
-                BinaryOp::Less => Ok(Value::Number(if ln < rn { 1.0 } else { 0.0 })),
-                BinaryOp::Greater => Ok(Value::Number(if ln > rn { 1.0 } else { 0.0 })),
-                BinaryOp::LessEq => Ok(Value::Number(if ln <= rn { 1.0 } else { 0.0 })),
-                BinaryOp::GreaterEq => Ok(Value::Number(if ln >= rn { 1.0 } else { 0.0 })),
+                BinaryOp::Mod => {
+                    if *rn == 0.0 {
+                        Err(format!("Line {}: Modulo by zero", line))
+                    } else {
+                        Ok(Value::Number(ln % rn))
+                    }
+                }
+                BinaryOp::EqEq => Ok(Value::Bool(ln == rn)),
+                BinaryOp::NotEq => Ok(Value::Bool(ln != rn)),
+                BinaryOp::Less => Ok(Value::Bool(ln < rn)),
+                BinaryOp::Greater => Ok(Value::Bool(ln > rn)),
+                BinaryOp::LessEq => Ok(Value::Bool(ln <= rn)),
+                BinaryOp::GreaterEq => Ok(Value::Bool(ln >= rn)),
             },
+            (Value::Bool(lb), Value::Bool(rb)) => match op {
+                BinaryOp::EqEq => Ok(Value::Bool(lb == rb)),
+                BinaryOp::NotEq => Ok(Value::Bool(lb != rb)),
+                _ => Err(format!("Line {}: Unsupported boolean operation", line)),
+            },
+            (Value::String(ls), right) if *op == BinaryOp::Add => {
+                Ok(Value::String(format!("{}{}", ls, right)))
+            }
+            (left, Value::String(rs)) if *op == BinaryOp::Add => {
+                Ok(Value::String(format!("{}{}", left, rs)))
+            }
             (Value::String(ls), Value::String(rs)) => match op {
-                BinaryOp::Add => Ok(Value::String(format!("{}{}", ls, rs))),
-                BinaryOp::EqEq => Ok(Value::Number(if ls == rs { 1.0 } else { 0.0 })),
-                BinaryOp::NotEq => Ok(Value::Number(if ls != rs { 1.0 } else { 0.0 })),
+                BinaryOp::EqEq => Ok(Value::Bool(ls == rs)),
+                BinaryOp::NotEq => Ok(Value::Bool(ls != rs)),
                 _ => Err(format!("Line {}: Unsupported string operation", line)),
             },
             (Value::String(ls), Value::Number(rn)) => match op {
-                BinaryOp::Add => Ok(Value::String(format!("{}{}", ls, rn))),
                 BinaryOp::Mul => {
                     let count = *rn as i64;
                     if count < 0 {
@@ -225,7 +290,6 @@ impl Interpreter {
                 _ => Err(format!("Line {}: Unsupported string operation", line)),
             },
             (Value::Number(ln), Value::String(rs)) => match op {
-                BinaryOp::Add => Ok(Value::String(format!("{}{}", ln, rs))),
                 BinaryOp::Mul => {
                     let count = *ln as i64;
                     if count < 0 {
@@ -240,9 +304,9 @@ impl Interpreter {
             },
             _ => {
                 if *op == BinaryOp::EqEq {
-                    Ok(Value::Number(if left == right { 1.0 } else { 0.0 }))
+                    Ok(Value::Bool(left == right))
                 } else if *op == BinaryOp::NotEq {
-                    Ok(Value::Number(if left != right { 1.0 } else { 0.0 }))
+                    Ok(Value::Bool(left != right))
                 } else {
                     Err(format!("Line {}: Unsupported operands for {:?}", line, op))
                 }
@@ -254,6 +318,7 @@ impl Interpreter {
         match expr {
             Expr::Number(n, _) => Ok(Value::Number(*n)),
             Expr::String(s, _) => Ok(Value::String(s.clone())),
+            Expr::Bool(b, _) => Ok(Value::Bool(*b)),
             Expr::FormatString(parts, _) => {
                 let mut result = String::new();
                 for part in parts {
@@ -268,7 +333,7 @@ impl Interpreter {
                 Ok(Value::String(result))
             }
             Expr::Ident(name, line) => {
-                if let Some(val) = self.env.values.get(name) {
+                if let Some(val) = self.env.get(name) {
                     Ok(val.clone())
                 } else {
                     Err(format!("Line {}: Undefined variable '{}'", line, name))
@@ -292,6 +357,10 @@ impl Interpreter {
                     if let Value::Number(ms) = eval_args[0] {
                         if ms < 0.0 {
                             return Err(format!("Line {}: 'sleep' time cannot be negative", line));
+                        }
+                        if self.cancel_token.load(Ordering::SeqCst) {
+                            self.should_exit = true;
+                            return Ok(Value::Nil);
                         }
                         std::thread::sleep(std::time::Duration::from_millis(ms as u64));
                         Ok(Value::Nil)

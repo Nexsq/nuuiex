@@ -4,7 +4,7 @@ use std::collections::HashSet;
 pub struct Analyzer {
     pub errors: Vec<String>,
     pub error_lines: HashSet<usize>,
-    pub defined_vars: HashSet<String>,
+    pub scopes: Vec<HashSet<String>>,
     pub loop_depth: usize,
 }
 
@@ -13,7 +13,7 @@ impl Analyzer {
         Self {
             errors: Vec::new(),
             error_lines: HashSet::new(),
-            defined_vars: HashSet::new(),
+            scopes: vec![HashSet::new()],
             loop_depth: 0,
         }
     }
@@ -21,6 +21,27 @@ impl Analyzer {
     fn error(&mut self, line: usize, msg: String) {
         self.error_lines.insert(line);
         self.errors.push(format!("Line {}: {}", line, msg));
+    }
+
+    fn push_scope(&mut self) {
+        self.scopes.push(HashSet::new());
+    }
+
+    fn pop_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    fn define(&mut self, name: &str) {
+        self.scopes.last_mut().unwrap().insert(name.to_string());
+    }
+
+    fn is_defined(&self, name: &str) -> bool {
+        for scope in self.scopes.iter().rev() {
+            if scope.contains(name) {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn analyze(&mut self, stmts: &[Stmt]) {
@@ -39,34 +60,43 @@ impl Analyzer {
             }
             Stmt::Let(name, expr, _) | Stmt::Const(name, expr, _) => {
                 self.analyze_expr(expr);
-                self.defined_vars.insert(name.clone());
+                self.define(name);
             }
             Stmt::Assign(name, expr, line) => {
                 self.analyze_expr(expr);
-                if !self.defined_vars.contains(name) {
+                if !self.is_defined(name) {
                     self.error(*line, format!("Undefined variable '{}'", name));
                 }
             }
             Stmt::AssignOp(name, _, expr, line) => {
                 self.analyze_expr(expr);
-                if !self.defined_vars.contains(name) {
+                if !self.is_defined(name) {
                     self.error(*line, format!("Undefined variable '{}'", name));
                 }
             }
             Stmt::If(cond, then_b, elifs, else_b) => {
                 self.analyze_expr(cond);
+                self.push_scope();
                 self.analyze(then_b);
+                self.pop_scope();
+
                 for (elif_cond, elif_b) in elifs {
                     self.analyze_expr(elif_cond);
+                    self.push_scope();
                     self.analyze(elif_b);
+                    self.pop_scope();
                 }
                 if let Some(e_b) = else_b {
+                    self.push_scope();
                     self.analyze(e_b);
+                    self.pop_scope();
                 }
             }
             Stmt::Loop(body) => {
                 self.loop_depth += 1;
+                self.push_scope();
                 self.analyze(body);
+                self.pop_scope();
                 self.loop_depth -= 1;
             }
             Stmt::Break(line) => {
@@ -79,7 +109,7 @@ impl Analyzer {
 
     fn analyze_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Number(_, _) | Expr::String(_, _) => {}
+            Expr::Number(_, _) | Expr::String(_, _) | Expr::Bool(_, _) => {}
             Expr::FormatString(parts, _) => {
                 for part in parts {
                     if let StringPart::Expr(e) = part {
@@ -88,7 +118,7 @@ impl Analyzer {
                 }
             }
             Expr::Ident(name, line) => {
-                if !self.defined_vars.contains(name) {
+                if !self.is_defined(name) {
                     self.error(*line, format!("Undefined variable '{}'", name));
                 }
             }

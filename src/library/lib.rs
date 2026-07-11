@@ -99,7 +99,7 @@ pub fn init(sorting: &str) -> Result<MacroLibrary, String> {
         Vec::new()
     };
 
-    let tree = scan_lib(&lib_dir, &lib_dir, sorting, &custom_order);
+    let tree = scan_lib(&lib_dir, &lib_dir, sorting, &custom_order, 0);
 
     Ok(MacroLibrary {
         root_path: lib_dir,
@@ -112,8 +112,13 @@ fn scan_lib(
     root_path: &Path,
     sorting: &str,
     custom_order: &[String],
+    depth: usize,
 ) -> Vec<MacroNode> {
     let mut nodes = Vec::new();
+
+    if depth > 32 {
+        return nodes;
+    }
 
     if let Ok(entries) = fs::read_dir(path) {
         for entry in entries.filter_map(Result::ok) {
@@ -130,7 +135,13 @@ fn scan_lib(
                 if file_type.is_dir() {
                     nodes.push(MacroNode::Folder {
                         name: raw_name,
-                        children: scan_lib(&entry_path, root_path, sorting, custom_order),
+                        children: scan_lib(
+                            &entry_path,
+                            root_path,
+                            sorting,
+                            custom_order,
+                            depth + 1,
+                        ),
                         path: entry_path,
                     });
                 } else if file_type.is_file() {

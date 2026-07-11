@@ -342,6 +342,15 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     },
                 },
                 Setting {
+                    name: "Search",
+                    key: "bind_edit_search",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_search.to_string(),
+                        default: def.bind_edit_search.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
                     name: "Undo",
                     key: "bind_edit_undo",
                     kind: SettingType::Custom {
@@ -484,6 +493,7 @@ pub fn settings_modal(
                 apply_setting!(config, set, "bind_edit_delete", bind_edit_delete);
                 apply_setting!(config, set, "bind_edit_copy", bind_edit_copy);
                 apply_setting!(config, set, "bind_edit_paste", bind_edit_paste);
+                apply_setting!(config, set, "bind_edit_search", bind_edit_search);
                 apply_setting!(config, set, "bind_edit_undo", bind_edit_undo);
                 apply_setting!(config, set, "bind_edit_redo", bind_edit_redo);
                 apply_setting!(config, set, "bind_edit_save", bind_edit_save);
@@ -798,6 +808,12 @@ pub fn settings_modal(
                                 }
                             }
                             apply_settings(&categories, config);
+
+                            let themes = available_themes();
+                            let current_theme_idx =
+                                themes.iter().position(|t| t == &config.theme).unwrap_or(0);
+                            categories = build_categories(config, &themes, current_theme_idx);
+
                             check_theme = true;
                             edit_mode = false;
                         }
@@ -894,6 +910,18 @@ pub fn settings_modal(
                                                 *idx = opts.len() - 1;
                                             }
                                             apply_settings(&categories, config);
+
+                                            let themes = available_themes();
+                                            let current_theme_idx = themes
+                                                .iter()
+                                                .position(|t| t == &config.theme)
+                                                .unwrap_or(0);
+                                            categories = build_categories(
+                                                config,
+                                                &themes,
+                                                current_theme_idx,
+                                            );
+
                                             check_theme = true;
                                         }
                                         SettingType::Custom { .. } | SettingType::Action => {}
@@ -916,6 +944,18 @@ pub fn settings_modal(
                                                 *idx = 0;
                                             }
                                             apply_settings(&categories, config);
+
+                                            let themes = available_themes();
+                                            let current_theme_idx = themes
+                                                .iter()
+                                                .position(|t| t == &config.theme)
+                                                .unwrap_or(0);
+                                            categories = build_categories(
+                                                config,
+                                                &themes,
+                                                current_theme_idx,
+                                            );
+
                                             check_theme = true;
                                         }
                                         SettingType::Custom { .. } | SettingType::Action => {}
@@ -1038,6 +1078,12 @@ pub fn settings_modal(
                                                             main_view.list_selected = 0;
                                                             main_view.list_scroll = 0;
                                                             for i in 0..6 {
+                                                                if let Some(token) = main_view
+                                                                    .cancellation_tokens[i]
+                                                                    .take()
+                                                                {
+                                                                    token.store(true, std::sync::atomic::Ordering::SeqCst);
+                                                                }
                                                                 main_view.editors[i].file_path =
                                                                     None;
                                                                 main_view.editors[i]
@@ -1138,6 +1184,9 @@ pub fn settings_modal(
             }
             if config.tabs_num != prev_tabs_num {
                 for i in config.tabs_num..6 {
+                    if let Some(token) = main_view.cancellation_tokens[i].take() {
+                        token.store(true, std::sync::atomic::Ordering::SeqCst);
+                    }
                     main_view.editors[i].process_rx = None;
                     main_view.running_macros[i] = None;
                     main_view.editors[i].file_path = None;

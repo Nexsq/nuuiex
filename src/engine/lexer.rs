@@ -3,15 +3,19 @@ pub enum TokenKind {
     Ident(String),
     Number(f64),
     String(String),
+    True,
+    False,
     Plus,
     Minus,
     Star,
     Slash,
+    Percent,
     Eq,
     PlusEq,
     MinusEq,
     StarEq,
     SlashEq,
+    PercentEq,
     EqEq,
     NotEq,
     Less,
@@ -248,6 +252,20 @@ impl<'a> Lexer<'a> {
                         line: self.line,
                     };
                 }
+                '%' => {
+                    self.advance();
+                    if self.peek() == '=' {
+                        self.advance();
+                        return Token {
+                            kind: TokenKind::PercentEq,
+                            line: self.line,
+                        };
+                    }
+                    return Token {
+                        kind: TokenKind::Percent,
+                        line: self.line,
+                    };
+                }
                 '=' => {
                     self.advance();
                     if self.peek() == '=' {
@@ -435,6 +453,8 @@ impl<'a> Lexer<'a> {
             "elif" => TokenKind::Elif,
             "else" => TokenKind::Else,
             "break" => TokenKind::Break,
+            "true" => TokenKind::True,
+            "false" => TokenKind::False,
             _ => TokenKind::Ident(text.to_string()),
         };
 

@@ -27,6 +27,7 @@ pub struct Config {
     pub bind_edit_delete: char,
     pub bind_edit_copy: char,
     pub bind_edit_paste: char,
+    pub bind_edit_search: char,
     pub bind_edit_undo: char,
     pub bind_edit_redo: char,
     pub bind_edit_save: char,
@@ -64,6 +65,7 @@ impl Default for Config {
             bind_edit_delete: '\0',
             bind_edit_copy: '\0',
             bind_edit_paste: '\0',
+            bind_edit_search: '\0',
             bind_edit_undo: '\0',
             bind_edit_redo: '\0',
             bind_edit_save: '\0',
@@ -216,6 +218,13 @@ impl Config {
                             .unwrap_or(self.bind_edit_paste)
                             .to_ascii_lowercase()
                     }
+                    "bind_edit_search" => {
+                        self.bind_edit_search = val
+                            .chars()
+                            .next()
+                            .unwrap_or(self.bind_edit_search)
+                            .to_ascii_lowercase()
+                    }
                     "bind_edit_undo" => {
                         self.bind_edit_undo = val
                             .chars()
@@ -318,6 +327,7 @@ impl Config {
         self.bind_edit_delete = default.bind_edit_delete;
         self.bind_edit_copy = default.bind_edit_copy;
         self.bind_edit_paste = default.bind_edit_paste;
+        self.bind_edit_search = default.bind_edit_search;
         self.bind_edit_undo = default.bind_edit_undo;
         self.bind_edit_redo = default.bind_edit_redo;
         self.bind_edit_save = default.bind_edit_save;
@@ -472,6 +482,12 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.bind_edit_paste, comment
+                    )
+                    .unwrap(),
+                    "bind_edit_search" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_search, comment
                     )
                     .unwrap(),
                     "bind_edit_undo" => writeln!(

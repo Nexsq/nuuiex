@@ -10,6 +10,7 @@ pub enum StringPart {
 pub enum Expr {
     Number(f64, usize),
     String(String, usize),
+    Bool(bool, usize),
     FormatString(Vec<StringPart>, usize),
     Ident(String, usize),
     Binary(Box<Expr>, BinaryOp, Box<Expr>, usize),
@@ -21,6 +22,7 @@ impl Expr {
         match self {
             Expr::Number(_, l) => *l,
             Expr::String(_, l) => *l,
+            Expr::Bool(_, l) => *l,
             Expr::FormatString(_, l) => *l,
             Expr::Ident(_, l) => *l,
             Expr::Binary(_, _, _, l) => *l,
@@ -35,6 +37,7 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    Mod,
     EqEq,
     NotEq,
     Less,
@@ -50,6 +53,7 @@ impl BinaryOp {
             TokenKind::Minus => Some(Self::Sub),
             TokenKind::Star => Some(Self::Mul),
             TokenKind::Slash => Some(Self::Div),
+            TokenKind::Percent => Some(Self::Mod),
             TokenKind::EqEq => Some(Self::EqEq),
             TokenKind::NotEq => Some(Self::NotEq),
             TokenKind::Less => Some(Self::Less),

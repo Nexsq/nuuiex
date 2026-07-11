@@ -33,6 +33,8 @@ pub struct Theme {
     pub editor_ins: Color,
     pub editor_cmd: Color,
     pub editor_vis: Color,
+    pub editor_src: Color,
+    pub editor_src_bg: Color,
 
     pub editor_keywords: Color,
     pub editor_functions: Color,
@@ -70,6 +72,8 @@ impl Theme {
             editor_ins: Color::None,
             editor_cmd: Color::None,
             editor_vis: Color::None,
+            editor_src: Color::None,
+            editor_src_bg: Color::None,
 
             editor_keywords: Color::None,
             editor_functions: Color::None,
@@ -349,6 +353,8 @@ fn apply_theme_value(theme: &mut Theme, key: &str, val: &str) -> Result<(), Stri
         "editor_ins" => theme.editor_ins = parse_color(val)?,
         "editor_cmd" => theme.editor_cmd = parse_color(val)?,
         "editor_vis" => theme.editor_vis = parse_color(val)?,
+        "editor_src" => theme.editor_src = parse_color(val)?,
+        "editor_src_bg" => theme.editor_src_bg = parse_color(val)?,
 
         "editor_keywords" => theme.editor_keywords = parse_color(val)?,
         "editor_functions" => theme.editor_functions = parse_color(val)?,

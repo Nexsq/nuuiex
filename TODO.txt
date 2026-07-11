@@ -1,6 +1,4 @@
 add to macro engine:
-- modulo %
-- booleans
 - user defined functions
 - while loops
 - for loops
