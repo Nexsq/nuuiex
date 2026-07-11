@@ -1,6 +1,6 @@
 [package]
 name = "nuui"
-version = "0.7.4"
+version = "0.8.3"
 edition = "2024"
 
 [dependencies]
