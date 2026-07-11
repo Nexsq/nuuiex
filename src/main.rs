@@ -136,27 +136,34 @@ fn main() {
         match terminal.read_key(Duration::from_millis(16)) {
             Key::None => continue,
             key => {
-                if main_view.active == main::ActivePanel::Main && main_view.editor.is_editing {
+                if main_view.active == main::ActivePanel::Main
+                    && main_view.editors[main_view.current_tab].is_editing
+                {
                     if key == Key::Char('\x03') {
                         break;
                     }
-                    if main_view.editor.mode == nuui::editor::Mode::Command && key == Key::Char('q')
+                    if main_view.editors[main_view.current_tab].mode == nuui::editor::Mode::Command
+                        && key == Key::Char('q')
                     {
                         break;
                     }
-                    if main_view.editor.mode == nuui::editor::Mode::Command && (key == Key::Tab) {
+                    if main_view.editors[main_view.current_tab].mode == nuui::editor::Mode::Command
+                        && (key == Key::Tab)
+                    {
                         main_view.toggle_focus(&config);
                         dirty = true;
                         continue;
                     }
-                    if main_view.editor.mode == nuui::editor::Mode::Insert && key == Key::Tab {
-                        main_view.editor.handle_key(key, &config);
+                    if main_view.editors[main_view.current_tab].mode == nuui::editor::Mode::Insert
+                        && key == Key::Tab
+                    {
+                        main_view.editors[main_view.current_tab].handle_key(key, &config);
                         main_view.refresh_main(&config);
                         dirty = true;
                         continue;
                     }
 
-                    main_view.editor.handle_key(key, &config);
+                    main_view.editors[main_view.current_tab].handle_key(key, &config);
                     main_view.refresh_main(&config);
                     dirty = true;
                     continue;
@@ -191,6 +198,18 @@ fn main() {
                 }
 
                 if main_view.active == main::ActivePanel::List {
+                    if let Key::Char(c) = key {
+                        if c >= '1'
+                            && c <= std::char::from_digit(config.tabs_num.clamp(2, 6) as u32, 10)
+                                .unwrap()
+                        {
+                            let tab_idx = (c as u8 - b'1') as usize;
+                            main_view.switch_tab(tab_idx, &config);
+                            dirty = true;
+                            continue;
+                        }
+                    }
+
                     match main::handle_list_action(
                         &mut main_view,
                         &key,

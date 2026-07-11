@@ -33,8 +33,9 @@ pub struct MainView {
     pub list_selected: usize,
     pub list_scroll: usize,
 
-    pub editor: Editor,
-    pub running_macro: Option<PathBuf>,
+    pub current_tab: usize,
+    pub editors: [Editor; 6],
+    pub running_macros: [Option<PathBuf>; 6],
     pub main_box: Box,
     pub main_x: i16,
     pub main_y: i16,
@@ -88,6 +89,9 @@ impl MainView {
             )
         };
 
+        let editors = std::array::from_fn(|_| Editor::new());
+        let running_macros = std::array::from_fn(|_| None);
+
         let mut view = Self {
             term_w,
             term_h,
@@ -99,8 +103,9 @@ impl MainView {
             library_tree,
             library_root,
             expanded_path: Vec::new(),
-            editor: Editor::new(),
-            running_macro: None,
+            current_tab: 0,
+            editors,
+            running_macros,
             main_box: dummy(),
             main_x: 0,
             main_y: 0,
@@ -138,6 +143,10 @@ impl MainView {
     }
 
     pub fn auto_load(&mut self) {
+        if self.running_macros[self.current_tab].is_some() {
+            return;
+        }
+
         let mut to_load = None;
         let mut is_folder = false;
 
@@ -159,16 +168,27 @@ impl MainView {
             is_folder = true;
         }
 
+        let editor = &mut self.editors[self.current_tab];
+
         if let Some((path, rp)) = to_load {
-            if self.editor.file_path.as_deref() != Some(path.as_path()) {
-                self.editor.load_file(path, false, rp);
+            if editor.file_path.as_deref() != Some(path.as_path()) {
+                editor.load_file(path, false, rp);
             }
         } else if is_folder {
-            self.editor.file_path = None;
-            self.editor.rel_path.clear();
-            self.editor.state.lines = vec![String::new()];
-            self.editor.is_editing = false;
+            editor.file_path = None;
+            editor.rel_path.clear();
+            editor.state.lines = vec![String::new()];
+            editor.is_editing = false;
         }
+    }
+
+    pub fn switch_tab(&mut self, tab: usize, config: &Config) {
+        if tab >= config.tabs_num.clamp(2, 6) || tab == self.current_tab {
+            return;
+        }
+        self.current_tab = tab;
+        self.auto_load();
+        self.refresh_all(config);
     }
 
     pub fn resize(&mut self, term_w: u16, term_h: u16, config: &Config) {
@@ -202,7 +222,7 @@ impl MainView {
 
     pub fn refresh_main(&mut self, config: &Config) {
         let header_h = self.theme.title.len().max(1) as u16;
-        self.main_box = self.editor.render(
+        self.main_box = self.editors[self.current_tab].render(
             self.term_w
                 .saturating_sub(layout::TABS_W + layout::LIST_W - 1),
             self.term_h.saturating_sub(header_h),
@@ -214,10 +234,9 @@ impl MainView {
 
     pub fn refresh_list(&mut self, config: &Config) {
         let header_h = self.theme.title.len().max(1) as u16;
-        let active_path = self
-            .running_macro
+        let active_path = self.running_macros[self.current_tab]
             .as_deref()
-            .or(self.editor.file_path.as_deref());
+            .or(self.editors[self.current_tab].file_path.as_deref());
 
         self.list_box = list::refresh(
             self.term_h,
@@ -236,25 +255,26 @@ impl MainView {
 
     pub fn refresh_static_boxes(&mut self, config: &Config) {
         let header_h = self.theme.title.len().max(1) as u16;
-        self.tabs_box = r#static::refresh_tabs(self.term_h, header_h, &self.theme, config);
+        self.tabs_box =
+            r#static::refresh_tabs(&self.theme, config, self.current_tab, &self.running_macros);
         self.title_box = r#static::refresh_title(&self.theme);
         self.deck_box = r#static::refresh_deck(self.term_w, header_h, &self.theme);
     }
 
     pub fn toggle_focus(&mut self, config: &Config) {
+        let editor = &mut self.editors[self.current_tab];
         if self.active == ActivePanel::Main {
             self.active = ActivePanel::List;
-            self.running_macro = None;
-            if self.editor.is_editing {
-                self.editor.save();
-                self.editor.is_editing = false;
+            if editor.is_editing {
+                editor.save();
+                editor.is_editing = false;
             }
             self.auto_load();
         } else {
             self.active = ActivePanel::Main;
             self.list_input = ListInputMode::None;
-            if self.editor.file_path.is_some() {
-                self.editor.is_editing = true;
+            if editor.file_path.is_some() {
+                editor.is_editing = true;
             }
         }
         self.refresh_main(config);
@@ -444,6 +464,34 @@ impl MainView {
         }
     }
 
+    pub fn edit_selected(&mut self, config: &Config) {
+        if self.active != ActivePanel::List {
+            return;
+        }
+
+        let mut target = None;
+        if let Some(node) = self.get_selected_node() {
+            if let MacroNode::Script { path, .. } = node {
+                let rp = path
+                    .strip_prefix(&self.library_root)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .into_owned();
+                target = Some((path.clone(), rp));
+            }
+        }
+
+        if let Some((path, rp)) = target {
+            self.running_macros[self.current_tab] = None;
+            self.editors[self.current_tab].load_file(path, true, rp);
+            self.active = ActivePanel::Main;
+            self.list_input = ListInputMode::None;
+            self.refresh_main(config);
+            self.refresh_list(config);
+            self.refresh_static_boxes(config);
+        }
+    }
+
     pub fn trigger_selected(&mut self, config: &Config) {
         if self.active != ActivePanel::List {
             return;
@@ -459,24 +507,25 @@ impl MainView {
         if let Some((name, path)) = target {
             if let Ok(source) = std::fs::read_to_string(&path) {
                 let output = crate::engine::core::run(&source);
-                self.editor.state.lines = output;
+                self.editors[self.current_tab].state.lines = output;
             } else {
-                self.editor.state.lines = vec![format!("Failed to read script '{}'", name)];
+                self.editors[self.current_tab].state.lines =
+                    vec![format!("Failed to read script '{}'", name)];
             }
 
-            self.editor.file_path = None;
-            self.running_macro = Some(path);
+            self.editors[self.current_tab].file_path = None;
+            self.running_macros[self.current_tab] = Some(path);
             self.active = ActivePanel::Main;
-            self.editor.is_editing = false;
+            self.editors[self.current_tab].is_editing = false;
             self.refresh_main(config);
             self.refresh_list(config);
+            self.refresh_static_boxes(config);
         }
     }
 
     pub fn render(&self, canvas: &mut Canvas) {
         canvas.put_box(&self.title_box, self.title_x, self.title_y);
         canvas.put_box(&self.deck_box, self.deck_x, self.deck_y);
-        canvas.put_box(&self.tabs_box, self.tabs_x, self.tabs_y);
 
         if self.active == ActivePanel::List {
             canvas.put_box(&self.main_box, self.main_x, self.main_y);
@@ -485,6 +534,8 @@ impl MainView {
             canvas.put_box(&self.list_box, self.list_x, self.list_y);
             canvas.put_box(&self.main_box, self.main_x, self.main_y);
         }
+
+        canvas.put_box(&self.tabs_box, self.tabs_x, self.tabs_y);
     }
 }
 
@@ -586,11 +637,13 @@ pub fn handle_list_input(
                             crate::lib::save_custom_order(&order);
                         }
 
-                        if view.editor.file_path.as_ref() == Some(&old_path) {
-                            view.editor.file_path = Some(new_path.clone());
-                        }
-                        if view.running_macro.as_ref() == Some(&old_path) {
-                            view.running_macro = Some(new_path.clone());
+                        for i in 0..6 {
+                            if view.editors[i].file_path.as_ref() == Some(&old_path) {
+                                view.editors[i].file_path = Some(new_path.clone());
+                            }
+                            if view.running_macros[i].as_ref() == Some(&old_path) {
+                                view.running_macros[i] = Some(new_path.clone());
+                            }
                         }
                     }
 
@@ -788,6 +841,9 @@ pub fn handle_list_action(
             view.list_input = ListInputMode::CreatingFolder(String::new());
             view.refresh_list(config);
             handled = true;
+        } else if *c == config.bind_lib_edit {
+            view.edit_selected(config);
+            handled = true;
         } else if *c == config.bind_lib_rename {
             if let Some(node) = view.get_selected_node() {
                 view.list_input = ListInputMode::Renaming(node.name().to_string());
@@ -843,12 +899,14 @@ pub fn handle_list_action(
                         let _ = std::fs::remove_file(&path);
                     }
 
-                    if view.editor.file_path.as_ref() == Some(&path)
-                        || view.running_macro.as_ref() == Some(&path)
-                    {
-                        view.editor.file_path = None;
-                        view.running_macro = None;
-                        view.editor.state.lines = vec![String::new()];
+                    for i in 0..6 {
+                        if view.editors[i].file_path.as_ref() == Some(&path)
+                            || view.running_macros[i].as_ref() == Some(&path)
+                        {
+                            view.editors[i].file_path = None;
+                            view.running_macros[i] = None;
+                            view.editors[i].state.lines = vec![String::new()];
+                        }
                     }
 
                     let l = crate::lib::init(&config.lib_sorting)?;
@@ -938,12 +996,14 @@ pub fn handle_list_action(
                     let _ = std::fs::remove_file(&path);
                 }
 
-                if view.editor.file_path.as_ref() == Some(&path)
-                    || view.running_macro.as_ref() == Some(&path)
-                {
-                    view.editor.file_path = None;
-                    view.running_macro = None;
-                    view.editor.state.lines = vec![String::new()];
+                for i in 0..6 {
+                    if view.editors[i].file_path.as_ref() == Some(&path)
+                        || view.running_macros[i].as_ref() == Some(&path)
+                    {
+                        view.editors[i].file_path = None;
+                        view.running_macros[i] = None;
+                        view.editors[i].state.lines = vec![String::new()];
+                    }
                 }
 
                 let l = crate::lib::init(&config.lib_sorting)?;

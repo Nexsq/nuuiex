@@ -98,6 +98,20 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     ),
                 },
                 Setting {
+                    name: "Number of Tabs",
+                    key: "tabs_num",
+                    kind: SettingType::Choice(
+                        vec![
+                            "2".to_string(),
+                            "3".to_string(),
+                            "4".to_string(),
+                            "5".to_string(),
+                            "6".to_string(),
+                        ],
+                        config.tabs_num.clamp(2, 6).saturating_sub(2),
+                    ),
+                },
+                Setting {
                     name: "Reset Appearance",
                     key: "reset_appearance",
                     kind: SettingType::Action,
@@ -416,6 +430,7 @@ pub fn settings_modal(
 
     let mut prev_theme = config.theme.clone();
     let mut prev_sorting = config.lib_sorting.clone();
+    let mut prev_tabs_num = config.tabs_num;
     let mut dirty = true;
 
     let version_str = format!(" v{} ", env!("CARGO_PKG_VERSION"));
@@ -436,6 +451,13 @@ pub fn settings_modal(
                 }
             }
         };
+        ($config:expr, $set:expr, choice_offset $key:expr, $field:ident, $offset:expr) => {
+            if $set.key == $key {
+                if let SettingType::Choice(_, idx) = &$set.kind {
+                    $config.$field = *idx + $offset;
+                }
+            }
+        };
     }
 
     let apply_settings = |categories: &[Category], config: &mut Config| {
@@ -445,6 +467,7 @@ pub fn settings_modal(
                 apply_setting!(config, set, choice "border_style", border_style);
                 apply_setting!(config, set, choice "indicator_style", indicator_style);
                 apply_setting!(config, set, choice "lib_sorting", lib_sorting);
+                apply_setting!(config, set, choice_offset "tabs_num", tabs_num, 2);
 
                 apply_setting!(config, set, "bind_edit_insert", bind_edit_insert);
                 apply_setting!(config, set, "bind_edit_visual", bind_edit_visual);
@@ -1014,11 +1037,16 @@ pub fn settings_modal(
                                                             main_view.expanded_path.clear();
                                                             main_view.list_selected = 0;
                                                             main_view.list_scroll = 0;
-                                                            main_view.editor.file_path = None;
-                                                            main_view.editor.rel_path.clear();
-                                                            main_view.editor.state.lines =
-                                                                vec![String::new()];
-                                                            main_view.running_macro = None;
+                                                            for i in 0..6 {
+                                                                main_view.editors[i].file_path =
+                                                                    None;
+                                                                main_view.editors[i]
+                                                                    .rel_path
+                                                                    .clear();
+                                                                main_view.editors[i].state.lines =
+                                                                    vec![String::new()];
+                                                                main_view.running_macros[i] = None;
+                                                            }
                                                         }
                                                         main_view.auto_load();
                                                     }
@@ -1100,6 +1128,12 @@ pub fn settings_modal(
                     main_view.auto_load();
                 }
                 prev_sorting = config.lib_sorting.clone();
+            }
+            if config.tabs_num != prev_tabs_num {
+                main_view.current_tab =
+                    main_view.current_tab.min(config.tabs_num.saturating_sub(1));
+                main_view.auto_load();
+                prev_tabs_num = config.tabs_num;
             }
             dirty = true;
         }

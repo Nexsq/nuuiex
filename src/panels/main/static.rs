@@ -1,29 +1,81 @@
 use super::layout::{LIST_W, TABS_W};
 use crate::{Box, Color, Modifier, Style, conf::Config, theme::themecore::Theme};
 
-pub fn refresh_tabs(term_h: u16, header_h: u16, theme: &Theme, config: &Config) -> Box {
+pub fn refresh_tabs(
+    theme: &Theme,
+    config: &Config,
+    current_tab: usize,
+    running_macros: &[Option<std::path::PathBuf>; 6],
+) -> Box {
+    let tabs_num = config.tabs_num.clamp(2, 6);
+    let height = 1 + (tabs_num as u16) * 2;
+
     let mut tabs_box = Box::new(
         TABS_W,
-        term_h.saturating_sub(header_h),
-        1,
-        config.get_border(),
+        height,
+        0,
+        crate::Border::None,
         Style {
             fg: theme.tabs_box,
             bg: Color::None,
             md: Modifier::None,
         },
     );
-    tabs_box.insert_text(
-        "t a b s",
-        0,
-        0,
-        false,
-        Style {
-            fg: Color::White,
-            bg: Color::None,
-            md: Modifier::None,
-        },
-    );
+
+    let (tl, h, v, l_tee, bl) = match config.get_border() {
+        crate::Border::Rounded => ('╭', '─', '│', '├', '╰'),
+        crate::Border::Light => ('┌', '─', '│', '├', '└'),
+        crate::Border::Heavy => ('┏', '━', '┃', '┣', '┗'),
+        crate::Border::None => (' ', ' ', ' ', ' ', ' '),
+    };
+
+    let border_style = Style {
+        fg: theme.tabs_box,
+        bg: Color::None,
+        md: Modifier::None,
+    };
+
+    tabs_box.put_cell(crate::Cell::new(tl, border_style), 0, 0);
+    tabs_box.put_cell(crate::Cell::new(h, border_style), 1, 0);
+
+    for i in 0..tabs_num {
+        let y_num = 1 + i * 2;
+        let y_sep = 2 + i * 2;
+
+        let is_selected = i == current_tab;
+        let is_running = running_macros[i].is_some();
+
+        let (num_color, num_md) = if is_selected {
+            (theme.tab_selected, Modifier::Bold)
+        } else if is_running {
+            (theme.tab_lazy, Modifier::Bold)
+        } else {
+            (Color::DarkGray, Modifier::Dim)
+        };
+
+        tabs_box.put_cell(crate::Cell::new(v, border_style), 0, y_num as u16);
+        tabs_box.put_cell(
+            crate::Cell::new(
+                char::from_digit((i + 1) as u32, 10).unwrap(),
+                Style {
+                    fg: num_color,
+                    bg: Color::None,
+                    md: num_md,
+                },
+            ),
+            1,
+            y_num as u16,
+        );
+
+        if i < tabs_num - 1 {
+            tabs_box.put_cell(crate::Cell::new(l_tee, border_style), 0, y_sep as u16);
+            tabs_box.put_cell(crate::Cell::new(h, border_style), 1, y_sep as u16);
+        }
+    }
+
+    tabs_box.put_cell(crate::Cell::new(bl, border_style), 0, height - 1);
+    tabs_box.put_cell(crate::Cell::new(h, border_style), 1, height - 1);
+
     tabs_box
 }
 

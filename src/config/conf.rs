@@ -10,6 +10,7 @@ pub struct Config {
     pub border_style: String,
     pub theme: String,
     pub lib_sorting: String,
+    pub tabs_num: usize,
 
     pub bind_edit_insert: char,
     pub bind_edit_visual: char,
@@ -32,6 +33,7 @@ pub struct Config {
 
     pub bind_lib_new_file: char,
     pub bind_lib_new_folder: char,
+    pub bind_lib_edit: char,
     pub bind_lib_rename: char,
     pub bind_lib_delete: char,
     pub bind_lib_move_up: char,
@@ -45,6 +47,7 @@ impl Default for Config {
             border_style: String::new(),
             theme: String::new(),
             lib_sorting: String::new(),
+            tabs_num: 6,
 
             bind_edit_insert: '\0',
             bind_edit_visual: '\0',
@@ -67,6 +70,7 @@ impl Default for Config {
 
             bind_lib_new_file: '\0',
             bind_lib_new_folder: '\0',
+            bind_lib_edit: '\0',
             bind_lib_rename: '\0',
             bind_lib_delete: '\0',
             bind_lib_move_up: '\0',
@@ -105,6 +109,7 @@ impl Config {
                     "border_style" => self.border_style = val.to_string(),
                     "theme" => self.theme = val.to_string(),
                     "lib_sorting" => self.lib_sorting = val.to_string(),
+                    "tabs_num" => self.tabs_num = val.parse().unwrap_or(self.tabs_num).clamp(2, 6),
 
                     "bind_edit_insert" => {
                         self.bind_edit_insert = val
@@ -246,6 +251,13 @@ impl Config {
                             .unwrap_or(self.bind_lib_new_folder)
                             .to_ascii_lowercase()
                     }
+                    "bind_lib_edit" => {
+                        self.bind_lib_edit = val
+                            .chars()
+                            .next()
+                            .unwrap_or(self.bind_lib_edit)
+                            .to_ascii_lowercase()
+                    }
                     "bind_lib_rename" => {
                         self.bind_lib_rename = val
                             .chars()
@@ -286,6 +298,7 @@ impl Config {
         self.indicator_style = default.indicator_style;
         self.border_style = default.border_style;
         self.theme = default.theme;
+        self.tabs_num = default.tabs_num;
     }
 
     pub fn reset_edit_keybinds(&mut self) {
@@ -314,6 +327,7 @@ impl Config {
         let default = Config::default();
         self.bind_lib_new_file = default.bind_lib_new_file;
         self.bind_lib_new_folder = default.bind_lib_new_folder;
+        self.bind_lib_edit = default.bind_lib_edit;
         self.bind_lib_rename = default.bind_lib_rename;
         self.bind_lib_delete = default.bind_lib_delete;
         self.bind_lib_move_up = default.bind_lib_move_up;
@@ -367,7 +381,9 @@ impl Config {
                         writeln!(&mut output, "{} = {}{}", key_str, self.lib_sorting, comment)
                             .unwrap()
                     }
-
+                    "tabs_num" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.tabs_num, comment).unwrap()
+                    }
                     "bind_edit_insert" => writeln!(
                         &mut output,
                         "{} = {}{}",
@@ -487,6 +503,12 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.bind_lib_new_folder, comment
+                    )
+                    .unwrap(),
+                    "bind_lib_edit" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_lib_edit, comment
                     )
                     .unwrap(),
                     "bind_lib_rename" => writeln!(
