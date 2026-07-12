@@ -130,7 +130,7 @@ pub fn refresh_deck(term_w: u16, header_h: u16, theme: &Theme) -> Box {
         term_w.saturating_sub(TABS_W + LIST_W - 2),
         header_h,
         0,
-        crate::Border::None,
+        crate::Border::Heavy,
         Style {
             fg: theme.deck_box,
             bg: Color::None,
