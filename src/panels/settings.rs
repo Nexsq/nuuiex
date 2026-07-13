@@ -98,7 +98,7 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     ),
                 },
                 Setting {
-                    name: "Number of Tabs",
+                    name: "Tabs",
                     key: "tabs_num",
                     kind: SettingType::Choice(
                         vec![
