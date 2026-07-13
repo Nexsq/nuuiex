@@ -1,4 +1,4 @@
-use super::layout::LIST_W;
+use super::layout::{LIST_W, TABS_W};
 use super::{ActivePanel, ListInputMode};
 use crate::{Box, Color, Modifier, Style, conf::Config, lib::MacroNode, theme::themecore::Theme};
 
@@ -46,8 +46,14 @@ pub fn refresh(
         theme.list_box
     };
 
+    let list_w = if config.tabs_num == 1 {
+        LIST_W + TABS_W - 1
+    } else {
+        LIST_W
+    };
+
     let mut list_box = Box::new(
-        LIST_W,
+        list_w,
         list_h,
         1,
         config.get_border(),
@@ -286,7 +292,7 @@ pub fn refresh(
         *list_scroll = target_render_idx.saturating_sub(visible_items - 1);
     }
 
-    let max_text_len = LIST_W.saturating_sub(2) as usize;
+    let max_text_len = list_w.saturating_sub(2) as usize;
 
     for (display_line, item) in render_items
         .iter()

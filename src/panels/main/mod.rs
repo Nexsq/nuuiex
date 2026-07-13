@@ -200,7 +200,7 @@ impl MainView {
     }
 
     pub fn switch_tab(&mut self, tab: usize, config: &Config) {
-        if tab >= config.tabs_num.clamp(2, 6) || tab == self.current_tab {
+        if tab >= config.tabs_num.clamp(1, 6) || tab == self.current_tab {
             return;
         }
         if self.editors[self.current_tab].is_editing {
@@ -218,7 +218,7 @@ impl MainView {
         let header_h = self.theme.title.len().max(1) as u16;
 
         let (main_pos, list_pos, tabs_pos, title_pos, deck_pos) =
-            layout::get_positions(term_w, term_h, header_h);
+            layout::get_positions(term_w, term_h, header_h, config.tabs_num);
 
         self.main_x = main_pos.0;
         self.main_y = main_pos.1;

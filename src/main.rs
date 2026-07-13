@@ -266,7 +266,7 @@ fn main() {
                 if main_view.active == main::ActivePanel::List {
                     if let Key::Char(c) = key {
                         if c >= '1'
-                            && c <= std::char::from_digit(config.tabs_num.clamp(2, 6) as u32, 10)
+                            && c <= std::char::from_digit(config.tabs_num.clamp(1, 6) as u32, 10)
                                 .unwrap()
                         {
                             let tab_idx = (c as u8 - b'1') as usize;
@@ -322,7 +322,7 @@ fn main() {
                             main_view.library_root = l.root_path;
                         }
                         main_view.auto_load();
-                        main_view.refresh_all(&config);
+                        main_view.resize(term_w, term_h, &config);
 
                         if should_quit {
                             break;

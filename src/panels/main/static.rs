@@ -7,7 +7,21 @@ pub fn refresh_tabs(
     current_tab: usize,
     running_macros: &[Option<std::path::PathBuf>; 6],
 ) -> Box {
-    let tabs_num = config.tabs_num.clamp(2, 6);
+    let tabs_num = config.tabs_num.clamp(1, 6);
+    if tabs_num == 1 {
+        return Box::new(
+            0,
+            0,
+            0,
+            crate::Border::None,
+            Style {
+                fg: Color::None,
+                bg: Color::None,
+                md: Modifier::None,
+            },
+        );
+    }
+
     let height = 1 + (tabs_num as u16) * 2;
 
     let mut tabs_box = Box::new(

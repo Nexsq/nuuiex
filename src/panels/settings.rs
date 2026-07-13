@@ -102,13 +102,14 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     key: "tabs_num",
                     kind: SettingType::Choice(
                         vec![
+                            "1".to_string(),
                             "2".to_string(),
                             "3".to_string(),
                             "4".to_string(),
                             "5".to_string(),
                             "6".to_string(),
                         ],
-                        config.tabs_num.clamp(2, 6).saturating_sub(2),
+                        config.tabs_num.clamp(1, 6).saturating_sub(1),
                     ),
                 },
                 Setting {
@@ -476,7 +477,7 @@ pub fn settings_modal(
                 apply_setting!(config, set, choice "border_style", border_style);
                 apply_setting!(config, set, choice "indicator_style", indicator_style);
                 apply_setting!(config, set, choice "lib_sorting", lib_sorting);
-                apply_setting!(config, set, choice_offset "tabs_num", tabs_num, 2);
+                apply_setting!(config, set, choice_offset "tabs_num", tabs_num, 1);
 
                 apply_setting!(config, set, "bind_edit_insert", bind_edit_insert);
                 apply_setting!(config, set, "bind_edit_visual", bind_edit_visual);
@@ -1202,6 +1203,10 @@ pub fn settings_modal(
                 main_view.current_tab =
                     main_view.current_tab.min(config.tabs_num.saturating_sub(1));
                 main_view.auto_load();
+
+                let (term_w, term_h) = Terminal::size();
+                main_view.resize(term_w, term_h, config);
+
                 prev_tabs_num = config.tabs_num;
             }
             dirty = true;

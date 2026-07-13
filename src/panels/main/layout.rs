@@ -5,10 +5,15 @@ pub fn get_positions(
     _term_w: u16,
     _term_h: u16,
     header_h: u16,
+    tabs_num: usize,
 ) -> ((i16, i16), (i16, i16), (i16, i16), (i16, i16), (i16, i16)) {
     let tabs_x = 0;
     let tabs_y = header_h as i16;
-    let list_x = (TABS_W - 1) as i16;
+    let list_x = if tabs_num == 1 {
+        0
+    } else {
+        (TABS_W - 1) as i16
+    };
     let list_y = header_h as i16;
     let main_x = (TABS_W + LIST_W - 1) as i16;
     let main_y = header_h as i16;

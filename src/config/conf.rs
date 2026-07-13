@@ -111,7 +111,7 @@ impl Config {
                     "border_style" => self.border_style = val.to_string(),
                     "theme" => self.theme = val.to_string(),
                     "lib_sorting" => self.lib_sorting = val.to_string(),
-                    "tabs_num" => self.tabs_num = val.parse().unwrap_or(self.tabs_num).clamp(2, 6),
+                    "tabs_num" => self.tabs_num = val.parse().unwrap_or(self.tabs_num).clamp(1, 6),
 
                     "bind_edit_insert" => {
                         self.bind_edit_insert = val
