@@ -1,4 +1,4 @@
-
+fullscreen in editor and macro
 
 add to macro engine:
 - user defined functions
