@@ -1,5 +1,3 @@
-gradient problems:
-- error outline does not have gradients
 
 
 add to macro engine:

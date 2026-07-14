@@ -6,8 +6,13 @@ const DEFAULT_THEME: &str = include_str!("themes/default.conf");
 
 pub const BUILTIN_THEMES: &[(&str, &str)] = &[
     ("default", DEFAULT_THEME),
-    ("fern", include_str!("themes/fern.conf")),
+    ("carbon", include_str!("themes/carbon.conf")),
     ("ocean", include_str!("themes/ocean.conf")),
+    ("abyss", include_str!("themes/abyss.conf")),
+    ("fern", include_str!("themes/fern.conf")),
+    ("sunset", include_str!("themes/sunset.conf")),
+    ("borealis", include_str!("themes/borealis.conf")),
+    ("solstice", include_str!("themes/solstice.conf")),
 ];
 
 #[derive(Debug, Clone)]
