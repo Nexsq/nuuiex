@@ -1220,6 +1220,9 @@ impl Editor {
 
         let selection = self.get_selection_bounds();
 
+        let mut line_chars: Vec<_> = Vec::with_capacity(128);
+        let mut syntax_colors = Vec::with_capacity(128);
+
         for (i, line) in self
             .state
             .lines
@@ -1250,9 +1253,9 @@ impl Editor {
             }
 
             let is_error_line = self.is_editing && self.error_lines.contains(&(i + 1));
-            let line_chars: Vec<char> = line.chars().collect();
-
-            let mut syntax_colors = Vec::with_capacity(line_chars.len());
+            line_chars.clear();
+            line_chars.extend(line.chars());
+            syntax_colors.clear();
 
             if self.is_editing {
                 let mut idx = 0;

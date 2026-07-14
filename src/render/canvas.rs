@@ -113,10 +113,6 @@ impl Box {
         }
     }
 
-    pub fn insert_box(&mut self, buffer: &Box, x: i16, y: i16) {
-        self.draw_box(buffer, x, y, false);
-    }
-
     pub fn insert_text(
         &mut self,
         text: &str,
@@ -294,6 +290,36 @@ impl Box {
     }
 }
 
+fn push_num_u16(buf: &mut Vec<u8>, mut n: u16) {
+    if n >= 10000 {
+        buf.push(b'0' + (n / 10000) as u8);
+        n %= 10000;
+        buf.push(b'0' + (n / 1000) as u8);
+        n %= 1000;
+        buf.push(b'0' + (n / 100) as u8);
+        n %= 100;
+        buf.push(b'0' + (n / 10) as u8);
+        buf.push(b'0' + (n % 10) as u8);
+    } else if n >= 1000 {
+        buf.push(b'0' + (n / 1000) as u8);
+        n %= 1000;
+        buf.push(b'0' + (n / 100) as u8);
+        n %= 100;
+        buf.push(b'0' + (n / 10) as u8);
+        buf.push(b'0' + (n % 10) as u8);
+    } else if n >= 100 {
+        buf.push(b'0' + (n / 100) as u8);
+        n %= 100;
+        buf.push(b'0' + (n / 10) as u8);
+        buf.push(b'0' + (n % 10) as u8);
+    } else if n >= 10 {
+        buf.push(b'0' + (n / 10) as u8);
+        buf.push(b'0' + (n % 10) as u8);
+    } else {
+        buf.push(b'0' + n as u8);
+    }
+}
+
 impl Canvas {
     pub fn new(width: u16, height: u16) -> Self {
         let size = (width as usize) * (height as usize);
@@ -321,7 +347,7 @@ impl Canvas {
         self.buffer.clear();
 
         if self.needs_clear {
-            self.buffer.write_all(b"\x1b[2J\x1b[H").unwrap();
+            self.buffer.extend_from_slice(b"\x1b[2J\x1b[H");
             self.needs_clear = false;
         }
 
@@ -337,19 +363,22 @@ impl Canvas {
         for (old_cell, new_cell) in self.old.iter_mut().zip(self.new.iter()) {
             if old_cell != new_cell {
                 if cursor_x != x || cursor_y != y {
-                    write!(&mut self.buffer, "\x1b[{};{}H", y + 1, x + 1).unwrap();
+                    self.buffer.extend_from_slice(b"\x1b[");
+                    push_num_u16(&mut self.buffer, y + 1);
+                    self.buffer.push(b';');
+                    push_num_u16(&mut self.buffer, x + 1);
+                    self.buffer.push(b'H');
                 }
 
                 if new_cell.s.md != cur_md {
                     if cur_md != Modifier::None {
-                        self.buffer.write_all(b"\x1b[0m").unwrap();
+                        self.buffer.extend_from_slice(b"\x1b[0m");
                         cur_fg = Color::None;
                         cur_bg = Color::None;
                     }
                     if new_cell.s.md != Modifier::None {
                         self.buffer
-                            .write_all(new_cell.s.md.to_ansi().as_bytes())
-                            .unwrap();
+                            .extend_from_slice(new_cell.s.md.to_ansi().as_bytes());
                     }
                     cur_md = new_cell.s.md;
                 }
@@ -366,8 +395,7 @@ impl Canvas {
 
                 let mut char_buf = [0; 4];
                 self.buffer
-                    .write_all(new_cell.c.encode_utf8(&mut char_buf).as_bytes())
-                    .unwrap();
+                    .extend_from_slice(new_cell.c.encode_utf8(&mut char_buf).as_bytes());
 
                 cursor_x = x + 1;
                 cursor_y = y;
@@ -384,7 +412,7 @@ impl Canvas {
             }
         }
 
-        self.buffer.write_all(b"\x1b[0m").unwrap();
+        self.buffer.extend_from_slice(b"\x1b[0m");
 
         let mut stdout = io::stdout().lock();
         stdout.write_all(&self.buffer).unwrap();

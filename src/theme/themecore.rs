@@ -298,11 +298,11 @@ fn parse_gradient(val: &str) -> Result<Gradient, String> {
     if parts.len() == 1 {
         Ok(Gradient::Solid(parse_color(parts[0])?))
     } else {
-        let mut colors = Vec::new();
-        for p in parts {
-            colors.push(parse_color(p)?);
+        let mut colors = [Color::None; 4];
+        for (i, p) in parts.iter().enumerate() {
+            colors[i] = parse_color(p)?;
         }
-        Ok(Gradient::Linear(colors))
+        Ok(Gradient::Linear(colors, parts.len() as u8))
     }
 }
 

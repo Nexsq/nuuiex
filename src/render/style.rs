@@ -1,5 +1,3 @@
-use std::io::Write;
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Style {
     pub fg: Color,
@@ -7,10 +5,10 @@ pub struct Style {
     pub md: Modifier,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Gradient {
     Solid(Color),
-    Linear(Vec<Color>),
+    Linear([Color; 4], u8),
 }
 
 impl Default for Gradient {
@@ -23,20 +21,24 @@ impl Gradient {
     pub fn color_at(&self, x: usize, max_x: usize) -> Color {
         match self {
             Gradient::Solid(c) => *c,
-            Gradient::Linear(colors) => {
-                if colors.is_empty() {
+            Gradient::Linear(colors, len) => {
+                let len = *len as usize;
+                if len == 0 {
                     return Color::None;
                 }
-                if colors.len() == 1 || max_x <= 1 {
+                if len == 1 || max_x <= 1 {
                     return colors[0];
                 }
-                let t = (x as f32 / (max_x - 1) as f32).clamp(0.0, 1.0);
-                let segments = (colors.len() - 1) as f32;
-                let scaled_t = t * segments;
-                let index = scaled_t.floor() as usize;
+                if x >= max_x - 1 {
+                    return colors[len - 1];
+                }
 
-                if index >= colors.len() - 1 {
-                    return colors.last().copied().unwrap_or(Color::None);
+                let t = x as f32 / (max_x - 1) as f32;
+                let scaled_t = t * (len - 1) as f32;
+                let index = scaled_t as usize;
+
+                if index >= len - 1 {
+                    return colors[len - 1];
                 }
 
                 let local_t = scaled_t - index as f32;
@@ -110,6 +112,20 @@ impl Default for Style {
     }
 }
 
+fn push_num_u8(buf: &mut Vec<u8>, mut n: u8) {
+    if n >= 100 {
+        buf.push(b'0' + (n / 100));
+        n %= 100;
+        buf.push(b'0' + (n / 10));
+        buf.push(b'0' + (n % 10));
+    } else if n >= 10 {
+        buf.push(b'0' + (n / 10));
+        buf.push(b'0' + (n % 10));
+    } else {
+        buf.push(b'0' + n);
+    }
+}
+
 impl Color {
     pub fn to_rgb(&self) -> Option<(u8, u8, u8)> {
         match self {
@@ -135,6 +151,12 @@ impl Color {
     }
 
     pub fn interpolate(&self, other: Color, t: f32) -> Color {
+        if t <= 0.0 {
+            return *self;
+        }
+        if t >= 1.0 {
+            return other;
+        }
         if let (Some((r1, g1, b1)), Some((r2, g2, b2))) = (self.to_rgb(), other.to_rgb()) {
             let inv_t = 1.0 - t;
             let r = (r1 as f32 * inv_t + r2 as f32 * t) as u8;
@@ -149,47 +171,63 @@ impl Color {
 
     pub fn fg_ansi(&self, buf: &mut Vec<u8>) {
         match self {
-            Color::None => buf.write_all(b"\x1b[39m").unwrap(),
-            Color::Black => buf.write_all(b"\x1b[30m").unwrap(),
-            Color::Red => buf.write_all(b"\x1b[31m").unwrap(),
-            Color::Green => buf.write_all(b"\x1b[32m").unwrap(),
-            Color::Yellow => buf.write_all(b"\x1b[33m").unwrap(),
-            Color::Blue => buf.write_all(b"\x1b[34m").unwrap(),
-            Color::Magenta => buf.write_all(b"\x1b[35m").unwrap(),
-            Color::Cyan => buf.write_all(b"\x1b[36m").unwrap(),
-            Color::White => buf.write_all(b"\x1b[37m").unwrap(),
-            Color::DarkGray => buf.write_all(b"\x1b[90m").unwrap(),
-            Color::BrightRed => buf.write_all(b"\x1b[91m").unwrap(),
-            Color::BrightGreen => buf.write_all(b"\x1b[92m").unwrap(),
-            Color::BrightYellow => buf.write_all(b"\x1b[93m").unwrap(),
-            Color::BrightBlue => buf.write_all(b"\x1b[94m").unwrap(),
-            Color::BrightMagenta => buf.write_all(b"\x1b[95m").unwrap(),
-            Color::BrightCyan => buf.write_all(b"\x1b[96m").unwrap(),
-            Color::BrightWhite => buf.write_all(b"\x1b[97m").unwrap(),
-            Color::Rgb(r, g, b) => write!(buf, "\x1b[38;2;{};{};{}m", r, g, b).unwrap(),
+            Color::None => buf.extend_from_slice(b"\x1b[39m"),
+            Color::Black => buf.extend_from_slice(b"\x1b[30m"),
+            Color::Red => buf.extend_from_slice(b"\x1b[31m"),
+            Color::Green => buf.extend_from_slice(b"\x1b[32m"),
+            Color::Yellow => buf.extend_from_slice(b"\x1b[33m"),
+            Color::Blue => buf.extend_from_slice(b"\x1b[34m"),
+            Color::Magenta => buf.extend_from_slice(b"\x1b[35m"),
+            Color::Cyan => buf.extend_from_slice(b"\x1b[36m"),
+            Color::White => buf.extend_from_slice(b"\x1b[37m"),
+            Color::DarkGray => buf.extend_from_slice(b"\x1b[90m"),
+            Color::BrightRed => buf.extend_from_slice(b"\x1b[91m"),
+            Color::BrightGreen => buf.extend_from_slice(b"\x1b[92m"),
+            Color::BrightYellow => buf.extend_from_slice(b"\x1b[93m"),
+            Color::BrightBlue => buf.extend_from_slice(b"\x1b[94m"),
+            Color::BrightMagenta => buf.extend_from_slice(b"\x1b[95m"),
+            Color::BrightCyan => buf.extend_from_slice(b"\x1b[96m"),
+            Color::BrightWhite => buf.extend_from_slice(b"\x1b[97m"),
+            Color::Rgb(r, g, b) => {
+                buf.extend_from_slice(b"\x1b[38;2;");
+                push_num_u8(buf, *r);
+                buf.push(b';');
+                push_num_u8(buf, *g);
+                buf.push(b';');
+                push_num_u8(buf, *b);
+                buf.push(b'm');
+            }
         }
     }
 
     pub fn bg_ansi(&self, buf: &mut Vec<u8>) {
         match self {
-            Color::None => buf.write_all(b"\x1b[49m").unwrap(),
-            Color::Black => buf.write_all(b"\x1b[40m").unwrap(),
-            Color::Red => buf.write_all(b"\x1b[41m").unwrap(),
-            Color::Green => buf.write_all(b"\x1b[42m").unwrap(),
-            Color::Yellow => buf.write_all(b"\x1b[43m").unwrap(),
-            Color::Blue => buf.write_all(b"\x1b[44m").unwrap(),
-            Color::Magenta => buf.write_all(b"\x1b[45m").unwrap(),
-            Color::Cyan => buf.write_all(b"\x1b[46m").unwrap(),
-            Color::White => buf.write_all(b"\x1b[47m").unwrap(),
-            Color::DarkGray => buf.write_all(b"\x1b[100m").unwrap(),
-            Color::BrightRed => buf.write_all(b"\x1b[101m").unwrap(),
-            Color::BrightGreen => buf.write_all(b"\x1b[102m").unwrap(),
-            Color::BrightYellow => buf.write_all(b"\x1b[103m").unwrap(),
-            Color::BrightBlue => buf.write_all(b"\x1b[104m").unwrap(),
-            Color::BrightMagenta => buf.write_all(b"\x1b[105m").unwrap(),
-            Color::BrightCyan => buf.write_all(b"\x1b[106m").unwrap(),
-            Color::BrightWhite => buf.write_all(b"\x1b[107m").unwrap(),
-            Color::Rgb(r, g, b) => write!(buf, "\x1b[48;2;{};{};{}m", r, g, b).unwrap(),
+            Color::None => buf.extend_from_slice(b"\x1b[49m"),
+            Color::Black => buf.extend_from_slice(b"\x1b[40m"),
+            Color::Red => buf.extend_from_slice(b"\x1b[41m"),
+            Color::Green => buf.extend_from_slice(b"\x1b[42m"),
+            Color::Yellow => buf.extend_from_slice(b"\x1b[43m"),
+            Color::Blue => buf.extend_from_slice(b"\x1b[44m"),
+            Color::Magenta => buf.extend_from_slice(b"\x1b[45m"),
+            Color::Cyan => buf.extend_from_slice(b"\x1b[46m"),
+            Color::White => buf.extend_from_slice(b"\x1b[47m"),
+            Color::DarkGray => buf.extend_from_slice(b"\x1b[100m"),
+            Color::BrightRed => buf.extend_from_slice(b"\x1b[101m"),
+            Color::BrightGreen => buf.extend_from_slice(b"\x1b[102m"),
+            Color::BrightYellow => buf.extend_from_slice(b"\x1b[103m"),
+            Color::BrightBlue => buf.extend_from_slice(b"\x1b[104m"),
+            Color::BrightMagenta => buf.extend_from_slice(b"\x1b[105m"),
+            Color::BrightCyan => buf.extend_from_slice(b"\x1b[106m"),
+            Color::BrightWhite => buf.extend_from_slice(b"\x1b[107m"),
+            Color::Rgb(r, g, b) => {
+                buf.extend_from_slice(b"\x1b[48;2;");
+                push_num_u8(buf, *r);
+                buf.push(b';');
+                push_num_u8(buf, *g);
+                buf.push(b';');
+                push_num_u8(buf, *b);
+                buf.push(b'm');
+            }
         }
     }
 }
