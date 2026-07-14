@@ -1,4 +1,4 @@
-use crate::{Border, Box, Canvas, Cell, Color, Key, Modifier, Style, Terminal};
+use crate::{Border, Box, Canvas, Cell, Color, Gradient, Key, Modifier, Style, Terminal};
 use std::time::Duration;
 
 pub fn run(
@@ -7,7 +7,7 @@ pub fn run(
     min_w: u16,
     min_h: u16,
     border: Border,
-    warning_color: Color,
+    warning_color: Gradient,
 ) -> bool {
     let mut dirty = true;
 
@@ -31,11 +31,9 @@ pub fn run(
                 current_h,
                 0,
                 border,
-                Style {
-                    fg: warning_color,
-                    bg: Color::None,
-                    md: Modifier::Bold,
-                },
+                warning_color.clone(),
+                Gradient::Solid(Color::None),
+                Modifier::Bold,
             );
 
             let w_len = current_w.to_string().len().max(min_w.to_string().len());
@@ -60,74 +58,116 @@ pub fn run(
                 title_x as i16,
                 start_y as i16,
                 false,
-                Style {
-                    fg: warning_color,
-                    bg: Color::None,
-                    md: Modifier::Bold,
-                },
+                warning_color.clone(),
+                Gradient::Solid(Color::None),
+                Modifier::Bold,
             );
 
-            let base_style = Style {
-                fg: Color::White,
-                bg: Color::None,
-                md: Modifier::None,
-            };
-            let base_bg = Style {
-                fg: Color::White,
-                bg: Color::DarkGray,
-                md: Modifier::None,
-            };
-            let correct_bg = Style {
-                fg: Color::White,
-                bg: Color::DarkGray,
-                md: Modifier::None,
-            };
-            let incorrect_bg = Style {
-                fg: Color::Black,
-                bg: warning_color,
-                md: Modifier::None,
-            };
-            let arrow_style = Style {
-                fg: Color::White,
-                bg: Color::None,
-                md: Modifier::Bold,
-            };
+            let base_fg = Gradient::Solid(Color::White);
+            let base_bg = Gradient::Solid(Color::None);
+            let dark_bg = Gradient::Solid(Color::DarkGray);
+            let incorrect_fg = Gradient::Solid(Color::Black);
+            let incorrect_bg = warning_color.clone();
 
             let mut cur_x = start_x;
             let line1_y = start_y + 2;
-            warning_box.insert_text("Current: ", cur_x as i16, line1_y as i16, false, base_style);
+            warning_box.insert_text(
+                "Current: ",
+                cur_x as i16,
+                line1_y as i16,
+                false,
+                base_fg.clone(),
+                base_bg.clone(),
+                Modifier::None,
+            );
             cur_x += 9;
 
-            let cw_style = if current_w >= min_w {
-                correct_bg
+            let (cw_fg, cw_bg) = if current_w >= min_w {
+                (base_fg.clone(), dark_bg.clone())
             } else {
-                incorrect_bg
+                (incorrect_fg.clone(), incorrect_bg.clone())
             };
-            warning_box.insert_text(&cw_str, cur_x as i16, line1_y as i16, false, cw_style);
+            warning_box.insert_text(
+                &cw_str,
+                cur_x as i16,
+                line1_y as i16,
+                false,
+                cw_fg,
+                cw_bg,
+                Modifier::None,
+            );
             cur_x += w_len as u16;
 
-            warning_box.insert_text("x", cur_x as i16, line1_y as i16, false, base_bg);
+            warning_box.insert_text(
+                "x",
+                cur_x as i16,
+                line1_y as i16,
+                false,
+                base_fg.clone(),
+                dark_bg.clone(),
+                Modifier::None,
+            );
             cur_x += 1;
 
-            let ch_style = if current_h >= min_h {
-                correct_bg
+            let (ch_fg, ch_bg) = if current_h >= min_h {
+                (base_fg.clone(), dark_bg.clone())
             } else {
-                incorrect_bg
+                (incorrect_fg.clone(), incorrect_bg.clone())
             };
-            warning_box.insert_text(&ch_str, cur_x as i16, line1_y as i16, false, ch_style);
+            warning_box.insert_text(
+                &ch_str,
+                cur_x as i16,
+                line1_y as i16,
+                false,
+                ch_fg,
+                ch_bg,
+                Modifier::None,
+            );
 
             let mut cur_x = start_x;
             let line2_y = start_y + 3;
-            warning_box.insert_text("Needed:  ", cur_x as i16, line2_y as i16, false, base_style);
+            warning_box.insert_text(
+                "Needed:  ",
+                cur_x as i16,
+                line2_y as i16,
+                false,
+                base_fg.clone(),
+                base_bg.clone(),
+                Modifier::None,
+            );
             cur_x += 9;
 
-            warning_box.insert_text(&mw_str, cur_x as i16, line2_y as i16, false, base_bg);
+            warning_box.insert_text(
+                &mw_str,
+                cur_x as i16,
+                line2_y as i16,
+                false,
+                base_fg.clone(),
+                dark_bg.clone(),
+                Modifier::None,
+            );
             cur_x += w_len as u16;
 
-            warning_box.insert_text("x", cur_x as i16, line2_y as i16, false, base_bg);
+            warning_box.insert_text(
+                "x",
+                cur_x as i16,
+                line2_y as i16,
+                false,
+                base_fg.clone(),
+                dark_bg.clone(),
+                Modifier::None,
+            );
             cur_x += 1;
 
-            warning_box.insert_text(&mh_str, cur_x as i16, line2_y as i16, false, base_bg);
+            warning_box.insert_text(
+                &mh_str,
+                cur_x as i16,
+                line2_y as i16,
+                false,
+                base_fg.clone(),
+                dark_bg.clone(),
+                Modifier::None,
+            );
 
             if current_w < min_w && start_x >= 3 {
                 let left_arr_x = start_x / 2;
@@ -136,7 +176,11 @@ pub fn run(
                 warning_box.put_cell(
                     Cell {
                         c: '◀',
-                        s: arrow_style,
+                        s: Style {
+                            fg: Color::White,
+                            bg: Color::None,
+                            md: Modifier::Bold,
+                        },
                     },
                     left_arr_x,
                     line1_y,
@@ -144,7 +188,11 @@ pub fn run(
                 warning_box.put_cell(
                     Cell {
                         c: '▶',
-                        s: arrow_style,
+                        s: Style {
+                            fg: Color::White,
+                            bg: Color::None,
+                            md: Modifier::Bold,
+                        },
                     },
                     right_arr_x,
                     line1_y,
@@ -159,7 +207,11 @@ pub fn run(
                 warning_box.put_cell(
                     Cell {
                         c: '▲',
-                        s: arrow_style,
+                        s: Style {
+                            fg: Color::White,
+                            bg: Color::None,
+                            md: Modifier::Bold,
+                        },
                     },
                     center_x,
                     top_arr_y,
@@ -167,7 +219,11 @@ pub fn run(
                 warning_box.put_cell(
                     Cell {
                         c: '▼',
-                        s: arrow_style,
+                        s: Style {
+                            fg: Color::White,
+                            bg: Color::None,
+                            md: Modifier::Bold,
+                        },
                     },
                     center_x,
                     bot_arr_y,

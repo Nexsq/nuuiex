@@ -1,5 +1,5 @@
 use super::layout::{LIST_W, TABS_W};
-use crate::{Box, Color, Modifier, Style, conf::Config, theme::themecore::Theme};
+use crate::{Box, Color, Gradient, Modifier, Style, conf::Config, theme::themecore::Theme};
 
 pub fn refresh_tabs(
     theme: &Theme,
@@ -14,11 +14,9 @@ pub fn refresh_tabs(
             0,
             0,
             crate::Border::None,
-            Style {
-                fg: Color::None,
-                bg: Color::None,
-                md: Modifier::None,
-            },
+            Gradient::Solid(Color::None),
+            Gradient::Solid(Color::None),
+            Modifier::None,
         );
     }
 
@@ -29,11 +27,9 @@ pub fn refresh_tabs(
         height,
         0,
         crate::Border::None,
-        Style {
-            fg: theme.tabs_box,
-            bg: Color::None,
-            md: Modifier::None,
-        },
+        theme.tabs_box.clone(),
+        Gradient::Solid(Color::None),
+        Modifier::None,
     );
 
     let (tl, h, v, l_tee, bl) = match config.get_border() {
@@ -43,14 +39,16 @@ pub fn refresh_tabs(
         crate::Border::None => (' ', ' ', ' ', ' ', ' '),
     };
 
-    let border_style = Style {
-        fg: theme.tabs_box,
+    let get_border_style = |x: usize| Style {
+        fg: theme.tabs_box.color_at(x, TABS_W as usize),
         bg: Color::None,
         md: Modifier::None,
     };
 
-    tabs_box.put_cell(crate::Cell::new(tl, border_style), 0, 0);
-    tabs_box.put_cell(crate::Cell::new(h, border_style), 1, 0);
+    tabs_box.put_cell(crate::Cell::new(tl, get_border_style(0)), 0, 0);
+    tabs_box.put_cell(crate::Cell::new(h, get_border_style(1)), 1, 0);
+
+    let dark_gray = Gradient::Solid(Color::DarkGray);
 
     for i in 0..tabs_num {
         let y_num = 1 + i * 2;
@@ -60,19 +58,19 @@ pub fn refresh_tabs(
         let is_running = running_macros[i].is_some();
 
         let (num_color, num_md) = if is_selected {
-            (theme.tab_selected, Modifier::Bold)
+            (&theme.tab_selected, Modifier::Bold)
         } else if is_running {
-            (theme.tab_lazy, Modifier::Bold)
+            (&theme.tab_lazy, Modifier::Bold)
         } else {
-            (Color::DarkGray, Modifier::Dim)
+            (&dark_gray, Modifier::Dim)
         };
 
-        tabs_box.put_cell(crate::Cell::new(v, border_style), 0, y_num as u16);
+        tabs_box.put_cell(crate::Cell::new(v, get_border_style(0)), 0, y_num as u16);
         tabs_box.put_cell(
             crate::Cell::new(
                 char::from_digit((i + 1) as u32, 10).unwrap(),
                 Style {
-                    fg: num_color,
+                    fg: num_color.color_at(1, TABS_W as usize),
                     bg: Color::None,
                     md: num_md,
                 },
@@ -82,13 +80,17 @@ pub fn refresh_tabs(
         );
 
         if i < tabs_num - 1 {
-            tabs_box.put_cell(crate::Cell::new(l_tee, border_style), 0, y_sep as u16);
-            tabs_box.put_cell(crate::Cell::new(h, border_style), 1, y_sep as u16);
+            tabs_box.put_cell(
+                crate::Cell::new(l_tee, get_border_style(0)),
+                0,
+                y_sep as u16,
+            );
+            tabs_box.put_cell(crate::Cell::new(h, get_border_style(1)), 1, y_sep as u16);
         }
     }
 
-    tabs_box.put_cell(crate::Cell::new(bl, border_style), 0, height - 1);
-    tabs_box.put_cell(crate::Cell::new(h, border_style), 1, height - 1);
+    tabs_box.put_cell(crate::Cell::new(bl, get_border_style(0)), 0, height - 1);
+    tabs_box.put_cell(crate::Cell::new(h, get_border_style(1)), 1, height - 1);
 
     tabs_box
 }
@@ -100,11 +102,9 @@ pub fn refresh_title(theme: &Theme) -> Box {
         header_h,
         0,
         crate::Border::None,
-        Style {
-            fg: theme.title_box,
-            bg: Color::None,
-            md: Modifier::None,
-        },
+        theme.title_box.clone(),
+        Gradient::Solid(Color::None),
+        Modifier::None,
     );
 
     let max_width = title_box.width;
@@ -127,11 +127,9 @@ pub fn refresh_title(theme: &Theme) -> Box {
                 current_x as i16,
                 i as i16,
                 false,
-                Style {
-                    fg: *color,
-                    bg: Color::None,
-                    md: Modifier::None,
-                },
+                Gradient::Solid(*color),
+                Gradient::Solid(Color::None),
+                Modifier::None,
             );
             current_x += display_text.chars().count() as u16;
         }
@@ -145,22 +143,18 @@ pub fn refresh_deck(term_w: u16, header_h: u16, theme: &Theme) -> Box {
         header_h,
         0,
         crate::Border::Heavy,
-        Style {
-            fg: theme.deck_box,
-            bg: Color::None,
-            md: Modifier::None,
-        },
+        theme.deck_box.clone(),
+        Gradient::Solid(Color::None),
+        Modifier::None,
     );
     deck_box.insert_text(
         "DECK",
         0,
         0,
         false,
-        Style {
-            fg: theme.main_label,
-            bg: Color::None,
-            md: Modifier::Bold,
-        },
+        theme.main_label.clone(),
+        Gradient::Solid(Color::None),
+        Modifier::Bold,
     );
     deck_box
 }

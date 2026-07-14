@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::conf::Config;
-use crate::{Box, Color, Key, Modifier, Style, theme::themecore::Theme};
+use crate::{Box, Color, Gradient, Key, Modifier, Style, theme::themecore::Theme};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Mode {
@@ -1108,15 +1108,13 @@ impl Editor {
             height,
             1,
             config.get_border(),
-            Style {
-                fg: if is_active && use_border_color {
-                    theme.selected_box
-                } else {
-                    theme.main_box
-                },
-                bg: Color::None,
-                md: Modifier::None,
+            if is_active && use_border_color {
+                theme.selected_box.clone()
+            } else {
+                theme.main_box.clone()
             },
+            Gradient::Solid(Color::None),
+            Modifier::None,
         );
 
         crate::panels::apply_indicator(&mut b, config, theme, is_active);
@@ -1125,38 +1123,54 @@ impl Editor {
             let (mode_str, mode_color) = match self.mode {
                 Mode::Command => {
                     if self.visual_mode {
-                        ("[VIS]", theme.editor_vis)
+                        ("[VIS]", &theme.editor_vis)
                     } else {
-                        ("[CMD]", theme.editor_cmd)
+                        ("[CMD]", &theme.editor_cmd)
                     }
                 }
-                Mode::Search => ("[SRC]", theme.editor_src),
-                Mode::Insert => ("[INS]", theme.editor_ins),
+                Mode::Search => ("[SRC]", &theme.editor_src),
+                Mode::Insert => ("[INS]", &theme.editor_ins),
             };
 
-            let default_style = Style {
-                fg: theme.main_label,
-                bg: Color::None,
-                md: Modifier::Bold,
-            };
-            let mode_style = Style {
-                fg: mode_color,
-                bg: Color::None,
-                md: Modifier::Bold,
-            };
+            b.insert_text(
+                " ",
+                1,
+                -1,
+                false,
+                Gradient::Solid(Color::White),
+                Gradient::Solid(Color::None),
+                Modifier::Bold,
+            );
+            b.insert_text(
+                mode_str,
+                2,
+                -1,
+                false,
+                mode_color.clone(),
+                Gradient::Solid(Color::None),
+                Modifier::Bold,
+            );
 
-            b.insert_text(" ", 1, -1, false, default_style);
-            b.insert_text(mode_str, 2, -1, false, mode_style);
             if !self.rel_path.is_empty() {
                 b.insert_text(
                     &format!(" {} ", self.rel_path),
                     2 + mode_str.len() as i16,
                     -1,
                     false,
-                    default_style,
+                    theme.main_label.clone(),
+                    Gradient::Solid(Color::None),
+                    Modifier::Bold,
                 );
             } else {
-                b.insert_text(" ", 2 + mode_str.len() as i16, -1, false, default_style);
+                b.insert_text(
+                    " ",
+                    2 + mode_str.len() as i16,
+                    -1,
+                    false,
+                    theme.main_label.clone(),
+                    Gradient::Solid(Color::None),
+                    Modifier::Bold,
+                );
             }
         }
 
@@ -1237,6 +1251,7 @@ impl Editor {
 
             let is_error_line = self.is_editing && self.error_lines.contains(&(i + 1));
             let line_chars: Vec<char> = line.chars().collect();
+
             let mut syntax_colors = Vec::with_capacity(line_chars.len());
 
             if self.is_editing {
@@ -1244,32 +1259,40 @@ impl Editor {
                 while idx < line_chars.len() {
                     let c = line_chars[idx];
                     if c == '#' {
-                        for _ in idx..line_chars.len() {
-                            syntax_colors.push(theme.editor_comments);
+                        let start = idx;
+                        let end = line_chars.len();
+                        for k in start..end {
+                            syntax_colors
+                                .push(theme.editor_comments.color_at(k - start, end - start));
                         }
                         break;
                     } else if c == '"' {
-                        syntax_colors.push(theme.editor_strings);
+                        let start = idx;
                         idx += 1;
                         while idx < line_chars.len() {
                             let sc = line_chars[idx];
-                            syntax_colors.push(theme.editor_strings);
                             idx += 1;
                             if sc == '\\' && idx < line_chars.len() {
-                                syntax_colors.push(theme.editor_strings);
                                 idx += 1;
                             } else if sc == '"' {
                                 break;
                             }
                         }
+                        for k in start..idx {
+                            syntax_colors
+                                .push(theme.editor_strings.color_at(k - start, idx - start));
+                        }
                     } else if c.is_ascii_digit() {
-                        syntax_colors.push(theme.editor_numbers);
+                        let start = idx;
                         idx += 1;
                         while idx < line_chars.len()
                             && (line_chars[idx].is_ascii_digit() || line_chars[idx] == '.')
                         {
-                            syntax_colors.push(theme.editor_numbers);
                             idx += 1;
+                        }
+                        for k in start..idx {
+                            syntax_colors
+                                .push(theme.editor_numbers.color_at(k - start, idx - start));
                         }
                     } else if c.is_alphabetic() || c == '_' {
                         let start = idx;
@@ -1300,26 +1323,33 @@ impl Editor {
                         let is_func = j < line_chars.len() && line_chars[j] == '(';
 
                         let color = if is_kw {
-                            theme.editor_keywords
+                            &theme.editor_keywords
                         } else if is_bool {
-                            theme.editor_bool
+                            &theme.editor_bool
                         } else if is_func {
-                            theme.editor_functions
+                            &theme.editor_functions
                         } else {
-                            theme.editor_variables
+                            &theme.editor_variables
                         };
 
-                        for _ in start..idx {
-                            syntax_colors.push(color);
+                        for k in start..idx {
+                            syntax_colors.push(color.color_at(k - start, idx - start));
                         }
                     } else if "+-=*/<>!".contains(c) {
-                        syntax_colors.push(theme.editor_operators);
+                        let start = idx;
                         idx += 1;
+                        while idx < line_chars.len() && "+-=*/<>!".contains(line_chars[idx]) {
+                            idx += 1;
+                        }
+                        for k in start..idx {
+                            syntax_colors
+                                .push(theme.editor_operators.color_at(k - start, idx - start));
+                        }
                     } else if "()[]{}".contains(c) {
-                        syntax_colors.push(theme.editor_brackets);
+                        syntax_colors.push(theme.editor_brackets.color_at(0, 1));
                         idx += 1;
                     } else {
-                        syntax_colors.push(theme.main_label);
+                        syntax_colors.push(theme.main_label.color_at(0, 1));
                         idx += 1;
                     }
                 }
@@ -1350,7 +1380,7 @@ impl Editor {
                     bg: if is_selected {
                         Color::DarkGray
                     } else if is_error_line {
-                        theme.editor_errors
+                        theme.editor_errors.color_at(display_x as usize, inner_w)
                     } else {
                         Color::None
                     },
@@ -1427,27 +1457,35 @@ impl Editor {
                 bar_text.push('_');
             }
 
-            let bar_style = Style {
-                fg: Color::Black,
-                bg: theme.editor_src_bg,
-                md: Modifier::None,
-            };
+            let bar_bg = &theme.editor_src_bg;
 
             for (x, c) in bar_text.chars().enumerate().take(inner_w) {
-                b.put_cell(crate::Cell { c, s: bar_style }, x as u16 + 1, bar_y);
+                b.put_cell(
+                    crate::Cell {
+                        c,
+                        s: Style {
+                            fg: Color::Black,
+                            bg: bar_bg.color_at(x, inner_w),
+                            md: Modifier::None,
+                        },
+                    },
+                    x as u16 + 1,
+                    bar_y,
+                );
             }
         }
 
         if self.is_editing && self.error_count > 0 {
             let err_str = format!(" ERR {} ", self.error_count);
+            let err_len = err_str.chars().count();
             let mut x = 2;
-            for c in err_str.chars() {
+            for (i, c) in err_str.chars().enumerate() {
                 if x < width.saturating_sub(1) {
                     b.put_cell(
                         crate::Cell {
                             c,
                             s: Style {
-                                fg: theme.editor_errors,
+                                fg: theme.editor_errors.color_at(i, err_len),
                                 bg: Color::None,
                                 md: Modifier::Bold,
                             },

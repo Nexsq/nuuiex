@@ -1,6 +1,5 @@
 pub mod layout;
 pub mod list;
-pub mod mainbox;
 pub mod r#static;
 
 use std::path::PathBuf;
@@ -8,8 +7,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{
-    Border, Box, Canvas, Color, Key, Modifier, Style, conf::Config, editor::Editor, lib::MacroNode,
-    theme::themecore::Theme,
+    Border, Box, Canvas, Color, Gradient, Key, Modifier, conf::Config, editor::Editor,
+    lib::MacroNode, theme::themecore::Theme,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -84,11 +83,9 @@ impl MainView {
                 1,
                 1,
                 Border::None,
-                Style {
-                    fg: Color::None,
-                    bg: Color::None,
-                    md: Modifier::None,
-                },
+                Gradient::Solid(Color::None),
+                Gradient::Solid(Color::None),
+                Modifier::None,
             )
         };
 
@@ -160,7 +157,7 @@ impl MainView {
                 MacroNode::Script { path, .. } => {
                     let rp = path
                         .strip_prefix(&self.library_root)
-                        .unwrap_or(path)
+                        .unwrap_or(path.as_path())
                         .to_string_lossy()
                         .into_owned();
                     to_load = Some((path.clone(), rp));
@@ -424,6 +421,8 @@ impl MainView {
             {
                 path = p.clone();
                 current = children;
+            } else {
+                break;
             }
         }
         path
@@ -492,7 +491,7 @@ impl MainView {
             if let MacroNode::Script { path, .. } = node {
                 let rp = path
                     .strip_prefix(&self.library_root)
-                    .unwrap_or(path)
+                    .unwrap_or(path.as_path())
                     .to_string_lossy()
                     .into_owned();
                 target = Some((path.clone(), rp));
@@ -639,7 +638,7 @@ pub fn handle_list_input(
                             view.min_w,
                             view.min_h,
                             config.get_border(),
-                            view.theme.warning_color,
+                            view.theme.warning_color.clone(),
                             |cvs, w, h| {
                                 if w != view.term_w || h != view.term_h {
                                     if w >= view.min_w && h >= view.min_h {
@@ -744,7 +743,7 @@ pub fn handle_list_input(
                         view.min_w,
                         view.min_h,
                         config.get_border(),
-                        view.theme.warning_color,
+                        view.theme.warning_color.clone(),
                         |cvs, w, h| {
                             if w != view.term_w || h != view.term_h {
                                 if w >= view.min_w && h >= view.min_h {
@@ -923,7 +922,7 @@ pub fn handle_list_action(
                     view.min_w,
                     view.min_h,
                     config.get_border(),
-                    view.theme.warning_color,
+                    view.theme.warning_color.clone(),
                     |cvs, w, h| {
                         if w != view.term_w || h != view.term_h {
                             if w >= view.min_w && h >= view.min_h {
@@ -995,7 +994,7 @@ pub fn handle_list_action(
                         view.min_w,
                         view.min_h,
                         config.get_border(),
-                        view.theme.warning_color,
+                        view.theme.warning_color.clone(),
                         |cvs, w, h| {
                             if w != view.term_w || h != view.term_h {
                                 if w >= view.min_w && h >= view.min_h {
@@ -1025,7 +1024,7 @@ pub fn handle_list_action(
                         view.min_w,
                         view.min_h,
                         config.get_border(),
-                        view.theme.warning_color,
+                        view.theme.warning_color.clone(),
                         |cvs, w, h| {
                             if w != view.term_w || h != view.term_h {
                                 if w >= view.min_w && h >= view.min_h {

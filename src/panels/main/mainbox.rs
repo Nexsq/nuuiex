@@ -1,6 +1,6 @@
 use super::ActivePanel;
 use super::layout::{LIST_W, TABS_W};
-use crate::{Box, Color, Modifier, Style, conf::Config, theme::themecore::Theme};
+use crate::{Box, Color, Gradient, Modifier, conf::Config, theme::themecore::Theme};
 
 pub fn refresh(
     term_w: u16,
@@ -15,9 +15,9 @@ pub fn refresh(
     let use_border_color = config.indicator_style == "border";
 
     let main_color = if is_active && use_border_color {
-        theme.selected_box
+        &theme.selected_box
     } else {
-        theme.main_box
+        &theme.main_box
     };
 
     let mut main_box = Box::new(
@@ -25,11 +25,9 @@ pub fn refresh(
         term_h.saturating_sub(header_h),
         1,
         config.get_border(),
-        Style {
-            fg: main_color,
-            bg: Color::None,
-            md: Modifier::None,
-        },
+        main_color.clone(),
+        Gradient::Solid(Color::None),
+        Modifier::None,
     );
 
     crate::panels::apply_indicator(&mut main_box, config, theme, is_active);
@@ -39,11 +37,9 @@ pub fn refresh(
         0,
         0,
         false,
-        Style {
-            fg: Color::White,
-            bg: Color::None,
-            md: Modifier::None,
-        },
+        Gradient::Solid(Color::White),
+        Gradient::Solid(Color::None),
+        Modifier::None,
     );
 
     main_box

@@ -1,4 +1,6 @@
-something big is comming
+gradient problems:
+- error outline does not have gradients
+
 
 add to macro engine:
 - user defined functions

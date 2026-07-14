@@ -7,6 +7,48 @@ pub struct Style {
     pub md: Modifier,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Gradient {
+    Solid(Color),
+    Linear(Vec<Color>),
+}
+
+impl Default for Gradient {
+    fn default() -> Self {
+        Gradient::Solid(Color::None)
+    }
+}
+
+impl Gradient {
+    pub fn color_at(&self, x: usize, max_x: usize) -> Color {
+        match self {
+            Gradient::Solid(c) => *c,
+            Gradient::Linear(colors) => {
+                if colors.is_empty() {
+                    return Color::None;
+                }
+                if colors.len() == 1 || max_x <= 1 {
+                    return colors[0];
+                }
+                let t = (x as f32 / (max_x - 1) as f32).clamp(0.0, 1.0);
+                let segments = (colors.len() - 1) as f32;
+                let scaled_t = t * segments;
+                let index = scaled_t.floor() as usize;
+
+                if index >= colors.len() - 1 {
+                    return colors.last().copied().unwrap_or(Color::None);
+                }
+
+                let local_t = scaled_t - index as f32;
+                let c1 = colors[index];
+                let c2 = colors[index + 1];
+
+                c1.interpolate(c2, local_t)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Color {
     None,
@@ -69,6 +111,42 @@ impl Default for Style {
 }
 
 impl Color {
+    pub fn to_rgb(&self) -> Option<(u8, u8, u8)> {
+        match self {
+            Color::None => None,
+            Color::Black => Some((0, 0, 0)),
+            Color::Red => Some((205, 49, 49)),
+            Color::Green => Some((13, 188, 121)),
+            Color::Yellow => Some((229, 229, 16)),
+            Color::Blue => Some((36, 114, 200)),
+            Color::Magenta => Some((188, 63, 188)),
+            Color::Cyan => Some((17, 168, 205)),
+            Color::White => Some((229, 229, 229)),
+            Color::DarkGray => Some((102, 102, 102)),
+            Color::BrightRed => Some((241, 76, 76)),
+            Color::BrightGreen => Some((35, 209, 139)),
+            Color::BrightYellow => Some((245, 245, 67)),
+            Color::BrightBlue => Some((59, 142, 234)),
+            Color::BrightMagenta => Some((214, 112, 214)),
+            Color::BrightCyan => Some((41, 184, 219)),
+            Color::BrightWhite => Some((255, 255, 255)),
+            Color::Rgb(r, g, b) => Some((*r, *g, *b)),
+        }
+    }
+
+    pub fn interpolate(&self, other: Color, t: f32) -> Color {
+        if let (Some((r1, g1, b1)), Some((r2, g2, b2))) = (self.to_rgb(), other.to_rgb()) {
+            let inv_t = 1.0 - t;
+            let r = (r1 as f32 * inv_t + r2 as f32 * t) as u8;
+            let g = (g1 as f32 * inv_t + g2 as f32 * t) as u8;
+            let b = (b1 as f32 * inv_t + b2 as f32 * t) as u8;
+
+            Color::Rgb(r, g, b)
+        } else {
+            *self
+        }
+    }
+
     pub fn fg_ansi(&self, buf: &mut Vec<u8>) {
         match self {
             Color::None => buf.write_all(b"\x1b[39m").unwrap(),

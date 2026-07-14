@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::{Border, Box, Canvas, Color, Key, Modifier, PanelResult, Style, Terminal};
+use crate::{Border, Box, Canvas, Color, Gradient, Key, Modifier, PanelResult, Terminal};
 
 pub fn warning_box<F>(
     terminal: &Terminal,
@@ -12,7 +12,7 @@ pub fn warning_box<F>(
     min_w: u16,
     min_h: u16,
     border: Border,
-    warning_color: Color,
+    warning_color: Gradient,
     mut draw_background: F,
 ) -> PanelResult
 where
@@ -30,27 +30,6 @@ where
     let selected_opts: Vec<String> = options.iter().map(|o| format!("> {} <", o)).collect();
     let unselected_opts: Vec<String> = options.iter().map(|o| format!("  {}  ", o)).collect();
 
-    let selected_style = Style {
-        fg: Color::Black,
-        bg: Color::White,
-        md: Modifier::Bold,
-    };
-    let unselected_style = Style {
-        fg: Color::Black,
-        bg: warning_color,
-        md: Modifier::None,
-    };
-    let msg_style = Style {
-        fg: Color::White,
-        bg: Color::None,
-        md: Modifier::None,
-    };
-    let border_style = Style {
-        fg: warning_color,
-        bg: Color::None,
-        md: Modifier::Bold,
-    };
-
     let mut selected_idx: usize = 0;
 
     let mut dirty = true;
@@ -65,7 +44,14 @@ where
 
         if dirty {
             if current_w < min_w || current_h < min_h {
-                if !crate::toosmall::run(terminal, canvas, min_w, min_h, border, warning_color) {
+                if !crate::toosmall::run(
+                    terminal,
+                    canvas,
+                    min_w,
+                    min_h,
+                    border,
+                    warning_color.clone(),
+                ) {
                     return PanelResult::Quit;
                 }
                 dirty = true;
@@ -97,12 +83,28 @@ where
             let box_x = (term_w.saturating_sub(box_w) / 2) as i16;
             let box_y = (term_h.saturating_sub(box_h) / 2) as i16;
 
-            let mut err_box = Box::new(box_w, box_h, pad, border, border_style);
+            let mut err_box = Box::new(
+                box_w,
+                box_h,
+                pad,
+                border,
+                warning_color.clone(),
+                Gradient::Solid(Color::None),
+                Modifier::Bold,
+            );
             let inner_w = box_w.saturating_sub(pad * 2);
             let inner_h = box_h.saturating_sub(pad * 2);
             let msg_x = (inner_w.saturating_sub(max_msg_len as u16) / 2) as i16;
 
-            err_box.insert_text(msg, msg_x, 0, true, msg_style);
+            err_box.insert_text(
+                msg,
+                msg_x,
+                0,
+                true,
+                Gradient::Solid(Color::White),
+                Gradient::Solid(Color::None),
+                Modifier::None,
+            );
 
             if !options.is_empty() {
                 let options_y = inner_h.saturating_sub(1) as i16;
@@ -115,13 +117,22 @@ where
                     } else {
                         &unselected_opts[i]
                     };
-                    let style = if is_selected {
-                        selected_style
+
+                    let (fg, bg, md) = if is_selected {
+                        (
+                            Gradient::Solid(Color::Black),
+                            Gradient::Solid(Color::White),
+                            Modifier::Bold,
+                        )
                     } else {
-                        unselected_style
+                        (
+                            Gradient::Solid(Color::Black),
+                            warning_color.clone(),
+                            Modifier::None,
+                        )
                     };
 
-                    err_box.insert_text(text, current_x, options_y, false, style);
+                    err_box.insert_text(text, current_x, options_y, false, fg, bg, md);
                     current_x += (text.chars().count() + 1) as i16;
                 }
             }
@@ -131,29 +142,32 @@ where
             dirty = false;
         }
 
-        match terminal.read_key(Duration::from_millis(16)) {
-            Key::None => continue,
-            key => {
-                match key {
-                    Key::Left | Key::Up => {
-                        if selected_idx > 0 {
-                            selected_idx -= 1;
-                        } else if !options.is_empty() {
-                            selected_idx = options.len() - 1;
-                        }
-                    }
-                    Key::Right | Key::Down => {
-                        if selected_idx < options.len().saturating_sub(1) {
-                            selected_idx += 1;
-                        } else {
-                            selected_idx = 0;
-                        }
-                    }
-                    Key::Enter => return PanelResult::Ok(selected_idx),
-                    Key::Esc => return PanelResult::Cancel,
-                    Key::Char('q') | Key::Char('\x03') => return PanelResult::Quit,
-                    _ => continue,
+        let key = terminal.read_key(Duration::from_millis(16));
+        if key == Key::None {
+            continue;
+        }
+
+        match key {
+            Key::Left | Key::Up => {
+                if selected_idx > 0 {
+                    selected_idx -= 1;
+                } else if !options.is_empty() {
+                    selected_idx = options.len() - 1;
                 }
+                dirty = true;
+            }
+            Key::Right | Key::Down => {
+                if selected_idx < options.len().saturating_sub(1) {
+                    selected_idx += 1;
+                } else {
+                    selected_idx = 0;
+                }
+                dirty = true;
+            }
+            Key::Enter => return PanelResult::Ok(selected_idx),
+            Key::Esc => return PanelResult::Cancel,
+            Key::Char('q') | Key::Char('\x03') => return PanelResult::Quit,
+            _ => {
                 dirty = true;
             }
         }
@@ -168,7 +182,7 @@ pub fn error_box(
     min_w: u16,
     min_h: u16,
     border: Border,
-    warning_color: Color,
+    warning_color: Gradient,
 ) -> PanelResult {
     let total_opts_len = options
         .iter()
@@ -178,27 +192,6 @@ pub fn error_box(
 
     let selected_opts: Vec<String> = options.iter().map(|o| format!("> {} <", o)).collect();
     let unselected_opts: Vec<String> = options.iter().map(|o| format!("  {}  ", o)).collect();
-
-    let selected_style = Style {
-        fg: Color::Black,
-        bg: Color::White,
-        md: Modifier::Bold,
-    };
-    let unselected_style = Style {
-        fg: Color::White,
-        bg: Color::Red,
-        md: Modifier::None,
-    };
-    let msg_style = Style {
-        fg: Color::White,
-        bg: Color::None,
-        md: Modifier::None,
-    };
-    let border_style = Style {
-        fg: Color::Red,
-        bg: Color::None,
-        md: Modifier::Bold,
-    };
 
     let mut selected_idx: usize = 0;
 
@@ -213,7 +206,14 @@ pub fn error_box(
 
         if dirty {
             if current_w < min_w || current_h < min_h {
-                if !crate::toosmall::run(terminal, canvas, min_w, min_h, border, warning_color) {
+                if !crate::toosmall::run(
+                    terminal,
+                    canvas,
+                    min_w,
+                    min_h,
+                    border,
+                    warning_color.clone(),
+                ) {
                     return PanelResult::Quit;
                 }
                 dirty = true;
@@ -226,7 +226,15 @@ pub fn error_box(
             let term_h = canvas.height;
 
             let pad: u16 = 2;
-            let mut err_box = Box::new(term_w, term_h, pad, Border::Heavy, border_style);
+            let mut err_box = Box::new(
+                term_w,
+                term_h,
+                pad,
+                Border::Heavy,
+                Gradient::Solid(Color::Red),
+                Gradient::Solid(Color::None),
+                Modifier::Bold,
+            );
 
             let inner_w = term_w.saturating_sub(pad * 2);
             let inner_h = term_h.saturating_sub(pad * 2);
@@ -234,7 +242,15 @@ pub fn error_box(
             let msg_x = 2;
             let msg_y = 0;
 
-            err_box.insert_text(msg, msg_x, msg_y, true, msg_style);
+            err_box.insert_text(
+                msg,
+                msg_x,
+                msg_y,
+                true,
+                Gradient::Solid(Color::White),
+                Gradient::Solid(Color::None),
+                Modifier::None,
+            );
 
             if !options.is_empty() {
                 let options_y = inner_h.saturating_sub(1) as i16;
@@ -247,13 +263,22 @@ pub fn error_box(
                     } else {
                         &unselected_opts[i]
                     };
-                    let style = if is_selected {
-                        selected_style
+
+                    let (fg, bg, md) = if is_selected {
+                        (
+                            Gradient::Solid(Color::Black),
+                            Gradient::Solid(Color::White),
+                            Modifier::Bold,
+                        )
                     } else {
-                        unselected_style
+                        (
+                            Gradient::Solid(Color::White),
+                            Gradient::Solid(Color::Red),
+                            Modifier::None,
+                        )
                     };
 
-                    err_box.insert_text(text, current_x, options_y, false, style);
+                    err_box.insert_text(text, current_x, options_y, false, fg, bg, md);
                     current_x += (text.chars().count() + 1) as i16;
                 }
             }
@@ -263,29 +288,32 @@ pub fn error_box(
             dirty = false;
         }
 
-        match terminal.read_key(Duration::from_millis(16)) {
-            Key::None => continue,
-            key => {
-                match key {
-                    Key::Left | Key::Up => {
-                        if selected_idx > 0 {
-                            selected_idx -= 1;
-                        } else if !options.is_empty() {
-                            selected_idx = options.len() - 1;
-                        }
-                    }
-                    Key::Right | Key::Down => {
-                        if selected_idx < options.len().saturating_sub(1) {
-                            selected_idx += 1;
-                        } else {
-                            selected_idx = 0;
-                        }
-                    }
-                    Key::Enter => return PanelResult::Ok(selected_idx),
-                    Key::Esc => return PanelResult::Cancel,
-                    Key::Char('q') | Key::Char('\x03') => return PanelResult::Quit,
-                    _ => continue,
+        let key = terminal.read_key(Duration::from_millis(16));
+        if key == Key::None {
+            continue;
+        }
+
+        match key {
+            Key::Left | Key::Up => {
+                if selected_idx > 0 {
+                    selected_idx -= 1;
+                } else if !options.is_empty() {
+                    selected_idx = options.len() - 1;
                 }
+                dirty = true;
+            }
+            Key::Right | Key::Down => {
+                if selected_idx < options.len().saturating_sub(1) {
+                    selected_idx += 1;
+                } else {
+                    selected_idx = 0;
+                }
+                dirty = true;
+            }
+            Key::Enter => return PanelResult::Ok(selected_idx),
+            Key::Esc => return PanelResult::Cancel,
+            Key::Char('q') | Key::Char('\x03') => return PanelResult::Quit,
+            _ => {
                 dirty = true;
             }
         }

@@ -6,7 +6,7 @@ mod render;
 mod theme;
 
 pub use render::canvas::{Box, Canvas, Cell};
-pub use render::style::{Border, Color, Modifier, Style};
+pub use render::style::{Border, Color, Gradient, Modifier, Style};
 pub use render::terminal::{Key, Terminal};
 
 pub use config::conf;

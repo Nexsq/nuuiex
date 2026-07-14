@@ -100,12 +100,7 @@ impl Interpreter {
 
         let mut res = self.output.clone();
         if !self.current_line.is_empty() {
-            if res.is_empty() {
-                res.push(self.current_line.clone());
-            } else {
-                let last = res.len() - 1;
-                res[last].push_str(&self.current_line);
-            }
+            res.push(self.current_line.clone());
         }
         if !self.errors.is_empty() {
             if !res.is_empty() && !res.last().unwrap().is_empty() {

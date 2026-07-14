@@ -1,4 +1,4 @@
-use crate::render::style::Color;
+use crate::render::style::{Color, Gradient};
 use directories::ProjectDirs;
 use std::fs;
 
@@ -14,39 +14,39 @@ pub const BUILTIN_THEMES: &[(&str, &str)] = &[
 pub struct Theme {
     pub name: String,
     pub title: Vec<Vec<(String, Color)>>,
-    pub main_label: Color,
-    pub warning_color: Color,
-    pub main_box: Color,
-    pub list_box: Color,
-    pub tabs_box: Color,
-    pub title_box: Color,
-    pub deck_box: Color,
-    pub settings_category_box: Color,
-    pub settings_options_box: Color,
-    pub selected_box: Color,
-    pub list_folder: Color,
-    pub list_file: Color,
-    pub tab_lazy: Color,
-    pub tab_selected: Color,
-    pub settings_entry: Color,
-    pub settings_selected: Color,
-    pub settings_special: Color,
-    pub editor_ins: Color,
-    pub editor_cmd: Color,
-    pub editor_vis: Color,
-    pub editor_src: Color,
-    pub editor_src_bg: Color,
+    pub main_label: Gradient,
+    pub warning_color: Gradient,
+    pub main_box: Gradient,
+    pub list_box: Gradient,
+    pub tabs_box: Gradient,
+    pub title_box: Gradient,
+    pub deck_box: Gradient,
+    pub settings_category_box: Gradient,
+    pub settings_options_box: Gradient,
+    pub selected_box: Gradient,
+    pub list_folder: Gradient,
+    pub list_file: Gradient,
+    pub tab_lazy: Gradient,
+    pub tab_selected: Gradient,
+    pub settings_entry: Gradient,
+    pub settings_selected: Gradient,
+    pub settings_special: Gradient,
+    pub editor_ins: Gradient,
+    pub editor_cmd: Gradient,
+    pub editor_vis: Gradient,
+    pub editor_src: Gradient,
+    pub editor_src_bg: Gradient,
 
-    pub editor_keywords: Color,
-    pub editor_functions: Color,
-    pub editor_strings: Color,
-    pub editor_numbers: Color,
-    pub editor_bool: Color,
-    pub editor_comments: Color,
-    pub editor_variables: Color,
-    pub editor_operators: Color,
-    pub editor_brackets: Color,
-    pub editor_errors: Color,
+    pub editor_keywords: Gradient,
+    pub editor_functions: Gradient,
+    pub editor_strings: Gradient,
+    pub editor_numbers: Gradient,
+    pub editor_bool: Gradient,
+    pub editor_comments: Gradient,
+    pub editor_variables: Gradient,
+    pub editor_operators: Gradient,
+    pub editor_brackets: Gradient,
+    pub editor_errors: Gradient,
 }
 
 impl Theme {
@@ -54,39 +54,39 @@ impl Theme {
         Self {
             name: String::new(),
             title: Vec::new(),
-            main_label: Color::None,
-            warning_color: Color::None,
-            main_box: Color::None,
-            list_box: Color::None,
-            tabs_box: Color::None,
-            title_box: Color::None,
-            deck_box: Color::None,
-            settings_category_box: Color::None,
-            settings_options_box: Color::None,
-            selected_box: Color::None,
-            list_folder: Color::None,
-            list_file: Color::None,
-            tab_lazy: Color::None,
-            tab_selected: Color::None,
-            settings_entry: Color::None,
-            settings_selected: Color::None,
-            settings_special: Color::None,
-            editor_ins: Color::None,
-            editor_cmd: Color::None,
-            editor_vis: Color::None,
-            editor_src: Color::None,
-            editor_src_bg: Color::None,
+            main_label: Gradient::default(),
+            warning_color: Gradient::default(),
+            main_box: Gradient::default(),
+            list_box: Gradient::default(),
+            tabs_box: Gradient::default(),
+            title_box: Gradient::default(),
+            deck_box: Gradient::default(),
+            settings_category_box: Gradient::default(),
+            settings_options_box: Gradient::default(),
+            selected_box: Gradient::default(),
+            list_folder: Gradient::default(),
+            list_file: Gradient::default(),
+            tab_lazy: Gradient::default(),
+            tab_selected: Gradient::default(),
+            settings_entry: Gradient::default(),
+            settings_selected: Gradient::default(),
+            settings_special: Gradient::default(),
+            editor_ins: Gradient::default(),
+            editor_cmd: Gradient::default(),
+            editor_vis: Gradient::default(),
+            editor_src: Gradient::default(),
+            editor_src_bg: Gradient::default(),
 
-            editor_keywords: Color::None,
-            editor_functions: Color::None,
-            editor_strings: Color::None,
-            editor_numbers: Color::None,
-            editor_bool: Color::None,
-            editor_comments: Color::None,
-            editor_variables: Color::None,
-            editor_operators: Color::None,
-            editor_brackets: Color::None,
-            editor_errors: Color::None,
+            editor_keywords: Gradient::default(),
+            editor_functions: Gradient::default(),
+            editor_strings: Gradient::default(),
+            editor_numbers: Gradient::default(),
+            editor_bool: Gradient::default(),
+            editor_comments: Gradient::default(),
+            editor_variables: Gradient::default(),
+            editor_operators: Gradient::default(),
+            editor_brackets: Gradient::default(),
+            editor_errors: Gradient::default(),
         }
     }
 }
@@ -282,6 +282,25 @@ fn parse_color(val: &str) -> Result<Color, String> {
     Err(format!("Invalid color: '{}'", val))
 }
 
+fn parse_gradient(val: &str) -> Result<Gradient, String> {
+    let parts: Vec<&str> = val.split_whitespace().collect();
+    if parts.is_empty() {
+        return Err("Empty color".into());
+    }
+    if parts.len() > 4 {
+        return Err("Maximum of 4 colors allowed in a gradient".into());
+    }
+    if parts.len() == 1 {
+        Ok(Gradient::Solid(parse_color(parts[0])?))
+    } else {
+        let mut colors = Vec::new();
+        for p in parts {
+            colors.push(parse_color(p)?);
+        }
+        Ok(Gradient::Linear(colors))
+    }
+}
+
 fn parse_title(val: &str) -> Result<Vec<Vec<(String, Color)>>, String> {
     let mut lines = Vec::new();
     let mut current_color = Color::White;
@@ -336,39 +355,39 @@ fn parse_title(val: &str) -> Result<Vec<Vec<(String, Color)>>, String> {
 fn apply_theme_value(theme: &mut Theme, key: &str, val: &str) -> Result<(), String> {
     match key {
         "title" => theme.title = parse_title(val)?,
-        "main_label" => theme.main_label = parse_color(val)?,
-        "warning_color" => theme.warning_color = parse_color(val)?,
-        "main_box" => theme.main_box = parse_color(val)?,
-        "list_box" => theme.list_box = parse_color(val)?,
-        "tabs_box" => theme.tabs_box = parse_color(val)?,
-        "title_box" => theme.title_box = parse_color(val)?,
-        "deck_box" => theme.deck_box = parse_color(val)?,
-        "settings_category_box" => theme.settings_category_box = parse_color(val)?,
-        "settings_options_box" => theme.settings_options_box = parse_color(val)?,
-        "selected_box" => theme.selected_box = parse_color(val)?,
-        "list_folder" => theme.list_folder = parse_color(val)?,
-        "list_file" => theme.list_file = parse_color(val)?,
-        "tab_lazy" => theme.tab_lazy = parse_color(val)?,
-        "tab_selected" => theme.tab_selected = parse_color(val)?,
-        "settings_entry" => theme.settings_entry = parse_color(val)?,
-        "settings_selected" => theme.settings_selected = parse_color(val)?,
-        "settings_special" => theme.settings_special = parse_color(val)?,
-        "editor_ins" => theme.editor_ins = parse_color(val)?,
-        "editor_cmd" => theme.editor_cmd = parse_color(val)?,
-        "editor_vis" => theme.editor_vis = parse_color(val)?,
-        "editor_src" => theme.editor_src = parse_color(val)?,
-        "editor_src_bg" => theme.editor_src_bg = parse_color(val)?,
+        "main_label" => theme.main_label = parse_gradient(val)?,
+        "warning_color" => theme.warning_color = parse_gradient(val)?,
+        "main_box" => theme.main_box = parse_gradient(val)?,
+        "list_box" => theme.list_box = parse_gradient(val)?,
+        "tabs_box" => theme.tabs_box = parse_gradient(val)?,
+        "title_box" => theme.title_box = parse_gradient(val)?,
+        "deck_box" => theme.deck_box = parse_gradient(val)?,
+        "settings_category_box" => theme.settings_category_box = parse_gradient(val)?,
+        "settings_options_box" => theme.settings_options_box = parse_gradient(val)?,
+        "selected_box" => theme.selected_box = parse_gradient(val)?,
+        "list_folder" => theme.list_folder = parse_gradient(val)?,
+        "list_file" => theme.list_file = parse_gradient(val)?,
+        "tab_lazy" => theme.tab_lazy = parse_gradient(val)?,
+        "tab_selected" => theme.tab_selected = parse_gradient(val)?,
+        "settings_entry" => theme.settings_entry = parse_gradient(val)?,
+        "settings_selected" => theme.settings_selected = parse_gradient(val)?,
+        "settings_special" => theme.settings_special = parse_gradient(val)?,
+        "editor_ins" => theme.editor_ins = parse_gradient(val)?,
+        "editor_cmd" => theme.editor_cmd = parse_gradient(val)?,
+        "editor_vis" => theme.editor_vis = parse_gradient(val)?,
+        "editor_src" => theme.editor_src = parse_gradient(val)?,
+        "editor_src_bg" => theme.editor_src_bg = parse_gradient(val)?,
 
-        "editor_keywords" => theme.editor_keywords = parse_color(val)?,
-        "editor_functions" => theme.editor_functions = parse_color(val)?,
-        "editor_strings" => theme.editor_strings = parse_color(val)?,
-        "editor_numbers" => theme.editor_numbers = parse_color(val)?,
-        "editor_bool" => theme.editor_bool = parse_color(val)?,
-        "editor_comments" => theme.editor_comments = parse_color(val)?,
-        "editor_variables" => theme.editor_variables = parse_color(val)?,
-        "editor_operators" => theme.editor_operators = parse_color(val)?,
-        "editor_brackets" => theme.editor_brackets = parse_color(val)?,
-        "editor_errors" => theme.editor_errors = parse_color(val)?,
+        "editor_keywords" => theme.editor_keywords = parse_gradient(val)?,
+        "editor_functions" => theme.editor_functions = parse_gradient(val)?,
+        "editor_strings" => theme.editor_strings = parse_gradient(val)?,
+        "editor_numbers" => theme.editor_numbers = parse_gradient(val)?,
+        "editor_bool" => theme.editor_bool = parse_gradient(val)?,
+        "editor_comments" => theme.editor_comments = parse_gradient(val)?,
+        "editor_variables" => theme.editor_variables = parse_gradient(val)?,
+        "editor_operators" => theme.editor_operators = parse_gradient(val)?,
+        "editor_brackets" => theme.editor_brackets = parse_gradient(val)?,
+        "editor_errors" => theme.editor_errors = parse_gradient(val)?,
         _ => {}
     }
     Ok(())

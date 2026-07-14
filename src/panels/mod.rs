@@ -21,7 +21,7 @@ pub fn apply_indicator(b: &mut Box, config: &Config, theme: &Theme, is_active: b
                     Cell {
                         c: '■',
                         s: Style {
-                            fg: theme.selected_box,
+                            fg: theme.selected_box.color_at(0, 1),
                             bg: Color::None,
                             md: Modifier::None,
                         },
@@ -41,7 +41,7 @@ pub fn apply_indicator(b: &mut Box, config: &Config, theme: &Theme, is_active: b
                         Cell {
                             c: '■',
                             s: Style {
-                                fg: theme.selected_box,
+                                fg: theme.selected_box.color_at(0, 1),
                                 bg: Color::None,
                                 md: Modifier::None,
                             },
@@ -54,34 +54,118 @@ pub fn apply_indicator(b: &mut Box, config: &Config, theme: &Theme, is_active: b
             }
 
             let chars = Border::Heavy.chars().unwrap();
-            let s = Style {
-                fg: theme.selected_box,
+            let get_style = |x: u16| Style {
+                fg: theme.selected_box.color_at(x as usize, w as usize),
                 bg: Color::None,
                 md: Modifier::None,
             };
 
-            b.put_cell(Cell { c: chars.tl, s }, 0, 0);
-            b.put_cell(Cell { c: chars.v, s }, 0, 1);
+            b.put_cell(
+                Cell {
+                    c: chars.tl,
+                    s: get_style(0),
+                },
+                0,
+                0,
+            );
+            b.put_cell(
+                Cell {
+                    c: chars.v,
+                    s: get_style(0),
+                },
+                0,
+                1,
+            );
             for i in 1..=3 {
-                b.put_cell(Cell { c: chars.h, s }, i, 0);
+                b.put_cell(
+                    Cell {
+                        c: chars.h,
+                        s: get_style(i),
+                    },
+                    i,
+                    0,
+                );
             }
 
-            b.put_cell(Cell { c: chars.tr, s }, w - 1, 0);
-            b.put_cell(Cell { c: chars.v, s }, w - 1, 1);
+            b.put_cell(
+                Cell {
+                    c: chars.tr,
+                    s: get_style(w - 1),
+                },
+                w - 1,
+                0,
+            );
+            b.put_cell(
+                Cell {
+                    c: chars.v,
+                    s: get_style(w - 1),
+                },
+                w - 1,
+                1,
+            );
             for i in 1..=3 {
-                b.put_cell(Cell { c: chars.h, s }, w - 1 - i, 0);
+                b.put_cell(
+                    Cell {
+                        c: chars.h,
+                        s: get_style(w - 1 - i),
+                    },
+                    w - 1 - i,
+                    0,
+                );
             }
 
-            b.put_cell(Cell { c: chars.bl, s }, 0, h - 1);
-            b.put_cell(Cell { c: chars.v, s }, 0, h - 2);
+            b.put_cell(
+                Cell {
+                    c: chars.bl,
+                    s: get_style(0),
+                },
+                0,
+                h - 1,
+            );
+            b.put_cell(
+                Cell {
+                    c: chars.v,
+                    s: get_style(0),
+                },
+                0,
+                h - 2,
+            );
             for i in 1..=3 {
-                b.put_cell(Cell { c: chars.h, s }, i, h - 1);
+                b.put_cell(
+                    Cell {
+                        c: chars.h,
+                        s: get_style(i),
+                    },
+                    i,
+                    h - 1,
+                );
             }
 
-            b.put_cell(Cell { c: chars.br, s }, w - 1, h - 1);
-            b.put_cell(Cell { c: chars.v, s }, w - 1, h - 2);
+            b.put_cell(
+                Cell {
+                    c: chars.br,
+                    s: get_style(w - 1),
+                },
+                w - 1,
+                h - 1,
+            );
+            b.put_cell(
+                Cell {
+                    c: chars.v,
+                    s: get_style(w - 1),
+                },
+                w - 1,
+                h - 2,
+            );
             for i in 1..=3 {
-                b.put_cell(Cell { c: chars.h, s }, w - 1 - i, h - 1);
+                b.put_cell(
+                    Cell {
+                        c: chars.h,
+                        s: get_style(w - 1 - i),
+                    },
+                    w - 1 - i,
+                    h - 1,
+                );
             }
         }
         _ => {}

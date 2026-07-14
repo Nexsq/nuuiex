@@ -1,17 +1,22 @@
 use super::layout::{LIST_W, TABS_W};
 use super::{ActivePanel, ListInputMode};
-use crate::{Box, Color, Modifier, Style, conf::Config, lib::MacroNode, theme::themecore::Theme};
+use crate::{
+    Box, Color, Gradient, Modifier, conf::Config, lib::MacroNode, theme::themecore::Theme,
+};
 
 pub fn resolve_view(
     expanded_path: &[usize],
     library_tree: &[MacroNode],
     is_creating: bool,
 ) -> (Vec<usize>, Option<usize>) {
-    let mut view_path = expanded_path.to_vec();
+    let mut view_path = Vec::with_capacity(expanded_path.len());
     let mut current_nodes = library_tree;
-    for &idx in &view_path {
+    for &idx in expanded_path {
         if let Some(MacroNode::Folder { children, .. }) = current_nodes.get(idx) {
+            view_path.push(idx);
             current_nodes = children;
+        } else {
+            break;
         }
     }
 
@@ -41,9 +46,9 @@ pub fn refresh(
     let use_border_color = config.indicator_style == "border";
 
     let list_color = if is_active && use_border_color {
-        theme.selected_box
+        &theme.selected_box
     } else {
-        theme.list_box
+        &theme.list_box
     };
 
     let list_w = if config.tabs_num == 1 {
@@ -57,11 +62,9 @@ pub fn refresh(
         list_h,
         1,
         config.get_border(),
-        Style {
-            fg: list_color,
-            bg: Color::None,
-            md: Modifier::None,
-        },
+        list_color.clone(),
+        Gradient::Solid(Color::None),
+        Modifier::None,
     );
 
     crate::panels::apply_indicator(&mut list_box, config, theme, is_active);
@@ -302,17 +305,17 @@ pub fn refresh(
     {
         let (node_symbol, normal_color) = if let Some(n) = item.node {
             match n {
-                MacroNode::Folder { .. } => ("▪", theme.list_folder),
-                MacroNode::Script { .. } => ("▫", theme.list_file),
+                MacroNode::Folder { .. } => ("▪", &theme.list_folder),
+                MacroNode::Script { .. } => ("▫", &theme.list_file),
             }
         } else if item.is_input {
             if item.input_is_folder {
-                ("▪", theme.list_folder)
+                ("▪", &theme.list_folder)
             } else {
-                ("▫", theme.list_file)
+                ("▫", &theme.list_file)
             }
         } else {
-            ("", theme.settings_entry)
+            ("", &theme.settings_entry)
         };
 
         let is_selected = item.is_selectable
@@ -325,15 +328,15 @@ pub fn refresh(
             !item.is_selectable && !is_empty_indicator && !item.is_active_parent && !item.is_input;
 
         let (fg_color, bg_color) = if item.is_active_parent {
-            (normal_color, Color::None)
+            (normal_color.clone(), Gradient::Solid(Color::None))
         } else if item.is_input {
-            (Color::Black, normal_color)
+            (Gradient::Solid(Color::Black), normal_color.clone())
         } else if !item.is_selectable && !is_empty_indicator {
-            (theme.settings_entry, Color::None)
+            (theme.settings_entry.clone(), Gradient::Solid(Color::None))
         } else if is_selected {
-            (Color::Black, normal_color)
+            (Gradient::Solid(Color::Black), normal_color.clone())
         } else {
-            (normal_color, Color::None)
+            (normal_color.clone(), Gradient::Solid(Color::None))
         };
 
         let md = if is_selected || item.is_input {
@@ -428,13 +431,7 @@ pub fn refresh(
         }
 
         let display_y = (display_line - *list_scroll) as i16;
-        let render_style = Style {
-            fg: fg_color,
-            bg: bg_color,
-            md,
-        };
-
-        list_box.insert_text(&text, 1, display_y, false, render_style);
+        list_box.insert_text(&text, 1, display_y, false, fg_color, bg_color, md);
     }
 
     list_box

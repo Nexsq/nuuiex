@@ -79,8 +79,7 @@ impl<'a> Lexer<'a> {
                 }
 
                 let peek = self.peek();
-                if peek == '\n' || peek == '\r' || peek == '#' || self.is_at_end() {
-                } else {
+                if !(peek == '\n' || peek == '\r' || peek == '#' || self.is_at_end()) {
                     if has_tabs {
                         tokens.push(Token {
                             kind: TokenKind::Error("Use spaces, not tabs, for indentation".into()),

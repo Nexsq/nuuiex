@@ -1,4 +1,4 @@
-use super::style::{Border, Color, Modifier, Style};
+use super::style::{Border, Color, Gradient, Modifier, Style};
 use std::io::{self, Write};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -42,50 +42,54 @@ impl Default for Cell {
 }
 
 impl Box {
-    pub fn new(width: u16, height: u16, padding: u16, border: Border, style: Style) -> Self {
-        let size = (width as usize) * (height as usize);
+    pub fn new(
+        width: u16,
+        height: u16,
+        padding: u16,
+        border: Border,
+        fg: Gradient,
+        bg: Gradient,
+        md: Modifier,
+    ) -> Self {
+        let w = width as usize;
+        let h = height as usize;
+        let size = w * h;
         let mut grid = vec![Cell::default(); size];
+
+        if w > 0 && h > 0 {
+            for x in 0..w {
+                grid[x] = Cell {
+                    c: ' ',
+                    s: Style {
+                        fg: fg.color_at(x, w),
+                        bg: bg.color_at(x, w),
+                        md,
+                    },
+                };
+            }
+
+            for y in 1..h {
+                let (first, rest) = grid.split_at_mut(y * w);
+                rest[..w].copy_from_slice(&first[..w]);
+            }
+        }
 
         if let Some(chars) = border.chars() {
             if width >= 2 && height >= 2 {
-                let w = width as usize;
-                let h = height as usize;
-
-                let h_cell = Cell {
-                    c: chars.h,
-                    s: style,
-                };
-                let v_cell = Cell {
-                    c: chars.v,
-                    s: style,
-                };
-
                 for x in 1..(w - 1) {
-                    grid[x] = h_cell;
-                    grid[(h - 1) * w + x] = h_cell;
+                    grid[x].c = chars.h;
+                    grid[(h - 1) * w + x].c = chars.h;
                 }
 
                 for y in 1..(h - 1) {
-                    grid[y * w] = v_cell;
-                    grid[y * w + (w - 1)] = v_cell;
+                    grid[y * w].c = chars.v;
+                    grid[y * w + (w - 1)].c = chars.v;
                 }
 
-                grid[0] = Cell {
-                    c: chars.tl,
-                    s: style,
-                };
-                grid[w - 1] = Cell {
-                    c: chars.tr,
-                    s: style,
-                };
-                grid[(h - 1) * w] = Cell {
-                    c: chars.bl,
-                    s: style,
-                };
-                grid[(h - 1) * w + (w - 1)] = Cell {
-                    c: chars.br,
-                    s: style,
-                };
+                grid[0].c = chars.tl;
+                grid[w - 1].c = chars.tr;
+                grid[(h - 1) * w].c = chars.bl;
+                grid[(h - 1) * w + (w - 1)].c = chars.br;
             }
         }
 
@@ -119,7 +123,9 @@ impl Box {
         offset_x: i16,
         offset_y: i16,
         word_wrap: bool,
-        style: Style,
+        fg: Gradient,
+        bg: Gradient,
+        md: Modifier,
     ) {
         let pad = self.padding as i16;
 
@@ -138,15 +144,27 @@ impl Box {
 
         let mut chars = text.chars().peekable();
 
+        let text_len = text.chars().count().max(1);
+        let mut text_idx = 0;
+
         while let Some(&c) = chars.peek() {
             if cy >= max_y {
                 break;
             }
 
+            let current_fg = fg.color_at(text_idx, text_len);
+            let current_bg = bg.color_at(text_idx, text_len);
+            let style = Style {
+                fg: current_fg,
+                bg: current_bg,
+                md,
+            };
+
             if c == '\n' {
                 cy += 1;
                 cx = eff_left;
                 chars.next();
+                text_idx += 1;
                 continue;
             }
 
@@ -154,8 +172,7 @@ impl Box {
                 let tab_spaces = 4 - ((cx - eff_left) % 4);
                 for _ in 0..tab_spaces {
                     if cx < max_x {
-                        let mut cell = Cell { c: '\0', s: style };
-                        cell.c = ' ';
+                        let cell = Cell { c: ' ', s: style };
                         self.put_cell(cell, cx, cy);
                         cx += 1;
                     }
@@ -165,17 +182,18 @@ impl Box {
                     cy += 1;
                 }
                 chars.next();
+                text_idx += 1;
                 continue;
             }
 
             if c.is_control() {
                 chars.next();
+                text_idx += 1;
                 continue;
             }
 
             if !word_wrap {
-                let mut cell = Cell { c: '\0', s: style };
-                cell.c = c;
+                let cell = Cell { c, s: style };
                 self.put_cell(cell, cx, cy);
 
                 cx += 1;
@@ -184,15 +202,16 @@ impl Box {
                     cy += 1;
                 }
                 chars.next();
+                text_idx += 1;
             } else {
                 if c.is_whitespace() {
                     if cx > eff_left && cx < max_x {
-                        let mut cell = Cell { c: '\0', s: style };
-                        cell.c = c;
+                        let cell = Cell { c, s: style };
                         self.put_cell(cell, cx, cy);
                         cx += 1;
                     }
                     chars.next();
+                    text_idx += 1;
                     continue;
                 }
 
@@ -218,34 +237,25 @@ impl Box {
                     if cy >= max_y {
                         break;
                     }
-                    let mut cell = Cell { c: '\0', s: style };
-                    cell.c = chars.next().unwrap();
+                    let cfg = fg.color_at(text_idx, text_len);
+                    let cbg = bg.color_at(text_idx, text_len);
+                    let cell = Cell {
+                        c: chars.next().unwrap(),
+                        s: Style {
+                            fg: cfg,
+                            bg: cbg,
+                            md,
+                        },
+                    };
                     self.put_cell(cell, cx, cy);
                     cx += 1;
                     if cx >= max_x {
                         cx = eff_left;
                         cy += 1;
                     }
+                    text_idx += 1;
                 }
             }
-        }
-    }
-
-    pub fn set_border_color(&mut self, color: Color) {
-        if self.width < 2 || self.height < 2 {
-            return;
-        }
-
-        let w = self.width as usize;
-        let h = self.height as usize;
-
-        for x in 0..w {
-            self.grid[x].s.fg = color;
-            self.grid[(h - 1) * w + x].s.fg = color;
-        }
-        for y in 0..h {
-            self.grid[y * w].s.fg = color;
-            self.grid[y * w + (w - 1)].s.fg = color;
         }
     }
 
@@ -454,7 +464,7 @@ pub trait DrawTarget {
 
             if ignore_spaces {
                 for (src_cell, dest_cell) in src_slice.iter().zip(dest_slice.iter_mut()) {
-                    if *src_cell != Cell::default() {
+                    if src_cell.c != ' ' || src_cell.s.bg != Color::None {
                         *dest_cell = *src_cell;
                     }
                 }
