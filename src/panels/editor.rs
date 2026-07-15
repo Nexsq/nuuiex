@@ -21,6 +21,12 @@ pub struct EditorState {
     pub selection_start: Option<(usize, usize)>,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum EditAction {
+    Char(bool),
+    Bulk,
+}
+
 pub struct Editor {
     pub is_editing: bool,
     pub mode: Mode,
@@ -32,8 +38,8 @@ pub struct Editor {
     pub rel_path: String,
     pub clipboard: Option<Clipboard>,
 
-    pub undo_stack: Vec<EditorState>,
-    pub redo_stack: Vec<EditorState>,
+    pub undo_stack: Vec<(EditorState, EditAction)>,
+    pub redo_stack: Vec<(EditorState, EditAction)>,
 
     pub last_key_select_all: bool,
     pub last_key_file_bounds: bool,
@@ -166,9 +172,31 @@ impl Editor {
         self.last_key_copy = false;
     }
 
-    fn push_undo(&mut self) {
-        self.undo_stack.push(self.state.clone());
+    fn push_undo(&mut self, action: EditAction) {
+        self.undo_stack.push((self.state.clone(), action));
         self.redo_stack.clear();
+    }
+
+    fn char_before_cursor(&self) -> Option<char> {
+        if self.state.cursor_x > 0 {
+            let line = &self.state.lines[self.state.cursor_y];
+            line.chars().nth(self.state.cursor_x - 1)
+        } else if self.state.cursor_y > 0 {
+            Some('\n')
+        } else {
+            None
+        }
+    }
+
+    fn char_after_cursor(&self) -> Option<char> {
+        let line = &self.state.lines[self.state.cursor_y];
+        if self.state.cursor_x < line.chars().count() {
+            line.chars().nth(self.state.cursor_x)
+        } else if self.state.cursor_y < self.state.lines.len() - 1 {
+            Some('\n')
+        } else {
+            None
+        }
     }
 
     pub fn refresh_analysis(&mut self) {
@@ -176,6 +204,76 @@ impl Editor {
         let (count, lines) = crate::engine::core::analyze_code(&source);
         self.error_count = count;
         self.error_lines = lines;
+    }
+
+    fn ctrl_undo(&mut self) {
+        let mut first = true;
+        let mut seen_non_ws = false;
+
+        while let Some((_, action)) = self.undo_stack.last() {
+            let action = *action;
+
+            if action == EditAction::Bulk {
+                if first {
+                    let (s, a) = self.undo_stack.pop().unwrap();
+                    let old = std::mem::replace(&mut self.state, s);
+                    self.redo_stack.push((old, a));
+                }
+                break;
+            }
+
+            let is_ws = match action {
+                EditAction::Char(ws) => ws,
+                _ => false,
+            };
+
+            if !first && seen_non_ws && is_ws {
+                break;
+            }
+            if !is_ws {
+                seen_non_ws = true;
+            }
+
+            let (s, a) = self.undo_stack.pop().unwrap();
+            let old = std::mem::replace(&mut self.state, s);
+            self.redo_stack.push((old, a));
+            first = false;
+        }
+    }
+
+    fn ctrl_redo(&mut self) {
+        let mut first = true;
+        let mut seen_non_ws = false;
+
+        while let Some((_, action)) = self.redo_stack.last() {
+            let action = *action;
+
+            if action == EditAction::Bulk {
+                if first {
+                    let (s, a) = self.redo_stack.pop().unwrap();
+                    let old = std::mem::replace(&mut self.state, s);
+                    self.undo_stack.push((old, a));
+                }
+                break;
+            }
+
+            let is_ws = match action {
+                EditAction::Char(ws) => ws,
+                _ => false,
+            };
+
+            if !first && seen_non_ws && is_ws {
+                break;
+            }
+            if !is_ws {
+                seen_non_ws = true;
+            }
+
+            let (s, a) = self.redo_stack.pop().unwrap();
+            let old = std::mem::replace(&mut self.state, s);
+            self.undo_stack.push((old, a));
+            first = false;
+        }
     }
 
     pub fn handle_key(&mut self, key: Key, config: &Config) -> bool {
@@ -308,7 +406,15 @@ impl Editor {
                         }
                     }
                     Key::Delete => {
-                        self.push_undo();
+                        let action = if self.state.selection_start.is_some() {
+                            EditAction::Bulk
+                        } else {
+                            EditAction::Char(
+                                self.char_after_cursor().map_or(true, |c| c.is_whitespace()),
+                            )
+                        };
+                        self.push_undo(action);
+
                         if self.state.selection_start.is_some() {
                             self.delete_selection();
                         } else {
@@ -337,12 +443,12 @@ impl Editor {
                     }
                     k if k == Key::Char(config.bind_edit_delete) => {
                         if self.state.selection_start.is_some() {
-                            self.push_undo();
+                            self.push_undo(EditAction::Bulk);
                             self.delete_selection();
                             reset_delete = true;
                             needs_analysis = true;
                         } else if self.last_key_delete {
-                            self.push_undo();
+                            self.push_undo(EditAction::Bulk);
                             self.delete_current_line();
                             needs_analysis = true;
                         } else {
@@ -362,23 +468,31 @@ impl Editor {
                         }
                     }
                     k if k == Key::Char(config.bind_edit_paste) => {
-                        self.push_undo();
+                        self.push_undo(EditAction::Bulk);
                         self.paste_from_clipboard();
                         needs_analysis = true;
                     }
                     k if k == Key::Char(config.bind_edit_undo) => {
-                        if let Some(state) = self.undo_stack.pop() {
-                            self.redo_stack.push(self.state.clone());
-                            self.state = state;
+                        if let Some((state, a)) = self.undo_stack.pop() {
+                            let old = std::mem::replace(&mut self.state, state);
+                            self.redo_stack.push((old, a));
                             needs_analysis = true;
                         }
                     }
                     k if k == Key::Char(config.bind_edit_redo) => {
-                        if let Some(state) = self.redo_stack.pop() {
-                            self.undo_stack.push(self.state.clone());
-                            self.state = state;
+                        if let Some((state, a)) = self.redo_stack.pop() {
+                            let old = std::mem::replace(&mut self.state, state);
+                            self.undo_stack.push((old, a));
                             needs_analysis = true;
                         }
+                    }
+                    k if k == Key::Ctrl(config.bind_edit_undo) => {
+                        self.ctrl_undo();
+                        needs_analysis = true;
+                    }
+                    k if k == Key::Ctrl(config.bind_edit_redo) => {
+                        self.ctrl_redo();
+                        needs_analysis = true;
                     }
                     k if k == Key::Char(config.bind_edit_save) => {
                         self.save();
@@ -412,7 +526,12 @@ impl Editor {
                 }
                 Key::Char(c) => {
                     if !c.is_control() {
-                        self.push_undo();
+                        let action = if self.state.selection_start.is_some() {
+                            EditAction::Bulk
+                        } else {
+                            EditAction::Char(c.is_whitespace())
+                        };
+                        self.push_undo(action);
                         if self.state.selection_start.is_some() {
                             self.delete_selection();
                         }
@@ -427,7 +546,12 @@ impl Editor {
                 }
                 Key::Shift(c) => {
                     if !c.is_control() {
-                        self.push_undo();
+                        let action = if self.state.selection_start.is_some() {
+                            EditAction::Bulk
+                        } else {
+                            EditAction::Char(c.is_whitespace())
+                        };
+                        self.push_undo(action);
                         if self.state.selection_start.is_some() {
                             self.delete_selection();
                         }
@@ -441,7 +565,12 @@ impl Editor {
                     }
                 }
                 Key::Enter => {
-                    self.push_undo();
+                    let action = if self.state.selection_start.is_some() {
+                        EditAction::Bulk
+                    } else {
+                        EditAction::Char(true)
+                    };
+                    self.push_undo(action);
                     if self.state.selection_start.is_some() {
                         self.delete_selection();
                     }
@@ -453,7 +582,15 @@ impl Editor {
                 Key::CtrlUp => self.jump_block_backward(false),
                 Key::CtrlDown => self.jump_block_forward(false),
                 Key::Backspace => {
-                    self.push_undo();
+                    let action = if self.state.selection_start.is_some() {
+                        EditAction::Bulk
+                    } else {
+                        EditAction::Char(
+                            self.char_before_cursor()
+                                .map_or(true, |c| c.is_whitespace()),
+                        )
+                    };
+                    self.push_undo(action);
                     if self.state.selection_start.is_some() {
                         self.delete_selection();
                     } else {
@@ -462,7 +599,14 @@ impl Editor {
                     needs_analysis = true;
                 }
                 Key::Delete => {
-                    self.push_undo();
+                    let action = if self.state.selection_start.is_some() {
+                        EditAction::Bulk
+                    } else {
+                        EditAction::Char(
+                            self.char_after_cursor().map_or(true, |c| c.is_whitespace()),
+                        )
+                    };
+                    self.push_undo(action);
                     if self.state.selection_start.is_some() {
                         self.delete_selection();
                     } else {
@@ -471,7 +615,7 @@ impl Editor {
                     needs_analysis = true;
                 }
                 Key::CtrlBackspace | Key::Ctrl('w') | Key::Ctrl('h') => {
-                    self.push_undo();
+                    self.push_undo(EditAction::Bulk);
                     if self.state.selection_start.is_some() {
                         self.delete_selection();
                     } else {
@@ -480,7 +624,7 @@ impl Editor {
                     needs_analysis = true;
                 }
                 Key::CtrlDelete => {
-                    self.push_undo();
+                    self.push_undo(EditAction::Bulk);
                     if self.state.selection_start.is_some() {
                         self.delete_selection();
                     } else {
@@ -489,7 +633,7 @@ impl Editor {
                     needs_analysis = true;
                 }
                 Key::Tab => {
-                    self.push_undo();
+                    self.push_undo(EditAction::Bulk);
                     if self.state.selection_start.is_some() {
                         self.delete_selection();
                     }
@@ -770,11 +914,7 @@ impl Editor {
     }
 
     fn delete_current_line(&mut self) {
-        let mut line = self.state.lines.remove(self.state.cursor_y);
-        line.push('\n');
-        if let Some(cb) = &mut self.clipboard {
-            let _ = cb.set_text(line);
-        }
+        self.state.lines.remove(self.state.cursor_y);
         if self.state.lines.is_empty() {
             self.state.lines.push(String::new());
         }
@@ -858,16 +998,12 @@ impl Editor {
 
     fn delete_selection(&mut self) {
         if let Some((start, end)) = self.get_selection_bounds() {
-            let mut text = String::new();
-
             if start.1 == end.1 {
                 let line = &self.state.lines[start.1];
                 let mut new_line = String::with_capacity(line.len());
                 for (j, c) in line.chars().enumerate() {
                     if j < start.0 || j >= end.0 {
                         new_line.push(c);
-                    } else {
-                        text.push(c);
                     }
                 }
                 self.state.lines[start.1] = new_line;
@@ -877,15 +1013,7 @@ impl Editor {
                 for (j, c) in start_line.chars().enumerate() {
                     if j < start.0 {
                         new_start_line.push(c);
-                    } else {
-                        text.push(c);
                     }
-                }
-                text.push('\n');
-
-                for i in (start.1 + 1)..end.1 {
-                    text.push_str(&self.state.lines[i]);
-                    text.push('\n');
                 }
 
                 let end_line = &self.state.lines[end.1];
@@ -893,8 +1021,6 @@ impl Editor {
                 for (j, c) in end_line.chars().enumerate() {
                     if j >= end.0 {
                         new_end_line.push(c);
-                    } else {
-                        text.push(c);
                     }
                 }
 
@@ -912,9 +1038,6 @@ impl Editor {
             self.state.selection_start = None;
             self.visual_mode = false;
 
-            if let Some(cb) = &mut self.clipboard {
-                let _ = cb.set_text(text);
-            }
             if self.state.lines.is_empty() {
                 self.state.lines.push(String::new());
             }
