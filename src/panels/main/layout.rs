@@ -6,6 +6,7 @@ pub fn get_positions(
     _term_h: u16,
     header_h: u16,
     tabs_num: usize,
+    deck_mode: &str,
 ) -> ((i16, i16), (i16, i16), (i16, i16), (i16, i16), (i16, i16)) {
     let tabs_x = 0;
     let tabs_y = header_h as i16;
@@ -16,7 +17,11 @@ pub fn get_positions(
     };
     let list_y = header_h as i16;
     let main_x = (TABS_W + LIST_W - 1) as i16;
-    let main_y = header_h as i16;
+    let main_y = if deck_mode == "none" {
+        0
+    } else {
+        header_h as i16
+    };
     let title_x = 0;
     let title_y = 0;
     let deck_x = (TABS_W + LIST_W - 1) as i16;

@@ -120,6 +120,41 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
             ],
         },
         Category {
+            name: "Deck",
+            settings: {
+                let mut s = vec![Setting {
+                    name: "Deck Mode",
+                    key: "deck_mode",
+                    kind: SettingType::Choice(
+                        vec![
+                            "none".to_string(),
+                            "title".to_string(),
+                            "widget".to_string(),
+                        ],
+                        match config.deck_mode.as_str() {
+                            "none" => 0,
+                            "title" => 1,
+                            _ => 2,
+                        },
+                    ),
+                }];
+                if config.deck_mode == "widget" {
+                    s.push(Setting {
+                        name: "Deck Widget",
+                        key: "deck_widget",
+                        kind: SettingType::Choice(
+                            vec!["audiovis".to_string(), "monitor".to_string()],
+                            match config.deck_widget.as_str() {
+                                "monitor" => 1,
+                                _ => 0,
+                            },
+                        ),
+                    });
+                }
+                s
+            },
+        },
+        Category {
             name: "Library",
             settings: vec![
                 Setting {
@@ -441,6 +476,8 @@ pub fn settings_modal(
     let mut prev_theme = config.theme.clone();
     let mut prev_sorting = config.lib_sorting.clone();
     let mut prev_tabs_num = config.tabs_num;
+    let mut prev_deck_mode = config.deck_mode.clone();
+    let mut prev_deck_widget = config.deck_widget.clone();
     let mut dirty = true;
 
     let version_str = format!(" v{} ", env!("CARGO_PKG_VERSION"));
@@ -478,6 +515,8 @@ pub fn settings_modal(
                 apply_setting!(config, set, choice "indicator_style", indicator_style);
                 apply_setting!(config, set, choice "lib_sorting", lib_sorting);
                 apply_setting!(config, set, choice_offset "tabs_num", tabs_num, 1);
+                apply_setting!(config, set, choice "deck_mode", deck_mode);
+                apply_setting!(config, set, choice "deck_widget", deck_widget);
 
                 apply_setting!(config, set, "bind_edit_insert", bind_edit_insert);
                 apply_setting!(config, set, "bind_edit_visual", bind_edit_visual);
@@ -809,7 +848,7 @@ pub fn settings_modal(
             dirty = false;
         }
 
-        let mut check_theme = false;
+        let mut needs_ui_refresh = false;
 
         let key = terminal.read_key(Duration::from_millis(16));
         if key == Key::None {
@@ -840,7 +879,7 @@ pub fn settings_modal(
                         themes.iter().position(|t| t == &config.theme).unwrap_or(0);
                     categories = build_categories(config, &themes, current_theme_idx);
 
-                    check_theme = true;
+                    needs_ui_refresh = true;
                     edit_mode = false;
                 }
                 Key::Esc => {
@@ -943,7 +982,7 @@ pub fn settings_modal(
                                     categories =
                                         build_categories(config, &themes, current_theme_idx);
 
-                                    check_theme = true;
+                                    needs_ui_refresh = true;
                                 }
                                 SettingType::Custom { .. } | SettingType::Action => {}
                             }
@@ -972,7 +1011,7 @@ pub fn settings_modal(
                                     categories =
                                         build_categories(config, &themes, current_theme_idx);
 
-                                    check_theme = true;
+                                    needs_ui_refresh = true;
                                 }
                                 SettingType::Custom { .. } | SettingType::Action => {}
                             }
@@ -1115,7 +1154,7 @@ pub fn settings_modal(
                                             .unwrap_or(0);
                                         categories =
                                             build_categories(config, &themes, current_theme_idx);
-                                        check_theme = true;
+                                        needs_ui_refresh = true;
                                     }
                                 }
                                 _ => {}
@@ -1130,7 +1169,16 @@ pub fn settings_modal(
             dirty = true;
         }
 
-        if check_theme {
+        if needs_ui_refresh {
+            for (i, cat) in categories.iter().enumerate() {
+                if det_selected[i] >= cat.settings.len() {
+                    det_selected[i] = cat.settings.len().saturating_sub(1);
+                }
+                if det_scroll[i] >= cat.settings.len() {
+                    det_scroll[i] = cat.settings.len().saturating_sub(1);
+                }
+            }
+
             if config.theme != prev_theme {
                 match crate::theme::themecore::init(&config.theme) {
                     Ok(new_theme) => {
@@ -1204,6 +1252,14 @@ pub fn settings_modal(
 
                 prev_tabs_num = config.tabs_num;
             }
+
+            if config.deck_mode != prev_deck_mode || config.deck_widget != prev_deck_widget {
+                let (term_w, term_h) = Terminal::size();
+                main_view.resize(term_w, term_h, config);
+                prev_deck_mode = config.deck_mode.clone();
+                prev_deck_widget = config.deck_widget.clone();
+            }
+
             dirty = true;
         }
     }

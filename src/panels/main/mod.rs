@@ -215,7 +215,7 @@ impl MainView {
         let header_h = self.theme.title.len().max(1) as u16;
 
         let (main_pos, list_pos, tabs_pos, title_pos, deck_pos) =
-            layout::get_positions(term_w, term_h, header_h, config.tabs_num);
+            layout::get_positions(term_w, term_h, header_h, config.tabs_num, &config.deck_mode);
 
         self.main_x = main_pos.0;
         self.main_y = main_pos.1;
@@ -239,10 +239,15 @@ impl MainView {
 
     pub fn refresh_main(&mut self, config: &Config) {
         let header_h = self.theme.title.len().max(1) as u16;
+        let main_h = if config.deck_mode == "none" {
+            self.term_h
+        } else {
+            self.term_h.saturating_sub(header_h)
+        };
         self.main_box = self.editors[self.current_tab].render(
             self.term_w
                 .saturating_sub(layout::TABS_W + layout::LIST_W - 1),
-            self.term_h.saturating_sub(header_h),
+            main_h,
             self.active == ActivePanel::Main,
             config,
             &self.theme,
@@ -274,8 +279,8 @@ impl MainView {
         let header_h = self.theme.title.len().max(1) as u16;
         self.tabs_box =
             r#static::refresh_tabs(&self.theme, config, self.current_tab, &self.running_macros);
-        self.title_box = r#static::refresh_title(&self.theme);
-        self.deck_box = r#static::refresh_deck(self.term_w, header_h, &self.theme);
+        self.title_box = r#static::refresh_title(&self.theme, config, self.term_w);
+        self.deck_box = r#static::refresh_deck(self.term_w, header_h, &self.theme, config);
     }
 
     pub fn toggle_focus(&mut self, config: &Config) {

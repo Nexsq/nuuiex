@@ -11,6 +11,8 @@ pub struct Config {
     pub theme: String,
     pub lib_sorting: String,
     pub tabs_num: usize,
+    pub deck_mode: String,
+    pub deck_widget: String,
 
     pub bind_edit_insert: char,
     pub bind_edit_visual: char,
@@ -49,6 +51,8 @@ impl Default for Config {
             theme: String::new(),
             lib_sorting: String::new(),
             tabs_num: 6,
+            deck_mode: String::new(),
+            deck_widget: String::new(),
 
             bind_edit_insert: '\0',
             bind_edit_visual: '\0',
@@ -112,6 +116,8 @@ impl Config {
                     "theme" => self.theme = val.to_string(),
                     "lib_sorting" => self.lib_sorting = val.to_string(),
                     "tabs_num" => self.tabs_num = val.parse().unwrap_or(self.tabs_num).clamp(1, 6),
+                    "deck_mode" => self.deck_mode = val.to_string(),
+                    "deck_widget" => self.deck_widget = val.to_string(),
 
                     "bind_edit_insert" => {
                         self.bind_edit_insert = val
@@ -308,6 +314,8 @@ impl Config {
         self.border_style = default.border_style;
         self.theme = default.theme;
         self.tabs_num = default.tabs_num;
+        self.deck_mode = default.deck_mode;
+        self.deck_widget = default.deck_widget;
     }
 
     pub fn reset_edit_keybinds(&mut self) {
@@ -393,6 +401,14 @@ impl Config {
                     }
                     "tabs_num" => {
                         writeln!(&mut output, "{} = {}{}", key_str, self.tabs_num, comment).unwrap()
+                    }
+                    "deck_mode" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.deck_mode, comment)
+                            .unwrap()
+                    }
+                    "deck_widget" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.deck_widget, comment)
+                            .unwrap()
                     }
                     "bind_edit_insert" => writeln!(
                         &mut output,

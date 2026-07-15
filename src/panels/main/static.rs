@@ -95,10 +95,15 @@ pub fn refresh_tabs(
     tabs_box
 }
 
-pub fn refresh_title(theme: &Theme) -> Box {
+pub fn refresh_title(theme: &Theme, config: &Config, term_w: u16) -> Box {
     let header_h = theme.title.len().max(1) as u16;
+    let width = if config.deck_mode == "title" {
+        term_w
+    } else {
+        TABS_W + LIST_W
+    };
     let mut title_box = Box::new(
-        TABS_W + LIST_W,
+        width,
         header_h,
         0,
         crate::Border::None,
@@ -137,18 +142,35 @@ pub fn refresh_title(theme: &Theme) -> Box {
     title_box
 }
 
-pub fn refresh_deck(term_w: u16, header_h: u16, theme: &Theme) -> Box {
+pub fn refresh_deck(term_w: u16, header_h: u16, theme: &Theme, config: &Config) -> Box {
+    if config.deck_mode != "widget" {
+        return Box::new(
+            0,
+            0,
+            0,
+            crate::Border::None,
+            Gradient::Solid(Color::None),
+            Gradient::Solid(Color::None),
+            Modifier::None,
+        );
+    }
+
     let mut deck_box = Box::new(
         term_w.saturating_sub(TABS_W + LIST_W - 1),
         header_h,
         0,
-        crate::Border::Heavy,
+        config.get_border(),
         theme.deck_box.clone(),
         Gradient::Solid(Color::None),
         Modifier::None,
     );
+    let widget_text = if config.deck_widget == "monitor" {
+        "monitor"
+    } else {
+        "audiovis"
+    };
     deck_box.insert_text(
-        "DECK",
+        widget_text,
         0,
         0,
         false,
