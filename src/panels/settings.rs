@@ -169,15 +169,6 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
 
                     if config.deck_widget == "keyvis" {
                         s.push(Setting {
-                            name: "Keyvis Color",
-                            key: "keyvis_color",
-                            kind: SettingType::Custom {
-                                value: config.keyvis_color.clone(),
-                                default: def.keyvis_color.clone(),
-                                validation: CustomType::Gradient,
-                            },
-                        });
-                        s.push(Setting {
                             name: "Keyvis Width",
                             key: "keyvis_width",
                             kind: SettingType::Custom {
@@ -618,7 +609,6 @@ pub fn settings_modal(
                 apply_setting!(config, set, choice "deck_mode", deck_mode);
                 apply_setting!(config, set, choice "deck_widget", deck_widget);
 
-                apply_setting!(config, set, text "keyvis_color", keyvis_color);
                 apply_setting!(config, set, parse "keyvis_width", keyvis_width);
                 apply_setting!(config, set, parse "keyvis_height", keyvis_height);
                 apply_setting!(config, set, choice_offset "keyvis_steps", keyvis_steps, 1);
@@ -1046,11 +1036,6 @@ pub fn settings_modal(
                 }
                 Key::Char(c) => {
                     if !c.is_control() {
-                        let caps = Terminal::is_caps_lock_on();
-                        let mut final_c = c;
-                        if caps && c.is_ascii_alphabetic() {
-                            final_c = c.to_ascii_uppercase();
-                        }
                         let is_char_type = {
                             let cat = &categories[cat_selected];
                             let setting = &cat.settings[det_selected[cat_selected]];
@@ -1063,20 +1048,15 @@ pub fn settings_modal(
                             )
                         };
                         if is_char_type {
-                            edit_buffer = final_c.to_ascii_lowercase().to_string();
+                            edit_buffer = c.to_ascii_lowercase().to_string();
                         } else {
-                            edit_buffer.push(final_c);
+                            edit_buffer.push(c);
                         }
                         dirty = true;
                     }
                 }
                 Key::Shift(c) => {
                     if !c.is_control() {
-                        let caps = Terminal::is_caps_lock_on();
-                        let mut final_c = c.to_ascii_uppercase();
-                        if caps && final_c.is_ascii_alphabetic() {
-                            final_c = final_c.to_ascii_lowercase();
-                        }
                         let is_char_type = {
                             let cat = &categories[cat_selected];
                             let setting = &cat.settings[det_selected[cat_selected]];
@@ -1087,6 +1067,11 @@ pub fn settings_modal(
                                     ..
                                 }
                             )
+                        };
+                        let final_c = if c.is_ascii_lowercase() {
+                            c.to_ascii_uppercase()
+                        } else {
+                            c
                         };
                         if is_char_type {
                             edit_buffer = final_c.to_ascii_lowercase().to_string();
@@ -1123,7 +1108,8 @@ pub fn settings_modal(
                             if let SettingType::Choice(opts, idx) = &mut setting.kind {
                                 *idx = if *idx > 0 { *idx - 1 } else { opts.len() - 1 };
                                 apply_settings(&categories, config);
-                                let current_theme_idx = themes.iter().position(|t| t == &config.theme).unwrap_or(0);
+                                let current_theme_idx =
+                                    themes.iter().position(|t| t == &config.theme).unwrap_or(0);
                                 categories = build_categories(config, &themes, current_theme_idx);
                                 needs_ui_refresh = true;
                             }
@@ -1140,7 +1126,8 @@ pub fn settings_modal(
                             if let SettingType::Choice(opts, idx) = &mut setting.kind {
                                 *idx = (*idx + 1) % opts.len();
                                 apply_settings(&categories, config);
-                                let current_theme_idx = themes.iter().position(|t| t == &config.theme).unwrap_or(0);
+                                let current_theme_idx =
+                                    themes.iter().position(|t| t == &config.theme).unwrap_or(0);
                                 categories = build_categories(config, &themes, current_theme_idx);
                                 needs_ui_refresh = true;
                             }
@@ -1150,12 +1137,16 @@ pub fn settings_modal(
                 Key::Up => {
                     if active_panel == ActiveSettingsPanel::Categories && cat_selected > 0 {
                         cat_selected -= 1;
-                    } else if active_panel == ActiveSettingsPanel::Details && det_selected[cat_selected] > 0 {
+                    } else if active_panel == ActiveSettingsPanel::Details
+                        && det_selected[cat_selected] > 0
+                    {
                         det_selected[cat_selected] -= 1;
                     }
                 }
                 Key::Down => {
-                    if active_panel == ActiveSettingsPanel::Categories && cat_selected < categories.len().saturating_sub(1) {
+                    if active_panel == ActiveSettingsPanel::Categories
+                        && cat_selected < categories.len().saturating_sub(1)
+                    {
                         cat_selected += 1;
                     } else if active_panel == ActiveSettingsPanel::Details {
                         let max_det = categories[cat_selected].settings.len().saturating_sub(1);
@@ -1216,28 +1207,7 @@ pub fn settings_modal(
                                         config.get_border(),
                                         main_view.theme.warning_color.clone(),
                                         |cvs, w, h, k| {
-                                            cvs.clean();
-                                            let mut anim = false;
-                                            if config.deck_mode == "widget"
-                                                && config.deck_widget == "keyvis"
-                                            {
-                                                if *k != Key::None {
-                                                    main_view.keyvis.push_key(k);
-                                                }
-                                                if main_view.keyvis.tick(
-                                                    config.keyvis_gravity,
-                                                    config.keyvis_steps,
-                                                    config.keyvis_tension,
-                                                ) {
-                                                    main_view.refresh_static_boxes(config);
-                                                    anim = true;
-                                                }
-                                            }
-                                            if w != main_view.term_w || h != main_view.term_h {
-                                                main_view.resize(w, h, config);
-                                            }
-                                            main_view.render(cvs);
-                                            anim
+                                            main_view.draw_background(cvs, w, h, k, config)
                                         },
                                     );
 
@@ -1346,28 +1316,7 @@ pub fn settings_modal(
                             main_view.min_h,
                             config.get_border(),
                             main_view.theme.warning_color.clone(),
-                            |cvs, w, h, k| {
-                                cvs.clean();
-                                let mut anim = false;
-                                if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-                                    if *k != Key::None {
-                                        main_view.keyvis.push_key(k);
-                                    }
-                                    if main_view.keyvis.tick(
-                                        config.keyvis_gravity,
-                                        config.keyvis_steps,
-                                        config.keyvis_tension,
-                                    ) {
-                                        main_view.refresh_static_boxes(config);
-                                        anim = true;
-                                    }
-                                }
-                                if w != main_view.term_w || h != main_view.term_h {
-                                    main_view.resize(w, h, config);
-                                }
-                                main_view.render(cvs);
-                                anim
-                            },
+                            |cvs, w, h, k| main_view.draw_background(cvs, w, h, k, config),
                         );
                         config.theme = prev_theme.clone();
                         let current_theme_idx =

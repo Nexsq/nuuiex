@@ -177,6 +177,18 @@ impl Editor {
         self.redo_stack.clear();
     }
 
+    fn prepare_edit(&mut self, is_whitespace: bool) {
+        let action = if self.state.selection_start.is_some() {
+            EditAction::Bulk
+        } else {
+            EditAction::Char(is_whitespace)
+        };
+        self.push_undo(action);
+        if self.state.selection_start.is_some() {
+            self.delete_selection();
+        }
+    }
+
     fn char_before_cursor(&self) -> Option<char> {
         if self.state.cursor_x > 0 {
             let line = &self.state.lines[self.state.cursor_y];
@@ -296,18 +308,11 @@ impl Editor {
                 }
                 Key::Char(c) | Key::Shift(c) => {
                     if !c.is_control() {
-                        let caps = crate::Terminal::is_caps_lock_on();
-                        let mut final_c = c;
-                        if let Key::Shift(_) = key {
-                            final_c = c.to_ascii_uppercase();
-                            if caps && final_c.is_ascii_alphabetic() {
-                                final_c = final_c.to_ascii_lowercase();
-                            }
+                        let final_c = if matches!(key, Key::Shift(_)) && c.is_ascii_lowercase() {
+                            c.to_ascii_uppercase()
                         } else {
-                            if caps && final_c.is_ascii_alphabetic() {
-                                final_c = final_c.to_ascii_uppercase();
-                            }
-                        }
+                            c
+                        };
                         self.search_query.push(final_c);
                     }
                 }
@@ -406,18 +411,11 @@ impl Editor {
                         }
                     }
                     Key::Delete => {
-                        let action = if self.state.selection_start.is_some() {
-                            EditAction::Bulk
-                        } else {
-                            EditAction::Char(
-                                self.char_after_cursor().map_or(true, |c| c.is_whitespace()),
-                            )
-                        };
-                        self.push_undo(action);
-
+                        let is_ws = self.char_after_cursor().map_or(true, |c| c.is_whitespace());
                         if self.state.selection_start.is_some() {
-                            self.delete_selection();
+                            self.prepare_edit(is_ws); // falls back to Bulk internally
                         } else {
+                            self.push_undo(EditAction::Char(is_ws));
                             self.delete_char_after();
                         }
                         needs_analysis = true;
@@ -443,8 +441,7 @@ impl Editor {
                     }
                     k if k == Key::Char(config.bind_edit_delete) => {
                         if self.state.selection_start.is_some() {
-                            self.push_undo(EditAction::Bulk);
-                            self.delete_selection();
+                            self.prepare_edit(true);
                             reset_delete = true;
                             needs_analysis = true;
                         } else if self.last_key_delete {
@@ -526,54 +523,25 @@ impl Editor {
                 }
                 Key::Char(c) => {
                     if !c.is_control() {
-                        let action = if self.state.selection_start.is_some() {
-                            EditAction::Bulk
-                        } else {
-                            EditAction::Char(c.is_whitespace())
-                        };
-                        self.push_undo(action);
-                        if self.state.selection_start.is_some() {
-                            self.delete_selection();
-                        }
-                        let caps = crate::Terminal::is_caps_lock_on();
-                        let mut final_c = c;
-                        if caps && c.is_ascii_alphabetic() {
-                            final_c = c.to_ascii_uppercase();
-                        }
-                        self.insert_char(final_c);
+                        self.prepare_edit(c.is_whitespace());
+                        self.insert_char(c);
                         needs_analysis = true;
                     }
                 }
                 Key::Shift(c) => {
                     if !c.is_control() {
-                        let action = if self.state.selection_start.is_some() {
-                            EditAction::Bulk
+                        self.prepare_edit(c.is_whitespace());
+                        let final_c = if c.is_ascii_lowercase() {
+                            c.to_ascii_uppercase()
                         } else {
-                            EditAction::Char(c.is_whitespace())
+                            c
                         };
-                        self.push_undo(action);
-                        if self.state.selection_start.is_some() {
-                            self.delete_selection();
-                        }
-                        let caps = crate::Terminal::is_caps_lock_on();
-                        let mut final_c = c.to_ascii_uppercase();
-                        if caps && final_c.is_ascii_alphabetic() {
-                            final_c = final_c.to_ascii_lowercase();
-                        }
                         self.insert_char(final_c);
                         needs_analysis = true;
                     }
                 }
                 Key::Enter => {
-                    let action = if self.state.selection_start.is_some() {
-                        EditAction::Bulk
-                    } else {
-                        EditAction::Char(true)
-                    };
-                    self.push_undo(action);
-                    if self.state.selection_start.is_some() {
-                        self.delete_selection();
-                    }
+                    self.prepare_edit(true);
                     self.insert_newline();
                     needs_analysis = true;
                 }
@@ -582,61 +550,47 @@ impl Editor {
                 Key::CtrlUp => self.jump_block_backward(false),
                 Key::CtrlDown => self.jump_block_forward(false),
                 Key::Backspace => {
-                    let action = if self.state.selection_start.is_some() {
-                        EditAction::Bulk
-                    } else {
-                        EditAction::Char(
-                            self.char_before_cursor()
-                                .map_or(true, |c| c.is_whitespace()),
-                        )
-                    };
-                    self.push_undo(action);
+                    let is_ws = self
+                        .char_before_cursor()
+                        .map_or(true, |c| c.is_whitespace());
                     if self.state.selection_start.is_some() {
-                        self.delete_selection();
+                        self.prepare_edit(is_ws);
                     } else {
+                        self.push_undo(EditAction::Char(is_ws));
                         self.delete_char_before();
                     }
                     needs_analysis = true;
                 }
                 Key::Delete => {
-                    let action = if self.state.selection_start.is_some() {
-                        EditAction::Bulk
-                    } else {
-                        EditAction::Char(
-                            self.char_after_cursor().map_or(true, |c| c.is_whitespace()),
-                        )
-                    };
-                    self.push_undo(action);
+                    let is_ws = self.char_after_cursor().map_or(true, |c| c.is_whitespace());
                     if self.state.selection_start.is_some() {
-                        self.delete_selection();
+                        self.prepare_edit(is_ws);
                     } else {
+                        self.push_undo(EditAction::Char(is_ws));
                         self.delete_char_after();
                     }
                     needs_analysis = true;
                 }
                 Key::CtrlBackspace | Key::Ctrl('w') | Key::Ctrl('h') => {
-                    self.push_undo(EditAction::Bulk);
                     if self.state.selection_start.is_some() {
-                        self.delete_selection();
+                        self.prepare_edit(true);
                     } else {
+                        self.push_undo(EditAction::Bulk);
                         self.delete_word_before();
                     }
                     needs_analysis = true;
                 }
                 Key::CtrlDelete => {
-                    self.push_undo(EditAction::Bulk);
                     if self.state.selection_start.is_some() {
-                        self.delete_selection();
+                        self.prepare_edit(true);
                     } else {
+                        self.push_undo(EditAction::Bulk);
                         self.delete_word_after();
                     }
                     needs_analysis = true;
                 }
                 Key::Tab => {
-                    self.push_undo(EditAction::Bulk);
-                    if self.state.selection_start.is_some() {
-                        self.delete_selection();
-                    }
+                    self.prepare_edit(true);
                     for _ in 0..4 {
                         self.insert_char(' ');
                     }
@@ -1000,20 +954,36 @@ impl Editor {
         if let Some((start, end)) = self.get_selection_bounds() {
             if start.1 == end.1 {
                 let line = &self.state.lines[start.1];
-                let byte_start = line.char_indices().nth(start.0).map(|(i, _)| i).unwrap_or(line.len());
-                let byte_end = line.char_indices().nth(end.0).map(|(i, _)| i).unwrap_or(line.len());
-                
+                let byte_start = line
+                    .char_indices()
+                    .nth(start.0)
+                    .map(|(i, _)| i)
+                    .unwrap_or(line.len());
+                let byte_end = line
+                    .char_indices()
+                    .nth(end.0)
+                    .map(|(i, _)| i)
+                    .unwrap_or(line.len());
+
                 let mut new_line = String::with_capacity(line.len() - (byte_end - byte_start));
                 new_line.push_str(&line[..byte_start]);
                 new_line.push_str(&line[byte_end..]);
                 self.state.lines[start.1] = new_line;
             } else {
                 let start_line = &self.state.lines[start.1];
-                let byte_start = start_line.char_indices().nth(start.0).map(|(i, _)| i).unwrap_or(start_line.len());
+                let byte_start = start_line
+                    .char_indices()
+                    .nth(start.0)
+                    .map(|(i, _)| i)
+                    .unwrap_or(start_line.len());
                 let mut new_start_line = start_line[..byte_start].to_string();
 
                 let end_line = &self.state.lines[end.1];
-                let byte_end = end_line.char_indices().nth(end.0).map(|(i, _)| i).unwrap_or(end_line.len());
+                let byte_end = end_line
+                    .char_indices()
+                    .nth(end.0)
+                    .map(|(i, _)| i)
+                    .unwrap_or(end_line.len());
                 new_start_line.push_str(&end_line[byte_end..]);
 
                 if end.1 > start.1 {
@@ -1041,16 +1011,32 @@ impl Editor {
             for i in start.1..=end.1 {
                 let line = &self.state.lines[i];
                 if start.1 == end.1 {
-                    let byte_start = line.char_indices().nth(start.0).map(|(i, _)| i).unwrap_or(line.len());
-                    let byte_end = line.char_indices().nth(end.0).map(|(i, _)| i).unwrap_or(line.len());
+                    let byte_start = line
+                        .char_indices()
+                        .nth(start.0)
+                        .map(|(i, _)| i)
+                        .unwrap_or(line.len());
+                    let byte_end = line
+                        .char_indices()
+                        .nth(end.0)
+                        .map(|(i, _)| i)
+                        .unwrap_or(line.len());
                     text.push_str(&line[byte_start..byte_end]);
                 } else {
                     if i == start.1 {
-                        let byte_start = line.char_indices().nth(start.0).map(|(i, _)| i).unwrap_or(line.len());
+                        let byte_start = line
+                            .char_indices()
+                            .nth(start.0)
+                            .map(|(i, _)| i)
+                            .unwrap_or(line.len());
                         text.push_str(&line[byte_start..]);
                         text.push('\n');
                     } else if i == end.1 {
-                        let byte_end = line.char_indices().nth(end.0).map(|(i, _)| i).unwrap_or(line.len());
+                        let byte_end = line
+                            .char_indices()
+                            .nth(end.0)
+                            .map(|(i, _)| i)
+                            .unwrap_or(line.len());
                         text.push_str(&line[..byte_end]);
                     } else {
                         text.push_str(line);

@@ -1,4 +1,4 @@
-use crate::{Box, Cell, Color, Gradient, Key, Modifier, Style, conf::Config};
+use crate::{Box, Cell, Key, Modifier, Style, conf::Config, theme::themecore::Theme};
 
 const NUM_BARS: usize = 256;
 const SUBCHARS: [char; 9] = [
@@ -66,22 +66,25 @@ impl KeyvisState {
     pub fn tick(&mut self, gravity: f32, steps: usize, tension: f32) -> bool {
         let stiffness = (gravity * 0.1).max(0.01);
         let damping = 0.88;
-        
+
         let sim_tension = tension * 0.2;
 
         for _ in 0..steps {
             let lap_left = self.heights[1] - self.heights[0];
-            self.velocities[0] =
-                (self.velocities[0] + lap_left * sim_tension - self.heights[0] * stiffness) * damping;
+            self.velocities[0] = (self.velocities[0] + lap_left * sim_tension
+                - self.heights[0] * stiffness)
+                * damping;
 
             for i in 1..(NUM_BARS - 1) {
                 let lap = self.heights[i - 1] + self.heights[i + 1] - 2.0 * self.heights[i];
-                self.velocities[i] =
-                    (self.velocities[i] + lap * sim_tension - self.heights[i] * stiffness) * damping;
+                self.velocities[i] = (self.velocities[i] + lap * sim_tension
+                    - self.heights[i] * stiffness)
+                    * damping;
             }
 
             let lap_right = self.heights[NUM_BARS - 2] - self.heights[NUM_BARS - 1];
-            self.velocities[NUM_BARS - 1] = (self.velocities[NUM_BARS - 1] + lap_right * sim_tension
+            self.velocities[NUM_BARS - 1] = (self.velocities[NUM_BARS - 1]
+                + lap_right * sim_tension
                 - self.heights[NUM_BARS - 1] * stiffness)
                 * damping;
 
@@ -120,7 +123,7 @@ impl KeyvisState {
     }
 }
 
-pub fn draw(state: &KeyvisState, b: &mut Box, config: &Config) {
+pub fn draw(state: &KeyvisState, b: &mut Box, config: &Config, theme: &Theme) {
     let w = b.width as usize;
     let h = b.height as usize;
 
@@ -128,8 +131,7 @@ pub fn draw(state: &KeyvisState, b: &mut Box, config: &Config) {
         return;
     }
 
-    let gradient = crate::theme::themecore::parse_gradient(&config.keyvis_color)
-        .unwrap_or(Gradient::Solid(Color::BrightCyan));
+    let gradient = theme.keyview_color.clone();
 
     let bar_width = config.keyvis_width.max(1);
     let visible_bars = (w.saturating_add(bar_width - 1)) / bar_width;

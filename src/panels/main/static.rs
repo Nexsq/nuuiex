@@ -188,7 +188,7 @@ pub fn refresh_deck(
             Modifier::Bold,
         );
     } else {
-        crate::panels::widgets::keyvis::draw(keyvis, &mut deck_box, config);
+        crate::panels::widgets::keyvis::draw(keyvis, &mut deck_box, config, theme);
     }
 
     deck_box

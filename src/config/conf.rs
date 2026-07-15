@@ -14,7 +14,6 @@ pub struct Config {
     pub deck_mode: String,
     pub deck_widget: String,
 
-    pub keyvis_color: String,
     pub keyvis_width: usize,
     pub keyvis_height: usize,
     pub keyvis_steps: usize,
@@ -62,7 +61,6 @@ impl Default for Config {
             deck_mode: String::new(),
             deck_widget: String::new(),
 
-            keyvis_color: String::new(),
             keyvis_width: 0,
             keyvis_height: 0,
             keyvis_steps: 0,
@@ -135,7 +133,6 @@ impl Config {
                     "deck_mode" => self.deck_mode = val.to_string(),
                     "deck_widget" => self.deck_widget = val.to_string(),
 
-                    "keyvis_color" => self.keyvis_color = val.to_string(),
                     "keyvis_width" => self.keyvis_width = val.parse().unwrap_or(self.keyvis_width),
                     "keyvis_height" => {
                         self.keyvis_height = val.parse().unwrap_or(self.keyvis_height).max(2)
@@ -354,7 +351,6 @@ impl Config {
         let default = Config::default();
         self.deck_mode = default.deck_mode;
         self.deck_widget = default.deck_widget;
-        self.keyvis_color = default.keyvis_color;
         self.keyvis_width = default.keyvis_width;
         self.keyvis_height = default.keyvis_height;
         self.keyvis_steps = default.keyvis_steps;
@@ -456,12 +452,6 @@ impl Config {
                             .unwrap()
                     }
 
-                    "keyvis_color" => writeln!(
-                        &mut output,
-                        "{} = {}{}",
-                        key_str, self.keyvis_color, comment
-                    )
-                    .unwrap(),
                     "keyvis_width" => writeln!(
                         &mut output,
                         "{} = {}{}",

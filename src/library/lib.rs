@@ -82,7 +82,7 @@ pub fn init(sorting: &str) -> Result<MacroLibrary, String> {
     let proj_dirs = ProjectDirs::from("com", "Nexsq", "nuui")
         .ok_or("Failed to locate the system configuration directory.")?;
 
-    let lib_dir = proj_dirs.config_dir().join("lib");
+    let lib_dir: PathBuf = proj_dirs.config_dir().join("lib");
 
     if !lib_dir.exists() {
         if let Err(e) = fs::create_dir_all(&lib_dir) {
@@ -102,7 +102,7 @@ pub fn init(sorting: &str) -> Result<MacroLibrary, String> {
     let tree = scan_lib(&lib_dir, &lib_dir, sorting, &custom_order, 0);
 
     Ok(MacroLibrary {
-        root_path: lib_dir,
+        root_path: lib_dir.clone(),
         tree,
     })
 }
@@ -163,8 +163,18 @@ fn scan_lib(
 
     nodes.sort_unstable_by(|a, b| {
         if sorting == "custom" {
-            let path_a_str = a.path().strip_prefix(root_path).unwrap().to_str().unwrap_or("");
-            let path_b_str = b.path().strip_prefix(root_path).unwrap().to_str().unwrap_or("");
+            let path_a_str = a
+                .path()
+                .strip_prefix(root_path)
+                .unwrap()
+                .to_str()
+                .unwrap_or("");
+            let path_b_str = b
+                .path()
+                .strip_prefix(root_path)
+                .unwrap()
+                .to_str()
+                .unwrap_or("");
 
             let idx_a = custom_order
                 .iter()

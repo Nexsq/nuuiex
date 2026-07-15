@@ -134,6 +134,38 @@ impl MainView {
         view
     }
 
+    pub fn draw_background(
+        &mut self,
+        cvs: &mut Canvas,
+        w: u16,
+        h: u16,
+        k: &Key,
+        config: &Config,
+    ) -> bool {
+        cvs.clean();
+        let mut anim = false;
+        if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+            if *k != Key::None {
+                self.keyvis.push_key(k);
+            }
+            if self.keyvis.tick(
+                config.keyvis_gravity,
+                config.keyvis_steps,
+                config.keyvis_tension,
+            ) {
+                self.refresh_static_boxes(config);
+                anim = true;
+            }
+        }
+        if w != self.term_w || h != self.term_h {
+            if w >= self.min_w && h >= self.min_h {
+                self.resize(w, h, config);
+            }
+        }
+        self.render(cvs);
+        anim
+    }
+
     pub fn update_min_h(&mut self, config: &Config) {
         let header_h = self.theme.title.len().max(1) as u16;
         let deck_h = if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
@@ -156,6 +188,24 @@ impl MainView {
             }
         }
         current.get(self.list_selected)
+    }
+
+    pub fn clear_editor_for_path(&mut self, path: &std::path::Path) {
+        for i in 0..6 {
+            if self.editors[i].file_path.as_deref() == Some(path)
+                || self.running_macros[i].as_deref() == Some(path)
+            {
+                if let Some(token) = self.cancellation_tokens[i].take() {
+                    token.store(true, Ordering::SeqCst);
+                }
+                self.editors[i].file_path = None;
+                self.running_macros[i] = None;
+                self.editors[i].process_rx = None;
+                self.editors[i].state.lines = vec![String::new()];
+                self.editors[i].error_count = 0;
+                self.editors[i].error_lines.clear();
+            }
+        }
     }
 
     pub fn auto_load(&mut self) {
@@ -671,30 +721,7 @@ pub fn handle_list_input(
                             view.min_h,
                             config.get_border(),
                             view.theme.warning_color.clone(),
-                            |cvs, w, h, k| {
-                                cvs.clean();
-                                let mut anim = false;
-                                if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-                                    if *k != Key::None {
-                                        view.keyvis.push_key(k);
-                                    }
-                                    if view.keyvis.tick(
-                                        config.keyvis_gravity,
-                                        config.keyvis_steps,
-                                        config.keyvis_tension,
-                                    ) {
-                                        view.refresh_static_boxes(config);
-                                        anim = true;
-                                    }
-                                }
-                                if w != view.term_w || h != view.term_h {
-                                    if w >= view.min_w && h >= view.min_h {
-                                        view.resize(w, h, config);
-                                    }
-                                }
-                                view.render(cvs);
-                                anim
-                            },
+                            |cvs, w, h, k| view.draw_background(cvs, w, h, k, config),
                         );
                         return Ok(true);
                     }
@@ -788,30 +815,7 @@ pub fn handle_list_input(
                         view.min_h,
                         config.get_border(),
                         view.theme.warning_color.clone(),
-                        |cvs, w, h, k| {
-                            cvs.clean();
-                            let mut anim = false;
-                            if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-                                if *k != Key::None {
-                                    view.keyvis.push_key(k);
-                                }
-                                if view.keyvis.tick(
-                                    config.keyvis_gravity,
-                                    config.keyvis_steps,
-                                    config.keyvis_tension,
-                                ) {
-                                    view.refresh_static_boxes(config);
-                                    anim = true;
-                                }
-                            }
-                            if w != view.term_w || h != view.term_h {
-                                if w >= view.min_w && h >= view.min_h {
-                                    view.resize(w, h, config);
-                                }
-                            }
-                            view.render(cvs);
-                            anim
-                        },
+                        |cvs, w, h, k| view.draw_background(cvs, w, h, k, config),
                     );
                     return Ok(true);
                 }
@@ -872,19 +876,11 @@ pub fn handle_list_input(
         }
         Key::Char(c) | Key::Shift(c) => {
             if !c.is_control() {
-                let mut final_c = *c;
-                if let Key::Shift(_) = key {
-                    let caps = crate::Terminal::is_caps_lock_on();
-                    final_c = c.to_ascii_uppercase();
-                    if caps && final_c.is_ascii_alphabetic() {
-                        final_c = final_c.to_ascii_lowercase();
-                    }
+                let final_c = if matches!(key, Key::Shift(_)) && c.is_ascii_lowercase() {
+                    c.to_ascii_uppercase()
                 } else {
-                    let caps = crate::Terminal::is_caps_lock_on();
-                    if caps && final_c.is_ascii_alphabetic() {
-                        final_c = final_c.to_ascii_uppercase();
-                    }
-                }
+                    *c
+                };
 
                 match &mut view.list_input {
                     ListInputMode::CreatingFile(n)
@@ -979,30 +975,7 @@ pub fn handle_list_action(
                     view.min_h,
                     config.get_border(),
                     view.theme.warning_color.clone(),
-                    |cvs, w, h, k| {
-                        cvs.clean();
-                        let mut anim = false;
-                        if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-                            if *k != Key::None {
-                                view.keyvis.push_key(k);
-                            }
-                            if view.keyvis.tick(
-                                config.keyvis_gravity,
-                                config.keyvis_steps,
-                                config.keyvis_tension,
-                            ) {
-                                view.refresh_static_boxes(config);
-                                anim = true;
-                            }
-                        }
-                        if w != view.term_w || h != view.term_h {
-                            if w >= view.min_w && h >= view.min_h {
-                                view.resize(w, h, config);
-                            }
-                        }
-                        view.render(cvs);
-                        anim
-                    },
+                    |cvs, w, h, k| view.draw_background(cvs, w, h, k, config),
                 );
 
                 if res == crate::PanelResult::Ok(1) {
@@ -1012,21 +985,7 @@ pub fn handle_list_action(
                         let _ = std::fs::remove_file(&path);
                     }
 
-                    for i in 0..6 {
-                        if view.editors[i].file_path.as_ref() == Some(&path)
-                            || view.running_macros[i].as_ref() == Some(&path)
-                        {
-                            if let Some(token) = view.cancellation_tokens[i].take() {
-                                token.store(true, std::sync::atomic::Ordering::SeqCst);
-                            }
-                            view.editors[i].file_path = None;
-                            view.running_macros[i] = None;
-                            view.editors[i].process_rx = None;
-                            view.editors[i].state.lines = vec![String::new()];
-                            view.editors[i].error_count = 0;
-                            view.editors[i].error_lines.clear();
-                        }
-                    }
+                    view.clear_editor_for_path(&path);
 
                     let l = crate::lib::init(&config.lib_sorting)?;
                     view.library_tree = l.tree;
@@ -1063,30 +1022,7 @@ pub fn handle_list_action(
                         view.min_h,
                         config.get_border(),
                         view.theme.warning_color.clone(),
-                        |cvs, w, h, k| {
-                            cvs.clean();
-                            let mut anim = false;
-                            if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-                                if *k != Key::None {
-                                    view.keyvis.push_key(k);
-                                }
-                                if view.keyvis.tick(
-                                    config.keyvis_gravity,
-                                    config.keyvis_steps,
-                                    config.keyvis_tension,
-                                ) {
-                                    view.refresh_static_boxes(config);
-                                    anim = true;
-                                }
-                            }
-                            if w != view.term_w || h != view.term_h {
-                                if w >= view.min_w && h >= view.min_h {
-                                    view.resize(w, h, config);
-                                }
-                            }
-                            view.render(cvs);
-                            anim
-                        },
+                        |cvs, w, h, k| view.draw_background(cvs, w, h, k, config),
                     );
                     confirm = res == crate::PanelResult::Ok(1);
                 }
@@ -1105,30 +1041,7 @@ pub fn handle_list_action(
                         view.min_h,
                         config.get_border(),
                         view.theme.warning_color.clone(),
-                        |cvs, w, h, k| {
-                            cvs.clean();
-                            let mut anim = false;
-                            if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-                                if *k != Key::None {
-                                    view.keyvis.push_key(k);
-                                }
-                                if view.keyvis.tick(
-                                    config.keyvis_gravity,
-                                    config.keyvis_steps,
-                                    config.keyvis_tension,
-                                ) {
-                                    view.refresh_static_boxes(config);
-                                    anim = true;
-                                }
-                            }
-                            if w != view.term_w || h != view.term_h {
-                                if w >= view.min_w && h >= view.min_h {
-                                    view.resize(w, h, config);
-                                }
-                            }
-                            view.render(cvs);
-                            anim
-                        },
+                        |cvs, w, h, k| view.draw_background(cvs, w, h, k, config),
                     );
                     confirm = res == crate::PanelResult::Ok(1);
                 }
@@ -1141,21 +1054,7 @@ pub fn handle_list_action(
                     let _ = std::fs::remove_file(&path);
                 }
 
-                for i in 0..6 {
-                    if view.editors[i].file_path.as_ref() == Some(&path)
-                        || view.running_macros[i].as_ref() == Some(&path)
-                    {
-                        if let Some(token) = view.cancellation_tokens[i].take() {
-                            token.store(true, std::sync::atomic::Ordering::SeqCst);
-                        }
-                        view.editors[i].file_path = None;
-                        view.running_macros[i] = None;
-                        view.editors[i].process_rx = None;
-                        view.editors[i].state.lines = vec![String::new()];
-                        view.editors[i].error_count = 0;
-                        view.editors[i].error_lines.clear();
-                    }
-                }
+                view.clear_editor_for_path(&path);
 
                 let l = crate::lib::init(&config.lib_sorting)?;
                 view.library_tree = l.tree;

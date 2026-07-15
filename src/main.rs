@@ -282,30 +282,7 @@ fn main() {
                                 min_h,
                                 config.get_border(),
                                 main_view.theme.warning_color.clone(),
-                                |cvs, w, h, k| {
-                                    cvs.clean();
-                                    let mut anim = false;
-                                    if config.deck_mode == "widget"
-                                        && config.deck_widget == "keyvis"
-                                    {
-                                        if *k != Key::None {
-                                            main_view.keyvis.push_key(k);
-                                        }
-                                        if main_view.keyvis.tick(
-                                            config.keyvis_gravity,
-                                            config.keyvis_steps,
-                                            config.keyvis_tension,
-                                        ) {
-                                            main_view.refresh_static_boxes(&config);
-                                            anim = true;
-                                        }
-                                    }
-                                    if w != main_view.term_w || h != main_view.term_h {
-                                        main_view.resize(w, h, &config);
-                                    }
-                                    main_view.render(cvs);
-                                    anim
-                                },
+                                |cvs, w, h, k| main_view.draw_background(cvs, w, h, k, &config),
                             );
                             break;
                         }
@@ -347,30 +324,7 @@ fn main() {
                                 min_h,
                                 config.get_border(),
                                 main_view.theme.warning_color.clone(),
-                                |cvs, w, h, k| {
-                                    cvs.clean();
-                                    let mut anim = false;
-                                    if config.deck_mode == "widget"
-                                        && config.deck_widget == "keyvis"
-                                    {
-                                        if *k != Key::None {
-                                            main_view.keyvis.push_key(k);
-                                        }
-                                        if main_view.keyvis.tick(
-                                            config.keyvis_gravity,
-                                            config.keyvis_steps,
-                                            config.keyvis_tension,
-                                        ) {
-                                            main_view.refresh_static_boxes(&config);
-                                            anim = true;
-                                        }
-                                    }
-                                    if w != main_view.term_w || h != main_view.term_h {
-                                        main_view.resize(w, h, &config);
-                                    }
-                                    main_view.render(cvs);
-                                    anim
-                                },
+                                |cvs, w, h, k| main_view.draw_background(cvs, w, h, k, &config),
                             );
                             break;
                         }
