@@ -1325,7 +1325,7 @@ impl Editor {
             let display_y = (i - self.scroll_y) as i16;
 
             if show_line_numbers {
-                let prefix_str = format!("{:<w$}", i + 1, w = max_num_width);
+                let prefix_str = format!("{:>w$}", i + 1, w = max_num_width);
                 let prefix_style = Style {
                     fg: Color::DarkGray,
                     bg: Color::None,
