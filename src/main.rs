@@ -27,6 +27,7 @@ fn main() {
                 min_h,
                 nuui::Border::Heavy,
                 Gradient::Solid(nuui::Color::BrightYellow),
+                |_, _, _, _| false,
             );
             if res == nuui::PanelResult::Ok(1) {
                 if let Err(err) = conf::reset_to_default() {
@@ -39,6 +40,7 @@ fn main() {
                         min_h,
                         nuui::Border::Heavy,
                         Gradient::Solid(nuui::Color::BrightYellow),
+                        |_, _, _, _| false,
                     );
                     return;
                 }
@@ -62,6 +64,7 @@ fn main() {
                 0,
                 config.get_border(),
                 Gradient::Solid(nuui::Color::BrightYellow),
+                |_, _, _, _| false,
             );
             if res == nuui::PanelResult::Ok(1) {
                 config.theme = "default".to_string();
@@ -85,6 +88,7 @@ fn main() {
                 min_h,
                 config.get_border(),
                 theme.warning_color.clone(),
+                |_, _, _, _| false,
             );
             return;
         }
@@ -184,7 +188,28 @@ fn main() {
             dirty = false;
         }
 
-        match terminal.read_key(Duration::from_millis(16)) {
+        let key = terminal.read_key(Duration::from_millis(16));
+
+        let mut anim_dirty = false;
+        if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+            if key != Key::None {
+                main_view.keyvis.push_key(&key);
+            }
+            if main_view.keyvis.tick(
+                config.keyvis_gravity,
+                config.keyvis_steps,
+                config.keyvis_tension,
+            ) {
+                main_view.refresh_static_boxes(&config);
+                anim_dirty = true;
+            }
+        }
+
+        if anim_dirty {
+            dirty = true;
+        }
+
+        match key {
             Key::None => continue,
             key => {
                 if main_view.active == main::ActivePanel::Main
@@ -257,6 +282,30 @@ fn main() {
                                 min_h,
                                 config.get_border(),
                                 main_view.theme.warning_color.clone(),
+                                |cvs, w, h, k| {
+                                    cvs.clean();
+                                    let mut anim = false;
+                                    if config.deck_mode == "widget"
+                                        && config.deck_widget == "keyvis"
+                                    {
+                                        if *k != Key::None {
+                                            main_view.keyvis.push_key(k);
+                                        }
+                                        if main_view.keyvis.tick(
+                                            config.keyvis_gravity,
+                                            config.keyvis_steps,
+                                            config.keyvis_tension,
+                                        ) {
+                                            main_view.refresh_static_boxes(&config);
+                                            anim = true;
+                                        }
+                                    }
+                                    if w != main_view.term_w || h != main_view.term_h {
+                                        main_view.resize(w, h, &config);
+                                    }
+                                    main_view.render(cvs);
+                                    anim
+                                },
                             );
                             break;
                         }
@@ -298,6 +347,30 @@ fn main() {
                                 min_h,
                                 config.get_border(),
                                 main_view.theme.warning_color.clone(),
+                                |cvs, w, h, k| {
+                                    cvs.clean();
+                                    let mut anim = false;
+                                    if config.deck_mode == "widget"
+                                        && config.deck_widget == "keyvis"
+                                    {
+                                        if *k != Key::None {
+                                            main_view.keyvis.push_key(k);
+                                        }
+                                        if main_view.keyvis.tick(
+                                            config.keyvis_gravity,
+                                            config.keyvis_steps,
+                                            config.keyvis_tension,
+                                        ) {
+                                            main_view.refresh_static_boxes(&config);
+                                            anim = true;
+                                        }
+                                    }
+                                    if w != main_view.term_w || h != main_view.term_h {
+                                        main_view.resize(w, h, &config);
+                                    }
+                                    main_view.render(cvs);
+                                    anim
+                                },
                             );
                             break;
                         }
@@ -322,6 +395,7 @@ fn main() {
                             main_view.library_root = l.root_path;
                         }
                         main_view.auto_load();
+                        main_view.update_min_h(&config);
                         main_view.resize(term_w, term_h, &config);
 
                         if should_quit {

@@ -142,7 +142,7 @@ fn scan_lib(
                             custom_order,
                             depth + 1,
                         ),
-                        path: entry_path,
+                        path: entry_path.clone(),
                     });
                 } else if file_type.is_file() {
                     if entry_path.extension().map_or(false, |ext| ext == "nuui") {
@@ -163,26 +163,16 @@ fn scan_lib(
 
     nodes.sort_unstable_by(|a, b| {
         if sorting == "custom" {
-            let path_a = a
-                .path()
-                .strip_prefix(root_path)
-                .unwrap()
-                .to_string_lossy()
-                .to_string();
-            let path_b = b
-                .path()
-                .strip_prefix(root_path)
-                .unwrap()
-                .to_string_lossy()
-                .to_string();
+            let path_a_str = a.path().strip_prefix(root_path).unwrap().to_str().unwrap_or("");
+            let path_b_str = b.path().strip_prefix(root_path).unwrap().to_str().unwrap_or("");
 
             let idx_a = custom_order
                 .iter()
-                .position(|p| p == &path_a)
+                .position(|p| p == path_a_str)
                 .unwrap_or(usize::MAX);
             let idx_b = custom_order
                 .iter()
-                .position(|p| p == &path_b)
+                .position(|p| p == path_b_str)
                 .unwrap_or(usize::MAX);
 
             if idx_a != idx_b {

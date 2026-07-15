@@ -4,6 +4,7 @@ pub mod main;
 pub mod result;
 pub mod settings;
 pub mod toosmall;
+pub mod widgets;
 
 use crate::conf::Config;
 use crate::theme::themecore::Theme;

@@ -14,6 +14,14 @@ pub struct Config {
     pub deck_mode: String,
     pub deck_widget: String,
 
+    pub keyvis_color: String,
+    pub keyvis_width: usize,
+    pub keyvis_height: usize,
+    pub keyvis_steps: usize,
+    pub keyvis_gravity: f32,
+    pub keyvis_tension: f32,
+    pub keyvis_base: bool,
+
     pub bind_edit_insert: char,
     pub bind_edit_visual: char,
     pub bind_edit_left: char,
@@ -50,9 +58,17 @@ impl Default for Config {
             border_style: String::new(),
             theme: String::new(),
             lib_sorting: String::new(),
-            tabs_num: 6,
+            tabs_num: 0,
             deck_mode: String::new(),
             deck_widget: String::new(),
+
+            keyvis_color: String::new(),
+            keyvis_width: 0,
+            keyvis_height: 0,
+            keyvis_steps: 0,
+            keyvis_gravity: 0.0,
+            keyvis_tension: 0.0,
+            keyvis_base: false,
 
             bind_edit_insert: '\0',
             bind_edit_visual: '\0',
@@ -118,6 +134,24 @@ impl Config {
                     "tabs_num" => self.tabs_num = val.parse().unwrap_or(self.tabs_num).clamp(1, 6),
                     "deck_mode" => self.deck_mode = val.to_string(),
                     "deck_widget" => self.deck_widget = val.to_string(),
+
+                    "keyvis_color" => self.keyvis_color = val.to_string(),
+                    "keyvis_width" => self.keyvis_width = val.parse().unwrap_or(self.keyvis_width),
+                    "keyvis_height" => {
+                        self.keyvis_height = val.parse().unwrap_or(self.keyvis_height).max(2)
+                    }
+                    "keyvis_steps" => {
+                        self.keyvis_steps = val.parse().unwrap_or(self.keyvis_steps).clamp(1, 4)
+                    }
+                    "keyvis_gravity" => {
+                        self.keyvis_gravity =
+                            val.parse().unwrap_or(self.keyvis_gravity).clamp(0.1, 1.0)
+                    }
+                    "keyvis_tension" => {
+                        self.keyvis_tension =
+                            val.parse().unwrap_or(self.keyvis_tension).clamp(0.1, 1.0)
+                    }
+                    "keyvis_base" => self.keyvis_base = val.parse().unwrap_or(self.keyvis_base),
 
                     "bind_edit_insert" => {
                         self.bind_edit_insert = val
@@ -314,8 +348,19 @@ impl Config {
         self.border_style = default.border_style;
         self.theme = default.theme;
         self.tabs_num = default.tabs_num;
+    }
+
+    pub fn reset_deck(&mut self) {
+        let default = Config::default();
         self.deck_mode = default.deck_mode;
         self.deck_widget = default.deck_widget;
+        self.keyvis_color = default.keyvis_color;
+        self.keyvis_width = default.keyvis_width;
+        self.keyvis_height = default.keyvis_height;
+        self.keyvis_steps = default.keyvis_steps;
+        self.keyvis_gravity = default.keyvis_gravity;
+        self.keyvis_tension = default.keyvis_tension;
+        self.keyvis_base = default.keyvis_base;
     }
 
     pub fn reset_edit_keybinds(&mut self) {
@@ -410,6 +455,48 @@ impl Config {
                         writeln!(&mut output, "{} = {}{}", key_str, self.deck_widget, comment)
                             .unwrap()
                     }
+
+                    "keyvis_color" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_color, comment
+                    )
+                    .unwrap(),
+                    "keyvis_width" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_width, comment
+                    )
+                    .unwrap(),
+                    "keyvis_height" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_height, comment
+                    )
+                    .unwrap(),
+                    "keyvis_steps" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_steps, comment
+                    )
+                    .unwrap(),
+                    "keyvis_gravity" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_gravity, comment
+                    )
+                    .unwrap(),
+                    "keyvis_tension" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_tension, comment
+                    )
+                    .unwrap(),
+                    "keyvis_base" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.keyvis_base, comment)
+                            .unwrap()
+                    }
+
                     "bind_edit_insert" => writeln!(
                         &mut output,
                         "{} = {}{}",

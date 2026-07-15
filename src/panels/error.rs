@@ -16,7 +16,7 @@ pub fn warning_box<F>(
     mut draw_background: F,
 ) -> PanelResult
 where
-    F: FnMut(&mut Canvas, u16, u16),
+    F: FnMut(&mut Canvas, u16, u16, &Key) -> bool,
 {
     let max_msg_len = msg.lines().map(|l| l.chars().count()).max().unwrap_or(0);
     let msg_height = msg.lines().count();
@@ -33,6 +33,7 @@ where
     let mut selected_idx: usize = 0;
 
     let mut dirty = true;
+    let mut current_key = Key::None;
 
     loop {
         let (current_w, current_h) = Terminal::size();
@@ -42,7 +43,9 @@ where
             dirty = true;
         }
 
-        if dirty {
+        let bg_dirty = draw_background(canvas, current_w, current_h, &current_key);
+
+        if dirty || bg_dirty {
             if current_w < min_w || current_h < min_h {
                 if !crate::toosmall::run(
                     terminal,
@@ -58,8 +61,6 @@ where
                 continue;
             }
 
-            canvas.clean();
-            draw_background(canvas, current_w, current_h);
             canvas.apply_dim();
 
             let term_w = canvas.width;
@@ -142,12 +143,12 @@ where
             dirty = false;
         }
 
-        let key = terminal.read_key(Duration::from_millis(16));
-        if key == Key::None {
+        current_key = terminal.read_key(Duration::from_millis(16));
+        if current_key == Key::None {
             continue;
         }
 
-        match key {
+        match current_key {
             Key::Left | Key::Up => {
                 if selected_idx > 0 {
                     selected_idx -= 1;
@@ -174,7 +175,7 @@ where
     }
 }
 
-pub fn error_box(
+pub fn error_box<F>(
     terminal: &Terminal,
     canvas: &mut Canvas,
     msg: &str,
@@ -183,7 +184,11 @@ pub fn error_box(
     min_h: u16,
     border: Border,
     warning_color: Gradient,
-) -> PanelResult {
+    mut draw_background: F,
+) -> PanelResult
+where
+    F: FnMut(&mut Canvas, u16, u16, &Key) -> bool,
+{
     let total_opts_len = options
         .iter()
         .map(|opt| opt.chars().count() + 4)
@@ -196,6 +201,7 @@ pub fn error_box(
     let mut selected_idx: usize = 0;
 
     let mut dirty = true;
+    let mut current_key = Key::None;
 
     loop {
         let (current_w, current_h) = Terminal::size();
@@ -204,7 +210,9 @@ pub fn error_box(
             dirty = true;
         }
 
-        if dirty {
+        let bg_dirty = draw_background(canvas, current_w, current_h, &current_key);
+
+        if dirty || bg_dirty {
             if current_w < min_w || current_h < min_h {
                 if !crate::toosmall::run(
                     terminal,
@@ -220,7 +228,7 @@ pub fn error_box(
                 continue;
             }
 
-            canvas.clean();
+            canvas.apply_dim();
 
             let term_w = canvas.width;
             let term_h = canvas.height;
@@ -283,17 +291,17 @@ pub fn error_box(
                 }
             }
 
-            canvas.put_box(&err_box, 0, 0);
+            canvas.put_box_opaque(&err_box, 0, 0);
             canvas.render();
             dirty = false;
         }
 
-        let key = terminal.read_key(Duration::from_millis(16));
-        if key == Key::None {
+        current_key = terminal.read_key(Duration::from_millis(16));
+        if current_key == Key::None {
             continue;
         }
 
-        match key {
+        match current_key {
             Key::Left | Key::Up => {
                 if selected_idx > 0 {
                     selected_idx -= 1;

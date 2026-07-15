@@ -1000,31 +1000,21 @@ impl Editor {
         if let Some((start, end)) = self.get_selection_bounds() {
             if start.1 == end.1 {
                 let line = &self.state.lines[start.1];
-                let mut new_line = String::with_capacity(line.len());
-                for (j, c) in line.chars().enumerate() {
-                    if j < start.0 || j >= end.0 {
-                        new_line.push(c);
-                    }
-                }
+                let byte_start = line.char_indices().nth(start.0).map(|(i, _)| i).unwrap_or(line.len());
+                let byte_end = line.char_indices().nth(end.0).map(|(i, _)| i).unwrap_or(line.len());
+                
+                let mut new_line = String::with_capacity(line.len() - (byte_end - byte_start));
+                new_line.push_str(&line[..byte_start]);
+                new_line.push_str(&line[byte_end..]);
                 self.state.lines[start.1] = new_line;
             } else {
                 let start_line = &self.state.lines[start.1];
-                let mut new_start_line = String::new();
-                for (j, c) in start_line.chars().enumerate() {
-                    if j < start.0 {
-                        new_start_line.push(c);
-                    }
-                }
+                let byte_start = start_line.char_indices().nth(start.0).map(|(i, _)| i).unwrap_or(start_line.len());
+                let mut new_start_line = start_line[..byte_start].to_string();
 
                 let end_line = &self.state.lines[end.1];
-                let mut new_end_line = String::new();
-                for (j, c) in end_line.chars().enumerate() {
-                    if j >= end.0 {
-                        new_end_line.push(c);
-                    }
-                }
-
-                new_start_line.push_str(&new_end_line);
+                let byte_end = end_line.char_indices().nth(end.0).map(|(i, _)| i).unwrap_or(end_line.len());
+                new_start_line.push_str(&end_line[byte_end..]);
 
                 if end.1 > start.1 {
                     self.state.lines.drain((start.1 + 1)..=end.1);
@@ -1051,25 +1041,17 @@ impl Editor {
             for i in start.1..=end.1 {
                 let line = &self.state.lines[i];
                 if start.1 == end.1 {
-                    for (j, c) in line.chars().enumerate() {
-                        if j >= start.0 && j < end.0 {
-                            text.push(c);
-                        }
-                    }
+                    let byte_start = line.char_indices().nth(start.0).map(|(i, _)| i).unwrap_or(line.len());
+                    let byte_end = line.char_indices().nth(end.0).map(|(i, _)| i).unwrap_or(line.len());
+                    text.push_str(&line[byte_start..byte_end]);
                 } else {
                     if i == start.1 {
-                        for (j, c) in line.chars().enumerate() {
-                            if j >= start.0 {
-                                text.push(c);
-                            }
-                        }
+                        let byte_start = line.char_indices().nth(start.0).map(|(i, _)| i).unwrap_or(line.len());
+                        text.push_str(&line[byte_start..]);
                         text.push('\n');
                     } else if i == end.1 {
-                        for (j, c) in line.chars().enumerate() {
-                            if j < end.0 {
-                                text.push(c);
-                            }
-                        }
+                        let byte_end = line.char_indices().nth(end.0).map(|(i, _)| i).unwrap_or(line.len());
+                        text.push_str(&line[..byte_end]);
                     } else {
                         text.push_str(line);
                         text.push('\n');

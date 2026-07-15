@@ -61,6 +61,8 @@ pub struct MainView {
     pub deck_x: i16,
     pub deck_y: i16,
 
+    pub keyvis: crate::panels::widgets::keyvis::KeyvisState,
+
     pub theme: Theme,
     pub list_input: ListInputMode,
 }
@@ -75,8 +77,6 @@ impl MainView {
         config: &Config,
         theme: Theme,
     ) -> Self {
-        let header_h = theme.title.len().max(1) as u16;
-
         let dummy = || {
             Box::new(
                 1,
@@ -97,7 +97,7 @@ impl MainView {
             term_w,
             term_h,
             min_w: 64,
-            min_h: 13 + header_h,
+            min_h: 16,
             active,
             list_selected: 0,
             list_scroll: 0,
@@ -123,13 +123,27 @@ impl MainView {
             deck_box: dummy(),
             deck_x: 0,
             deck_y: 0,
+            keyvis: crate::panels::widgets::keyvis::KeyvisState::new(),
             theme,
             list_input: ListInputMode::None,
         };
 
+        view.update_min_h(config);
         view.auto_load();
         view.resize(term_w, term_h, config);
         view
+    }
+
+    pub fn update_min_h(&mut self, config: &Config) {
+        let header_h = self.theme.title.len().max(1) as u16;
+        let deck_h = if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+            config.keyvis_height as u16
+        } else if config.deck_mode == "none" {
+            0
+        } else {
+            header_h
+        };
+        self.min_h = 13 + deck_h;
     }
 
     pub fn get_selected_node(&self) -> Option<&MacroNode> {
@@ -211,11 +225,23 @@ impl MainView {
     pub fn resize(&mut self, term_w: u16, term_h: u16, config: &Config) {
         self.term_w = term_w;
         self.term_h = term_h;
+        self.update_min_h(config);
 
         let header_h = self.theme.title.len().max(1) as u16;
+        let deck_h = if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+            config.keyvis_height as u16
+        } else {
+            header_h
+        };
 
-        let (main_pos, list_pos, tabs_pos, title_pos, deck_pos) =
-            layout::get_positions(term_w, term_h, header_h, config.tabs_num, &config.deck_mode);
+        let (main_pos, list_pos, tabs_pos, title_pos, deck_pos) = layout::get_positions(
+            term_w,
+            term_h,
+            header_h,
+            deck_h,
+            config.tabs_num,
+            &config.deck_mode,
+        );
 
         self.main_x = main_pos.0;
         self.main_y = main_pos.1;
@@ -238,12 +264,7 @@ impl MainView {
     }
 
     pub fn refresh_main(&mut self, config: &Config) {
-        let header_h = self.theme.title.len().max(1) as u16;
-        let main_h = if config.deck_mode == "none" {
-            self.term_h
-        } else {
-            self.term_h.saturating_sub(header_h)
-        };
+        let main_h = self.term_h.saturating_sub(self.main_y as u16);
         self.main_box = self.editors[self.current_tab].render(
             self.term_w
                 .saturating_sub(layout::TABS_W + layout::LIST_W - 1),
@@ -277,10 +298,16 @@ impl MainView {
 
     pub fn refresh_static_boxes(&mut self, config: &Config) {
         let header_h = self.theme.title.len().max(1) as u16;
+        let deck_h = if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+            config.keyvis_height as u16
+        } else {
+            header_h
+        };
         self.tabs_box =
             r#static::refresh_tabs(&self.theme, config, self.current_tab, &self.running_macros);
         self.title_box = r#static::refresh_title(&self.theme, config, self.term_w);
-        self.deck_box = r#static::refresh_deck(self.term_w, header_h, &self.theme, config);
+        self.deck_box =
+            r#static::refresh_deck(self.term_w, deck_h, &self.theme, config, &self.keyvis);
     }
 
     pub fn toggle_focus(&mut self, config: &Config) {
@@ -572,7 +599,7 @@ impl MainView {
 
     pub fn render(&self, canvas: &mut Canvas) {
         canvas.put_box(&self.title_box, self.title_x, self.title_y);
-        canvas.put_box(&self.deck_box, self.deck_x, self.deck_y);
+        canvas.put_box_opaque(&self.deck_box, self.deck_x, self.deck_y);
 
         if self.active == ActivePanel::List {
             canvas.put_box(&self.main_box, self.main_x, self.main_y);
@@ -644,17 +671,29 @@ pub fn handle_list_input(
                             view.min_h,
                             config.get_border(),
                             view.theme.warning_color.clone(),
-                            |cvs, w, h| {
+                            |cvs, w, h, k| {
+                                cvs.clean();
+                                let mut anim = false;
+                                if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+                                    if *k != Key::None {
+                                        view.keyvis.push_key(k);
+                                    }
+                                    if view.keyvis.tick(
+                                        config.keyvis_gravity,
+                                        config.keyvis_steps,
+                                        config.keyvis_tension,
+                                    ) {
+                                        view.refresh_static_boxes(config);
+                                        anim = true;
+                                    }
+                                }
                                 if w != view.term_w || h != view.term_h {
                                     if w >= view.min_w && h >= view.min_h {
                                         view.resize(w, h, config);
                                     }
-                                } else {
-                                    if view.term_w >= view.min_w && view.term_h >= view.min_h {
-                                        view.refresh_all(config);
-                                    }
                                 }
                                 view.render(cvs);
+                                anim
                             },
                         );
                         return Ok(true);
@@ -749,17 +788,29 @@ pub fn handle_list_input(
                         view.min_h,
                         config.get_border(),
                         view.theme.warning_color.clone(),
-                        |cvs, w, h| {
+                        |cvs, w, h, k| {
+                            cvs.clean();
+                            let mut anim = false;
+                            if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+                                if *k != Key::None {
+                                    view.keyvis.push_key(k);
+                                }
+                                if view.keyvis.tick(
+                                    config.keyvis_gravity,
+                                    config.keyvis_steps,
+                                    config.keyvis_tension,
+                                ) {
+                                    view.refresh_static_boxes(config);
+                                    anim = true;
+                                }
+                            }
                             if w != view.term_w || h != view.term_h {
                                 if w >= view.min_w && h >= view.min_h {
                                     view.resize(w, h, config);
                                 }
-                            } else {
-                                if view.term_w >= view.min_w && view.term_h >= view.min_h {
-                                    view.refresh_all(config);
-                                }
                             }
                             view.render(cvs);
+                            anim
                         },
                     );
                     return Ok(true);
@@ -928,17 +979,29 @@ pub fn handle_list_action(
                     view.min_h,
                     config.get_border(),
                     view.theme.warning_color.clone(),
-                    |cvs, w, h| {
+                    |cvs, w, h, k| {
+                        cvs.clean();
+                        let mut anim = false;
+                        if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+                            if *k != Key::None {
+                                view.keyvis.push_key(k);
+                            }
+                            if view.keyvis.tick(
+                                config.keyvis_gravity,
+                                config.keyvis_steps,
+                                config.keyvis_tension,
+                            ) {
+                                view.refresh_static_boxes(config);
+                                anim = true;
+                            }
+                        }
                         if w != view.term_w || h != view.term_h {
                             if w >= view.min_w && h >= view.min_h {
                                 view.resize(w, h, config);
                             }
-                        } else {
-                            if view.term_w >= view.min_w && view.term_h >= view.min_h {
-                                view.refresh_all(config);
-                            }
                         }
                         view.render(cvs);
+                        anim
                     },
                 );
 
@@ -1000,17 +1063,29 @@ pub fn handle_list_action(
                         view.min_h,
                         config.get_border(),
                         view.theme.warning_color.clone(),
-                        |cvs, w, h| {
+                        |cvs, w, h, k| {
+                            cvs.clean();
+                            let mut anim = false;
+                            if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+                                if *k != Key::None {
+                                    view.keyvis.push_key(k);
+                                }
+                                if view.keyvis.tick(
+                                    config.keyvis_gravity,
+                                    config.keyvis_steps,
+                                    config.keyvis_tension,
+                                ) {
+                                    view.refresh_static_boxes(config);
+                                    anim = true;
+                                }
+                            }
                             if w != view.term_w || h != view.term_h {
                                 if w >= view.min_w && h >= view.min_h {
                                     view.resize(w, h, config);
                                 }
-                            } else {
-                                if view.term_w >= view.min_w && view.term_h >= view.min_h {
-                                    view.refresh_all(config);
-                                }
                             }
                             view.render(cvs);
+                            anim
                         },
                     );
                     confirm = res == crate::PanelResult::Ok(1);
@@ -1030,17 +1105,29 @@ pub fn handle_list_action(
                         view.min_h,
                         config.get_border(),
                         view.theme.warning_color.clone(),
-                        |cvs, w, h| {
+                        |cvs, w, h, k| {
+                            cvs.clean();
+                            let mut anim = false;
+                            if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+                                if *k != Key::None {
+                                    view.keyvis.push_key(k);
+                                }
+                                if view.keyvis.tick(
+                                    config.keyvis_gravity,
+                                    config.keyvis_steps,
+                                    config.keyvis_tension,
+                                ) {
+                                    view.refresh_static_boxes(config);
+                                    anim = true;
+                                }
+                            }
                             if w != view.term_w || h != view.term_h {
                                 if w >= view.min_w && h >= view.min_h {
                                     view.resize(w, h, config);
                                 }
-                            } else {
-                                if view.term_w >= view.min_w && view.term_h >= view.min_h {
-                                    view.refresh_all(config);
-                                }
                             }
                             view.render(cvs);
+                            anim
                         },
                     );
                     confirm = res == crate::PanelResult::Ok(1);

@@ -5,6 +5,7 @@ pub fn get_positions(
     _term_w: u16,
     _term_h: u16,
     header_h: u16,
+    deck_h: u16,
     tabs_num: usize,
     deck_mode: &str,
 ) -> ((i16, i16), (i16, i16), (i16, i16), (i16, i16), (i16, i16)) {
@@ -20,7 +21,7 @@ pub fn get_positions(
     let main_y = if deck_mode == "none" {
         0
     } else {
-        header_h as i16
+        deck_h as i16
     };
     let title_x = 0;
     let title_y = 0;

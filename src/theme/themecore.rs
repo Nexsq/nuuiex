@@ -220,7 +220,7 @@ fn parse_theme_base(content: &str, mut theme: Theme) -> Result<Theme, String> {
     Ok(theme)
 }
 
-fn parse_color(val: &str) -> Result<Color, String> {
+pub fn parse_color(val: &str) -> Result<Color, String> {
     let val = val.trim();
 
     if val.eq_ignore_ascii_case("none") {
@@ -287,7 +287,7 @@ fn parse_color(val: &str) -> Result<Color, String> {
     Err(format!("Invalid color: '{}'", val))
 }
 
-fn parse_gradient(val: &str) -> Result<Gradient, String> {
+pub fn parse_gradient(val: &str) -> Result<Gradient, String> {
     let parts: Vec<&str> = val.split_whitespace().collect();
     if parts.is_empty() {
         return Err("Empty color".into());

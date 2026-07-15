@@ -13,6 +13,9 @@ enum ActiveSettingsPanel {
 pub enum CustomType {
     Text,
     Char,
+    Int,
+    FloatRange(f32, f32),
+    Gradient,
 }
 
 #[derive(Debug, Clone)]
@@ -24,6 +27,19 @@ pub enum SettingType {
         validation: CustomType,
     },
     Action,
+}
+
+#[derive(Debug, Clone)]
+pub struct Setting {
+    pub name: &'static str,
+    pub key: &'static str,
+    pub kind: SettingType,
+}
+
+#[derive(Debug, Clone)]
+pub struct Category {
+    pub name: &'static str,
+    pub settings: Vec<Setting>,
 }
 
 pub fn available_themes() -> Vec<String> {
@@ -143,14 +159,88 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                         name: "Deck Widget",
                         key: "deck_widget",
                         kind: SettingType::Choice(
-                            vec!["audiovis".to_string(), "monitor".to_string()],
+                            vec!["keyvis".to_string(), "monitor".to_string()],
                             match config.deck_widget.as_str() {
                                 "monitor" => 1,
                                 _ => 0,
                             },
                         ),
                     });
+
+                    if config.deck_widget == "keyvis" {
+                        s.push(Setting {
+                            name: "Keyvis Color",
+                            key: "keyvis_color",
+                            kind: SettingType::Custom {
+                                value: config.keyvis_color.clone(),
+                                default: def.keyvis_color.clone(),
+                                validation: CustomType::Gradient,
+                            },
+                        });
+                        s.push(Setting {
+                            name: "Keyvis Width",
+                            key: "keyvis_width",
+                            kind: SettingType::Custom {
+                                value: config.keyvis_width.to_string(),
+                                default: def.keyvis_width.to_string(),
+                                validation: CustomType::Int,
+                            },
+                        });
+                        s.push(Setting {
+                            name: "Keyvis Height",
+                            key: "keyvis_height",
+                            kind: SettingType::Custom {
+                                value: config.keyvis_height.to_string(),
+                                default: def.keyvis_height.to_string(),
+                                validation: CustomType::Int,
+                            },
+                        });
+                        s.push(Setting {
+                            name: "Keyvis Steps",
+                            key: "keyvis_steps",
+                            kind: SettingType::Choice(
+                                vec![
+                                    "1".to_string(),
+                                    "2".to_string(),
+                                    "3".to_string(),
+                                    "4".to_string(),
+                                ],
+                                config.keyvis_steps.clamp(1, 4).saturating_sub(1),
+                            ),
+                        });
+                        s.push(Setting {
+                            name: "Keyvis Gravity",
+                            key: "keyvis_gravity",
+                            kind: SettingType::Custom {
+                                value: config.keyvis_gravity.to_string(),
+                                default: def.keyvis_gravity.to_string(),
+                                validation: CustomType::FloatRange(0.1, 1.0),
+                            },
+                        });
+                        s.push(Setting {
+                            name: "Keyvis Tension",
+                            key: "keyvis_tension",
+                            kind: SettingType::Custom {
+                                value: config.keyvis_tension.to_string(),
+                                default: def.keyvis_tension.to_string(),
+                                validation: CustomType::FloatRange(0.1, 1.0),
+                            },
+                        });
+                        s.push(Setting {
+                            name: "Keyvis Base",
+                            key: "keyvis_base",
+                            kind: SettingType::Choice(
+                                vec!["true".to_string(), "false".to_string()],
+                                if config.keyvis_base { 0 } else { 1 },
+                            ),
+                        });
+                    }
                 }
+                s.push(Setting {
+                    name: "Reset Deck",
+                    key: "reset_deck",
+                    kind: SettingType::Action,
+                });
                 s
             },
         },
@@ -438,19 +528,6 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
     ]
 }
 
-#[derive(Debug, Clone)]
-pub struct Setting {
-    pub name: &'static str,
-    pub key: &'static str,
-    pub kind: SettingType,
-}
-
-#[derive(Debug, Clone)]
-pub struct Category {
-    pub name: &'static str,
-    pub settings: Vec<Setting>,
-}
-
 pub fn settings_modal(
     terminal: &Terminal,
     canvas: &mut Canvas,
@@ -484,10 +561,26 @@ pub fn settings_modal(
     let version_len = version_str.chars().count() as u16;
 
     macro_rules! apply_setting {
-        ($config:expr, $set:expr, $key:expr, $field:ident) => {
+        ($config:expr, $set:expr, char $key:expr, $field:ident) => {
             if $set.key == $key {
                 if let SettingType::Custom { value, .. } = &$set.kind {
                     $config.$field = value.chars().next().unwrap_or($config.$field);
+                }
+            }
+        };
+        ($config:expr, $set:expr, text $key:expr, $field:ident) => {
+            if $set.key == $key {
+                if let SettingType::Custom { value, .. } = &$set.kind {
+                    $config.$field = value.clone();
+                }
+            }
+        };
+        ($config:expr, $set:expr, parse $key:expr, $field:ident) => {
+            if $set.key == $key {
+                if let SettingType::Custom { value, .. } = &$set.kind {
+                    if let Ok(v) = value.parse() {
+                        $config.$field = v;
+                    }
                 }
             }
         };
@@ -505,6 +598,13 @@ pub fn settings_modal(
                 }
             }
         };
+        ($config:expr, $set:expr, bool $key:expr, $field:ident) => {
+            if $set.key == $key {
+                if let SettingType::Choice(opts, idx) = &$set.kind {
+                    $config.$field = opts[*idx] == "true";
+                }
+            }
+        };
     }
 
     let apply_settings = |categories: &[Category], config: &mut Config| {
@@ -518,44 +618,43 @@ pub fn settings_modal(
                 apply_setting!(config, set, choice "deck_mode", deck_mode);
                 apply_setting!(config, set, choice "deck_widget", deck_widget);
 
-                apply_setting!(config, set, "bind_edit_insert", bind_edit_insert);
-                apply_setting!(config, set, "bind_edit_visual", bind_edit_visual);
-                apply_setting!(config, set, "bind_edit_left", bind_edit_left);
-                apply_setting!(config, set, "bind_edit_right", bind_edit_right);
-                apply_setting!(config, set, "bind_edit_up", bind_edit_up);
-                apply_setting!(config, set, "bind_edit_down", bind_edit_down);
-                apply_setting!(config, set, "bind_edit_word_next", bind_edit_word_next);
-                apply_setting!(config, set, "bind_edit_word_prev", bind_edit_word_prev);
-                apply_setting!(config, set, "bind_edit_line_start", bind_edit_line_start);
-                apply_setting!(config, set, "bind_edit_line_end", bind_edit_line_end);
-                apply_setting!(config, set, "bind_edit_select_all", bind_edit_select_all);
-                apply_setting!(config, set, "bind_edit_file_bounds", bind_edit_file_bounds);
-                apply_setting!(config, set, "bind_edit_delete", bind_edit_delete);
-                apply_setting!(config, set, "bind_edit_copy", bind_edit_copy);
-                apply_setting!(config, set, "bind_edit_paste", bind_edit_paste);
-                apply_setting!(config, set, "bind_edit_search", bind_edit_search);
-                apply_setting!(config, set, "bind_edit_undo", bind_edit_undo);
-                apply_setting!(config, set, "bind_edit_redo", bind_edit_redo);
-                apply_setting!(config, set, "bind_edit_save", bind_edit_save);
+                apply_setting!(config, set, text "keyvis_color", keyvis_color);
+                apply_setting!(config, set, parse "keyvis_width", keyvis_width);
+                apply_setting!(config, set, parse "keyvis_height", keyvis_height);
+                apply_setting!(config, set, choice_offset "keyvis_steps", keyvis_steps, 1);
+                apply_setting!(config, set, parse "keyvis_gravity", keyvis_gravity);
+                apply_setting!(config, set, parse "keyvis_tension", keyvis_tension);
+                apply_setting!(config, set, bool "keyvis_base", keyvis_base);
 
-                apply_setting!(config, set, "bind_lib_new_file", bind_lib_new_file);
-                apply_setting!(config, set, "bind_lib_new_folder", bind_lib_new_folder);
-                apply_setting!(config, set, "bind_lib_rename", bind_lib_rename);
-                apply_setting!(config, set, "bind_lib_delete", bind_lib_delete);
-                apply_setting!(config, set, "bind_lib_move_up", bind_lib_move_up);
-                apply_setting!(config, set, "bind_lib_move_down", bind_lib_move_down);
+                apply_setting!(config, set, char "bind_edit_insert", bind_edit_insert);
+                apply_setting!(config, set, char "bind_edit_visual", bind_edit_visual);
+                apply_setting!(config, set, char "bind_edit_left", bind_edit_left);
+                apply_setting!(config, set, char "bind_edit_right", bind_edit_right);
+                apply_setting!(config, set, char "bind_edit_up", bind_edit_up);
+                apply_setting!(config, set, char "bind_edit_down", bind_edit_down);
+                apply_setting!(config, set, char "bind_edit_word_next", bind_edit_word_next);
+                apply_setting!(config, set, char "bind_edit_word_prev", bind_edit_word_prev);
+                apply_setting!(config, set, char "bind_edit_line_start", bind_edit_line_start);
+                apply_setting!(config, set, char "bind_edit_line_end", bind_edit_line_end);
+                apply_setting!(config, set, char "bind_edit_select_all", bind_edit_select_all);
+                apply_setting!(config, set, char "bind_edit_file_bounds", bind_edit_file_bounds);
+                apply_setting!(config, set, char "bind_edit_delete", bind_edit_delete);
+                apply_setting!(config, set, char "bind_edit_copy", bind_edit_copy);
+                apply_setting!(config, set, char "bind_edit_paste", bind_edit_paste);
+                apply_setting!(config, set, char "bind_edit_search", bind_edit_search);
+                apply_setting!(config, set, char "bind_edit_undo", bind_edit_undo);
+                apply_setting!(config, set, char "bind_edit_redo", bind_edit_redo);
+                apply_setting!(config, set, char "bind_edit_save", bind_edit_save);
+
+                apply_setting!(config, set, char "bind_lib_new_file", bind_lib_new_file);
+                apply_setting!(config, set, char "bind_lib_new_folder", bind_lib_new_folder);
+                apply_setting!(config, set, char "bind_lib_rename", bind_lib_rename);
+                apply_setting!(config, set, char "bind_lib_delete", bind_lib_delete);
+                apply_setting!(config, set, char "bind_lib_move_up", bind_lib_move_up);
+                apply_setting!(config, set, char "bind_lib_move_down", bind_lib_move_down);
             }
         }
     };
-
-    fn validate_custom(val: &str, kind: &CustomType) -> bool {
-        match kind {
-            CustomType::Text => true,
-            CustomType::Char => {
-                val.chars().count() == 1 && val.chars().next().unwrap().is_ascii_alphanumeric()
-            }
-        }
-    }
 
     loop {
         let (current_w, current_h) = Terminal::size();
@@ -565,7 +664,19 @@ pub fn settings_modal(
             dirty = true;
         }
 
-        if dirty {
+        let mut bg_dirty = false;
+        if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+            if main_view.keyvis.tick(
+                config.keyvis_gravity,
+                config.keyvis_steps,
+                config.keyvis_tension,
+            ) {
+                main_view.refresh_static_boxes(config);
+                bg_dirty = true;
+            }
+        }
+
+        if dirty || bg_dirty {
             let current_min_w = main_view.min_w;
             let current_min_h = main_view.min_h;
 
@@ -588,8 +699,6 @@ pub fn settings_modal(
 
             if current_w != main_view.term_w || current_h != main_view.term_h {
                 main_view.resize(current_w, current_h, config);
-            } else {
-                main_view.refresh_all(config);
             }
             main_view.render(canvas);
             canvas.apply_dim();
@@ -851,6 +960,10 @@ pub fn settings_modal(
         let mut needs_ui_refresh = false;
 
         let key = terminal.read_key(Duration::from_millis(16));
+        if key != Key::None && config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+            main_view.keyvis.push_key(&key);
+        }
+
         if key == Key::None {
             continue;
         }
@@ -860,6 +973,9 @@ pub fn settings_modal(
                 Key::Enter => {
                     let cat = &mut categories[cat_selected];
                     let setting = &mut cat.settings[det_selected[cat_selected]];
+
+                    let mut do_apply = false;
+
                     if let SettingType::Custom {
                         value,
                         default,
@@ -868,25 +984,61 @@ pub fn settings_modal(
                     {
                         if edit_buffer.is_empty() {
                             *value = default.clone();
-                        } else if validate_custom(&edit_buffer, validation) {
-                            *value = edit_buffer.clone();
+                            do_apply = true;
+                            edit_mode = false;
+                        } else {
+                            match validation {
+                                CustomType::Text => do_apply = true,
+                                CustomType::Char => {
+                                    if edit_buffer.chars().count() == 1 {
+                                        do_apply = true;
+                                    }
+                                }
+                                CustomType::Int => {
+                                    if edit_buffer.parse::<usize>().is_ok() {
+                                        do_apply = true;
+                                    }
+                                }
+                                CustomType::FloatRange(min, max) => {
+                                    if let Ok(v) = edit_buffer.parse::<f32>() {
+                                        if v >= *min && v <= *max {
+                                            do_apply = true;
+                                        }
+                                    }
+                                }
+                                CustomType::Gradient => {
+                                    if crate::theme::themecore::parse_gradient(&edit_buffer).is_ok()
+                                    {
+                                        do_apply = true;
+                                    }
+                                }
+                            }
+
+                            if do_apply {
+                                *value = edit_buffer.clone();
+                                edit_mode = false;
+                            }
                         }
                     }
-                    apply_settings(&categories, config);
 
-                    let themes = available_themes();
-                    let current_theme_idx =
-                        themes.iter().position(|t| t == &config.theme).unwrap_or(0);
-                    categories = build_categories(config, &themes, current_theme_idx);
+                    if do_apply {
+                        apply_settings(&categories, config);
 
-                    needs_ui_refresh = true;
-                    edit_mode = false;
+                        let current_theme_idx =
+                            themes.iter().position(|t| t == &config.theme).unwrap_or(0);
+                        categories = build_categories(config, &themes, current_theme_idx);
+
+                        needs_ui_refresh = true;
+                    }
+                    dirty = true;
                 }
                 Key::Esc => {
                     edit_mode = false;
+                    dirty = true;
                 }
                 Key::Backspace => {
                     edit_buffer.pop();
+                    dirty = true;
                 }
                 Key::Char('\x03') => {
                     config.save();
@@ -915,6 +1067,7 @@ pub fn settings_modal(
                         } else {
                             edit_buffer.push(final_c);
                         }
+                        dirty = true;
                     }
                 }
                 Key::Shift(c) => {
@@ -940,11 +1093,11 @@ pub fn settings_modal(
                         } else {
                             edit_buffer.push(final_c);
                         }
+                        dirty = true;
                     }
                 }
                 _ => {}
             }
-            dirty = true;
         } else {
             match key {
                 Key::Esc => {
@@ -967,24 +1120,12 @@ pub fn settings_modal(
                         let cat = &mut categories[cat_selected];
                         if !cat.settings.is_empty() {
                             let setting = &mut cat.settings[det_selected[cat_selected]];
-                            match &mut setting.kind {
-                                SettingType::Choice(opts, idx) => {
-                                    if *idx > 0 {
-                                        *idx -= 1;
-                                    } else {
-                                        *idx = opts.len() - 1;
-                                    }
-                                    apply_settings(&categories, config);
-
-                                    let themes = available_themes();
-                                    let current_theme_idx =
-                                        themes.iter().position(|t| t == &config.theme).unwrap_or(0);
-                                    categories =
-                                        build_categories(config, &themes, current_theme_idx);
-
-                                    needs_ui_refresh = true;
-                                }
-                                SettingType::Custom { .. } | SettingType::Action => {}
+                            if let SettingType::Choice(opts, idx) = &mut setting.kind {
+                                *idx = if *idx > 0 { *idx - 1 } else { opts.len() - 1 };
+                                apply_settings(&categories, config);
+                                let current_theme_idx = themes.iter().position(|t| t == &config.theme).unwrap_or(0);
+                                categories = build_categories(config, &themes, current_theme_idx);
+                                needs_ui_refresh = true;
                             }
                         }
                     }
@@ -996,45 +1137,27 @@ pub fn settings_modal(
                         let cat = &mut categories[cat_selected];
                         if !cat.settings.is_empty() {
                             let setting = &mut cat.settings[det_selected[cat_selected]];
-                            match &mut setting.kind {
-                                SettingType::Choice(opts, idx) => {
-                                    if *idx < opts.len() - 1 {
-                                        *idx += 1;
-                                    } else {
-                                        *idx = 0;
-                                    }
-                                    apply_settings(&categories, config);
-
-                                    let themes = available_themes();
-                                    let current_theme_idx =
-                                        themes.iter().position(|t| t == &config.theme).unwrap_or(0);
-                                    categories =
-                                        build_categories(config, &themes, current_theme_idx);
-
-                                    needs_ui_refresh = true;
-                                }
-                                SettingType::Custom { .. } | SettingType::Action => {}
+                            if let SettingType::Choice(opts, idx) = &mut setting.kind {
+                                *idx = (*idx + 1) % opts.len();
+                                apply_settings(&categories, config);
+                                let current_theme_idx = themes.iter().position(|t| t == &config.theme).unwrap_or(0);
+                                categories = build_categories(config, &themes, current_theme_idx);
+                                needs_ui_refresh = true;
                             }
                         }
                     }
                 }
                 Key::Up => {
-                    if active_panel == ActiveSettingsPanel::Categories {
-                        if cat_selected > 0 {
-                            cat_selected -= 1;
-                        }
-                    } else {
-                        if det_selected[cat_selected] > 0 {
-                            det_selected[cat_selected] -= 1;
-                        }
+                    if active_panel == ActiveSettingsPanel::Categories && cat_selected > 0 {
+                        cat_selected -= 1;
+                    } else if active_panel == ActiveSettingsPanel::Details && det_selected[cat_selected] > 0 {
+                        det_selected[cat_selected] -= 1;
                     }
                 }
                 Key::Down => {
-                    if active_panel == ActiveSettingsPanel::Categories {
-                        if cat_selected < categories.len().saturating_sub(1) {
-                            cat_selected += 1;
-                        }
-                    } else {
+                    if active_panel == ActiveSettingsPanel::Categories && cat_selected < categories.len().saturating_sub(1) {
+                        cat_selected += 1;
+                    } else if active_panel == ActiveSettingsPanel::Details {
                         let max_det = categories[cat_selected].settings.len().saturating_sub(1);
                         if det_selected[cat_selected] < max_det {
                             det_selected[cat_selected] += 1;
@@ -1075,6 +1198,9 @@ pub fn settings_modal(
                                             "Delete all files in the library\nThis cannot be undone!\n\nAre you sure?",
                                             5,
                                         ),
+                                        "reset_deck" => {
+                                            ("Reset deck settings to default\n\nAre you sure?", 6)
+                                        }
                                         _ => ("", 99),
                                     };
 
@@ -1089,13 +1215,29 @@ pub fn settings_modal(
                                         main_view.min_h,
                                         config.get_border(),
                                         main_view.theme.warning_color.clone(),
-                                        |cvs, w, h| {
+                                        |cvs, w, h, k| {
+                                            cvs.clean();
+                                            let mut anim = false;
+                                            if config.deck_mode == "widget"
+                                                && config.deck_widget == "keyvis"
+                                            {
+                                                if *k != Key::None {
+                                                    main_view.keyvis.push_key(k);
+                                                }
+                                                if main_view.keyvis.tick(
+                                                    config.keyvis_gravity,
+                                                    config.keyvis_steps,
+                                                    config.keyvis_tension,
+                                                ) {
+                                                    main_view.refresh_static_boxes(config);
+                                                    anim = true;
+                                                }
+                                            }
                                             if w != main_view.term_w || h != main_view.term_h {
                                                 main_view.resize(w, h, config);
-                                            } else {
-                                                main_view.refresh_all(config);
                                             }
                                             main_view.render(cvs);
+                                            anim
                                         },
                                     );
 
@@ -1112,6 +1254,8 @@ pub fn settings_modal(
                                             crate::lib::reset_custom_order();
                                         } else if action_type == 5 {
                                             crate::lib::reset_library();
+                                        } else if action_type == 6 {
+                                            config.reset_deck();
                                         }
                                         config.save();
 
@@ -1147,7 +1291,6 @@ pub fn settings_modal(
                                             }
                                         }
 
-                                        let themes = available_themes();
                                         let current_theme_idx = themes
                                             .iter()
                                             .position(|t| t == &config.theme)
@@ -1183,8 +1326,7 @@ pub fn settings_modal(
                 match crate::theme::themecore::init(&config.theme) {
                     Ok(new_theme) => {
                         main_view.theme = new_theme;
-                        let header_h = main_view.theme.title.len().max(1) as u16;
-                        main_view.min_h = 13 + header_h;
+                        main_view.update_min_h(config);
 
                         let (term_w, term_h) = Terminal::size();
                         main_view.resize(term_w, term_h, config);
@@ -1204,17 +1346,30 @@ pub fn settings_modal(
                             main_view.min_h,
                             config.get_border(),
                             main_view.theme.warning_color.clone(),
-                            |cvs, w, h| {
+                            |cvs, w, h, k| {
+                                cvs.clean();
+                                let mut anim = false;
+                                if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+                                    if *k != Key::None {
+                                        main_view.keyvis.push_key(k);
+                                    }
+                                    if main_view.keyvis.tick(
+                                        config.keyvis_gravity,
+                                        config.keyvis_steps,
+                                        config.keyvis_tension,
+                                    ) {
+                                        main_view.refresh_static_boxes(config);
+                                        anim = true;
+                                    }
+                                }
                                 if w != main_view.term_w || h != main_view.term_h {
                                     main_view.resize(w, h, config);
-                                } else {
-                                    main_view.refresh_all(config);
                                 }
                                 main_view.render(cvs);
+                                anim
                             },
                         );
                         config.theme = prev_theme.clone();
-                        let themes = available_themes();
                         let current_theme_idx =
                             themes.iter().position(|t| t == &config.theme).unwrap_or(0);
                         categories = build_categories(config, &themes, current_theme_idx);
@@ -1258,6 +1413,10 @@ pub fn settings_modal(
                 main_view.resize(term_w, term_h, config);
                 prev_deck_mode = config.deck_mode.clone();
                 prev_deck_widget = config.deck_widget.clone();
+            } else {
+                main_view.update_min_h(config);
+                let (term_w, term_h) = Terminal::size();
+                main_view.resize(term_w, term_h, config);
             }
 
             dirty = true;

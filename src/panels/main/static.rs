@@ -142,7 +142,13 @@ pub fn refresh_title(theme: &Theme, config: &Config, term_w: u16) -> Box {
     title_box
 }
 
-pub fn refresh_deck(term_w: u16, header_h: u16, theme: &Theme, config: &Config) -> Box {
+pub fn refresh_deck(
+    term_w: u16,
+    deck_h: u16,
+    theme: &Theme,
+    config: &Config,
+    keyvis: &crate::panels::widgets::keyvis::KeyvisState,
+) -> Box {
     if config.deck_mode != "widget" {
         return Box::new(
             0,
@@ -155,28 +161,35 @@ pub fn refresh_deck(term_w: u16, header_h: u16, theme: &Theme, config: &Config) 
         );
     }
 
+    let border = if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+        crate::Border::None
+    } else {
+        config.get_border()
+    };
+
     let mut deck_box = Box::new(
         term_w.saturating_sub(TABS_W + LIST_W - 1),
-        header_h,
-        0,
-        config.get_border(),
+        deck_h,
+        if border == crate::Border::None { 0 } else { 1 },
+        border,
         theme.deck_box.clone(),
         Gradient::Solid(Color::None),
         Modifier::None,
     );
-    let widget_text = if config.deck_widget == "monitor" {
-        "monitor"
+
+    if config.deck_widget == "monitor" {
+        deck_box.insert_text(
+            "monitor",
+            0,
+            0,
+            false,
+            theme.main_label.clone(),
+            Gradient::Solid(Color::None),
+            Modifier::Bold,
+        );
     } else {
-        "audiovis"
-    };
-    deck_box.insert_text(
-        widget_text,
-        0,
-        0,
-        false,
-        theme.main_label.clone(),
-        Gradient::Solid(Color::None),
-        Modifier::Bold,
-    );
+        crate::panels::widgets::keyvis::draw(keyvis, &mut deck_box, config);
+    }
+
     deck_box
 }
