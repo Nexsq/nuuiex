@@ -167,7 +167,40 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                         ),
                     });
 
-                    if config.deck_widget == "keyvis" {
+                    if config.deck_widget == "monitor" {
+                        s.push(Setting {
+                            name: "Monitor CPU",
+                            key: "monitor_cpu",
+                            kind: SettingType::Choice(
+                                vec!["true".to_string(), "false".to_string()],
+                                if config.monitor_cpu { 0 } else { 1 },
+                            ),
+                        });
+                        s.push(Setting {
+                            name: "Monitor GPU",
+                            key: "monitor_gpu",
+                            kind: SettingType::Choice(
+                                vec!["true".to_string(), "false".to_string()],
+                                if config.monitor_gpu { 0 } else { 1 },
+                            ),
+                        });
+                        s.push(Setting {
+                            name: "Monitor MEM",
+                            key: "monitor_mem",
+                            kind: SettingType::Choice(
+                                vec!["true".to_string(), "false".to_string()],
+                                if config.monitor_mem { 0 } else { 1 },
+                            ),
+                        });
+                        s.push(Setting {
+                            name: "Monitor TERM",
+                            key: "monitor_term",
+                            kind: SettingType::Choice(
+                                vec!["true".to_string(), "false".to_string()],
+                                if config.monitor_term { 0 } else { 1 },
+                            ),
+                        });
+                    } else if config.deck_widget == "keyvis" {
                         s.push(Setting {
                             name: "Keyvis Width",
                             key: "keyvis_width",
@@ -646,6 +679,11 @@ pub fn settings_modal(
                 apply_setting!(config, set, parse_clamp "keyvis_tension", keyvis_tension, 0.1, 1.0);
                 apply_setting!(config, set, bool "keyvis_base", keyvis_base);
 
+                apply_setting!(config, set, bool "monitor_cpu", monitor_cpu);
+                apply_setting!(config, set, bool "monitor_gpu", monitor_gpu);
+                apply_setting!(config, set, bool "monitor_mem", monitor_mem);
+                apply_setting!(config, set, bool "monitor_term", monitor_term);
+
                 apply_setting!(config, set, char "bind_edit_insert", bind_edit_insert);
                 apply_setting!(config, set, char "bind_edit_visual", bind_edit_visual);
                 apply_setting!(config, set, char "bind_edit_left", bind_edit_left);
@@ -981,7 +1019,9 @@ pub fn settings_modal(
 
         let key = terminal.read_key(Duration::from_millis(16));
         if key != Key::None && config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-            main_view.keyvis.push_key(&key, config.keyvis_force, config.keyvis_spread);
+            main_view
+                .keyvis
+                .push_key(&key, config.keyvis_force, config.keyvis_spread);
         }
 
         if key == Key::None {

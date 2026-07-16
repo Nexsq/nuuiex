@@ -62,6 +62,7 @@ pub struct MainView {
     pub deck_y: i16,
 
     pub keyvis: crate::panels::widgets::keyvis::KeyvisState,
+    pub monitor: crate::panels::widgets::monitor::MonitorState,
 
     pub theme: Theme,
     pub list_input: ListInputMode,
@@ -124,6 +125,7 @@ impl MainView {
             deck_x: 0,
             deck_y: 0,
             keyvis: crate::panels::widgets::keyvis::KeyvisState::new(),
+            monitor: crate::panels::widgets::monitor::MonitorState::new(),
             theme,
             list_input: ListInputMode::None,
         };
@@ -144,17 +146,25 @@ impl MainView {
     ) -> bool {
         cvs.clean();
         let mut anim = false;
-        if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-            if *k != Key::None {
-                self.keyvis.push_key(k, config.keyvis_force, config.keyvis_spread);
-            }
-            if self.keyvis.tick(
-                config.keyvis_gravity,
-                config.keyvis_steps,
-                config.keyvis_tension,
-            ) {
-                self.refresh_static_boxes(config);
-                anim = true;
+        if config.deck_mode == "widget" {
+            if config.deck_widget == "keyvis" {
+                if *k != Key::None {
+                    self.keyvis
+                        .push_key(k, config.keyvis_force, config.keyvis_spread);
+                }
+                if self.keyvis.tick(
+                    config.keyvis_gravity,
+                    config.keyvis_steps,
+                    config.keyvis_tension,
+                ) {
+                    self.refresh_static_boxes(config);
+                    anim = true;
+                }
+            } else if config.deck_widget == "monitor" {
+                if self.monitor.tick(w, h) {
+                    self.refresh_static_boxes(config);
+                    anim = true;
+                }
             }
         }
         if w != self.term_w || h != self.term_h {
@@ -168,8 +178,14 @@ impl MainView {
 
     pub fn update_min_h(&mut self, config: &Config) {
         let header_h = self.theme.title.len().max(1) as u16;
-        let deck_h = if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-            config.keyvis_height as u16
+        let deck_h = if config.deck_mode == "widget" {
+            if config.deck_widget == "keyvis" {
+                config.keyvis_height as u16
+            } else if config.deck_widget == "monitor" {
+                3
+            } else {
+                header_h
+            }
         } else if config.deck_mode == "none" {
             0
         } else {
@@ -278,8 +294,14 @@ impl MainView {
         self.update_min_h(config);
 
         let header_h = self.theme.title.len().max(1) as u16;
-        let deck_h = if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-            config.keyvis_height as u16
+        let deck_h = if config.deck_mode == "widget" {
+            if config.deck_widget == "keyvis" {
+                config.keyvis_height as u16
+            } else if config.deck_widget == "monitor" {
+                3
+            } else {
+                header_h
+            }
         } else {
             header_h
         };
@@ -348,16 +370,29 @@ impl MainView {
 
     pub fn refresh_static_boxes(&mut self, config: &Config) {
         let header_h = self.theme.title.len().max(1) as u16;
-        let deck_h = if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-            config.keyvis_height as u16
+        let deck_h = if config.deck_mode == "widget" {
+            if config.deck_widget == "keyvis" {
+                config.keyvis_height as u16
+            } else if config.deck_widget == "monitor" {
+                3
+            } else {
+                header_h
+            }
         } else {
             header_h
         };
         self.tabs_box =
             r#static::refresh_tabs(&self.theme, config, self.current_tab, &self.running_macros);
         self.title_box = r#static::refresh_title(&self.theme, config, self.term_w);
-        self.deck_box =
-            r#static::refresh_deck(self.term_w, deck_h, &self.theme, config, &self.keyvis);
+        self.deck_box = r#static::refresh_deck(
+            self.term_w,
+            self.term_h,
+            deck_h,
+            &self.theme,
+            config,
+            &self.keyvis,
+            &self.monitor,
+        );
     }
 
     pub fn toggle_focus(&mut self, config: &Config) {

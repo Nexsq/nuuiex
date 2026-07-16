@@ -191,17 +191,26 @@ fn main() {
         let key = terminal.read_key(Duration::from_millis(16));
 
         let mut anim_dirty = false;
-        if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-            if key != Key::None {
-                main_view.keyvis.push_key(&key, config.keyvis_force, config.keyvis_spread);
-            }
-            if main_view.keyvis.tick(
-                config.keyvis_gravity,
-                config.keyvis_steps,
-                config.keyvis_tension,
-            ) {
-                main_view.refresh_static_boxes(&config);
-                anim_dirty = true;
+        if config.deck_mode == "widget" {
+            if config.deck_widget == "keyvis" {
+                if key != Key::None {
+                    main_view
+                        .keyvis
+                        .push_key(&key, config.keyvis_force, config.keyvis_spread);
+                }
+                if main_view.keyvis.tick(
+                    config.keyvis_gravity,
+                    config.keyvis_steps,
+                    config.keyvis_tension,
+                ) {
+                    main_view.refresh_static_boxes(&config);
+                    anim_dirty = true;
+                }
+            } else if config.deck_widget == "monitor" {
+                if main_view.monitor.tick(term_w, term_h) {
+                    main_view.refresh_static_boxes(&config);
+                    anim_dirty = true;
+                }
             }
         }
 

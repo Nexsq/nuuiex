@@ -144,10 +144,12 @@ pub fn refresh_title(theme: &Theme, config: &Config, term_w: u16) -> Box {
 
 pub fn refresh_deck(
     term_w: u16,
+    term_h: u16,
     deck_h: u16,
     theme: &Theme,
     config: &Config,
     keyvis: &crate::panels::widgets::keyvis::KeyvisState,
+    monitor: &crate::panels::widgets::monitor::MonitorState,
 ) -> Box {
     if config.deck_mode != "widget" {
         return Box::new(
@@ -178,14 +180,13 @@ pub fn refresh_deck(
     );
 
     if config.deck_widget == "monitor" {
-        deck_box.insert_text(
-            "monitor",
-            0,
-            0,
-            false,
-            theme.main_label.clone(),
-            Gradient::Solid(Color::None),
-            Modifier::Bold,
+        crate::panels::widgets::monitor::draw(
+            monitor,
+            &mut deck_box,
+            config,
+            theme,
+            term_w,
+            term_h,
         );
     } else {
         crate::panels::widgets::keyvis::draw(keyvis, &mut deck_box, config, theme);

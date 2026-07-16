@@ -14,6 +14,11 @@ pub struct Config {
     pub deck_mode: String,
     pub deck_widget: String,
 
+    pub monitor_cpu: bool,
+    pub monitor_gpu: bool,
+    pub monitor_mem: bool,
+    pub monitor_term: bool,
+
     pub keyvis_width: usize,
     pub keyvis_height: usize,
     pub keyvis_steps: usize,
@@ -62,6 +67,11 @@ impl Default for Config {
             tabs_num: 0,
             deck_mode: String::new(),
             deck_widget: String::new(),
+
+            monitor_cpu: false,
+            monitor_gpu: false,
+            monitor_mem: false,
+            monitor_term: false,
 
             keyvis_width: 0,
             keyvis_height: 0,
@@ -136,6 +146,11 @@ impl Config {
                     "tabs_num" => self.tabs_num = val.parse().unwrap_or(self.tabs_num).clamp(1, 6),
                     "deck_mode" => self.deck_mode = val.to_string(),
                     "deck_widget" => self.deck_widget = val.to_string(),
+
+                    "monitor_cpu" => self.monitor_cpu = val.parse().unwrap_or(self.monitor_cpu),
+                    "monitor_gpu" => self.monitor_gpu = val.parse().unwrap_or(self.monitor_gpu),
+                    "monitor_mem" => self.monitor_mem = val.parse().unwrap_or(self.monitor_mem),
+                    "monitor_term" => self.monitor_term = val.parse().unwrap_or(self.monitor_term),
 
                     "keyvis_width" => self.keyvis_width = val.parse().unwrap_or(self.keyvis_width),
                     "keyvis_height" => {
@@ -361,6 +376,10 @@ impl Config {
         let default = Config::default();
         self.deck_mode = default.deck_mode;
         self.deck_widget = default.deck_widget;
+        self.monitor_cpu = default.monitor_cpu;
+        self.monitor_gpu = default.monitor_gpu;
+        self.monitor_mem = default.monitor_mem;
+        self.monitor_term = default.monitor_term;
         self.keyvis_width = default.keyvis_width;
         self.keyvis_height = default.keyvis_height;
         self.keyvis_steps = default.keyvis_steps;
@@ -463,6 +482,25 @@ impl Config {
                         writeln!(&mut output, "{} = {}{}", key_str, self.deck_widget, comment)
                             .unwrap()
                     }
+
+                    "monitor_cpu" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.monitor_cpu, comment)
+                            .unwrap()
+                    }
+                    "monitor_gpu" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.monitor_gpu, comment)
+                            .unwrap()
+                    }
+                    "monitor_mem" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.monitor_mem, comment)
+                            .unwrap()
+                    }
+                    "monitor_term" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.monitor_term, comment
+                    )
+                    .unwrap(),
 
                     "keyvis_width" => writeln!(
                         &mut output,

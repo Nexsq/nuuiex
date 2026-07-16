@@ -413,7 +413,7 @@ impl Editor {
                     Key::Delete => {
                         let is_ws = self.char_after_cursor().map_or(true, |c| c.is_whitespace());
                         if self.state.selection_start.is_some() {
-                            self.prepare_edit(is_ws); // falls back to Bulk internally
+                            self.prepare_edit(is_ws);
                         } else {
                             self.push_undo(EditAction::Char(is_ws));
                             self.delete_char_after();
