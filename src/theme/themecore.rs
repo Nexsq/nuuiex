@@ -53,6 +53,17 @@ pub struct Theme {
     pub editor_operators: Gradient,
     pub editor_brackets: Gradient,
     pub editor_errors: Gradient,
+
+    pub monitor_cpu_key: Gradient,
+    pub monitor_cpu_val: Gradient,
+    pub monitor_gpu_key: Gradient,
+    pub monitor_gpu_val: Gradient,
+    pub monitor_mem_key: Gradient,
+    pub monitor_mem_val: Gradient,
+    pub monitor_term_key: Gradient,
+    pub monitor_term_val: Gradient,
+    pub monitor_divider: Gradient,
+    pub monitor_bar_bounds: Gradient,
 }
 
 impl Theme {
@@ -94,6 +105,17 @@ impl Theme {
             editor_operators: Gradient::default(),
             editor_brackets: Gradient::default(),
             editor_errors: Gradient::default(),
+
+            monitor_cpu_key: Gradient::default(),
+            monitor_cpu_val: Gradient::default(),
+            monitor_gpu_key: Gradient::default(),
+            monitor_gpu_val: Gradient::default(),
+            monitor_mem_key: Gradient::default(),
+            monitor_mem_val: Gradient::default(),
+            monitor_term_key: Gradient::default(),
+            monitor_term_val: Gradient::default(),
+            monitor_divider: Gradient::default(),
+            monitor_bar_bounds: Gradient::default(),
         }
     }
 }
@@ -396,6 +418,17 @@ fn apply_theme_value(theme: &mut Theme, key: &str, val: &str) -> Result<(), Stri
         "editor_operators" => theme.editor_operators = parse_gradient(val)?,
         "editor_brackets" => theme.editor_brackets = parse_gradient(val)?,
         "editor_errors" => theme.editor_errors = parse_gradient(val)?,
+
+        "monitor_cpu_key" => theme.monitor_cpu_key = parse_gradient(val)?,
+        "monitor_cpu_val" => theme.monitor_cpu_val = parse_gradient(val)?,
+        "monitor_gpu_key" => theme.monitor_gpu_key = parse_gradient(val)?,
+        "monitor_gpu_val" => theme.monitor_gpu_val = parse_gradient(val)?,
+        "monitor_mem_key" => theme.monitor_mem_key = parse_gradient(val)?,
+        "monitor_mem_val" => theme.monitor_mem_val = parse_gradient(val)?,
+        "monitor_term_key" => theme.monitor_term_key = parse_gradient(val)?,
+        "monitor_term_val" => theme.monitor_term_val = parse_gradient(val)?,
+        "monitor_divider" => theme.monitor_divider = parse_gradient(val)?,
+        "monitor_bar_bounds" => theme.monitor_bar_bounds = parse_gradient(val)?,
         _ => {}
     }
     Ok(())

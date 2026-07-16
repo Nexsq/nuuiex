@@ -172,32 +172,56 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                             name: "Monitor CPU",
                             key: "monitor_cpu",
                             kind: SettingType::Choice(
-                                vec!["true".to_string(), "false".to_string()],
-                                if config.monitor_cpu { 0 } else { 1 },
+                                vec!["off".to_string(), "pct".to_string(), "bar".to_string(), "graph".to_string(), "both".to_string(), "both_graph".to_string()],
+                                match config.monitor_cpu.as_str() { "pct" => 1, "bar" => 2, "graph" => 3, "both" => 4, "both_graph" => 5, _ => 0 },
                             ),
                         });
                         s.push(Setting {
                             name: "Monitor GPU",
                             key: "monitor_gpu",
                             kind: SettingType::Choice(
-                                vec!["true".to_string(), "false".to_string()],
-                                if config.monitor_gpu { 0 } else { 1 },
+                                vec!["off".to_string(), "pct".to_string(), "bar".to_string(), "graph".to_string(), "both".to_string(), "both_graph".to_string()],
+                                match config.monitor_gpu.as_str() { "pct" => 1, "bar" => 2, "graph" => 3, "both" => 4, "both_graph" => 5, _ => 0 },
                             ),
                         });
                         s.push(Setting {
                             name: "Monitor MEM",
                             key: "monitor_mem",
                             kind: SettingType::Choice(
-                                vec!["true".to_string(), "false".to_string()],
-                                if config.monitor_mem { 0 } else { 1 },
+                                vec!["off".to_string(), "pct".to_string(), "used".to_string(), "bar".to_string(), "graph".to_string(), "both".to_string(), "both_graph".to_string()],
+                                match config.monitor_mem.as_str() { "pct" => 1, "used" => 2, "bar" => 3, "graph" => 4, "both" => 5, "both_graph" => 6, _ => 0 },
                             ),
                         });
                         s.push(Setting {
                             name: "Monitor TERM",
                             key: "monitor_term",
                             kind: SettingType::Choice(
+                                vec!["off".to_string(), "on".to_string()],
+                                match config.monitor_term.as_str() { "on" => 1, _ => 0 },
+                            ),
+                        });
+                        s.push(Setting {
+                            name: "Divider",
+                            key: "monitor_divider",
+                            kind: SettingType::Choice(
+                                vec!["show".to_string(), "hide".to_string()],
+                                match config.monitor_divider.as_str() { "hide" => 1, _ => 0 },
+                            ),
+                        });
+                        s.push(Setting {
+                            name: "Bar Mode",
+                            key: "monitor_bar_mode",
+                            kind: SettingType::Choice(
+                                vec!["background".to_string(), "caps".to_string()],
+                                match config.monitor_bar_mode.as_str() { "caps" => 1, _ => 0 },
+                            ),
+                        });
+                        s.push(Setting {
+                            name: "Icons",
+                            key: "monitor_icons",
+                            kind: SettingType::Choice(
                                 vec!["true".to_string(), "false".to_string()],
-                                if config.monitor_term { 0 } else { 1 },
+                                if config.monitor_icons { 0 } else { 1 },
                             ),
                         });
                     } else if config.deck_widget == "keyvis" {
@@ -679,10 +703,13 @@ pub fn settings_modal(
                 apply_setting!(config, set, parse_clamp "keyvis_tension", keyvis_tension, 0.1, 1.0);
                 apply_setting!(config, set, bool "keyvis_base", keyvis_base);
 
-                apply_setting!(config, set, bool "monitor_cpu", monitor_cpu);
-                apply_setting!(config, set, bool "monitor_gpu", monitor_gpu);
-                apply_setting!(config, set, bool "monitor_mem", monitor_mem);
-                apply_setting!(config, set, bool "monitor_term", monitor_term);
+                apply_setting!(config, set, choice "monitor_cpu", monitor_cpu);
+                apply_setting!(config, set, choice "monitor_gpu", monitor_gpu);
+                apply_setting!(config, set, choice "monitor_mem", monitor_mem);
+                apply_setting!(config, set, choice "monitor_term", monitor_term);
+                apply_setting!(config, set, choice "monitor_divider", monitor_divider);
+                apply_setting!(config, set, choice "monitor_bar_mode", monitor_bar_mode);
+                apply_setting!(config, set, bool "monitor_icons", monitor_icons);
 
                 apply_setting!(config, set, char "bind_edit_insert", bind_edit_insert);
                 apply_setting!(config, set, char "bind_edit_visual", bind_edit_visual);

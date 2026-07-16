@@ -1,4 +1,5 @@
 add clock to widgets
+test monitor on nvidia gpu on linux
 
 fullscreen in editor and macro
 

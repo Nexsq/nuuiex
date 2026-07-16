@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 use std::thread;
 use std::time::Duration;
 
-use crate::{Box, Color, Gradient, Modifier, conf::Config, theme::themecore::Theme};
+use crate::{Box, Color, Gradient, Modifier, Style, conf::Config, theme::themecore::Theme};
 
 pub struct MonitorState {
     pub cpu: Arc<AtomicU8>,
@@ -287,6 +287,86 @@ fn get_gpu_usage() -> u8 {
     0
 }
 
+fn push_text(
+    cells: &mut Vec<(char, Style)>,
+    text: &str,
+    fg: &Gradient,
+    bg: &Gradient,
+    md: Modifier,
+) {
+    let len = text.chars().count();
+    for (i, c) in text.chars().enumerate() {
+        cells.push((
+            c,
+            Style {
+                fg: fg.color_at(i, len),
+                bg: bg.color_at(i, len),
+                md,
+            },
+        ));
+    }
+}
+
+fn push_bar(
+    cells: &mut Vec<(char, Style)>,
+    usage: u8,
+    fg: &Gradient,
+    bounds: &Gradient,
+    mode: &str,
+) {
+    let chars = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
+    let frac = (usage as u32 * 48) / 100;
+    let full = (frac / 8) as usize;
+    let rem = (frac % 8) as usize;
+
+    if mode == "caps" {
+        cells.push((
+            '[',
+            Style {
+                fg: bounds.color_at(0, 1),
+                bg: Color::None,
+                md: Modifier::Bold,
+            },
+        ));
+    }
+
+    for i in 0..6 {
+        let c = if i < full {
+            chars[8]
+        } else if i == full {
+            chars[rem]
+        } else {
+            ' '
+        };
+
+        let bg_color = if mode == "background" {
+            bounds.color_at(i, 6)
+        } else {
+            Color::None
+        };
+
+        cells.push((
+            c,
+            Style {
+                fg: fg.color_at(i, 6),
+                bg: bg_color,
+                md: Modifier::None,
+            },
+        ));
+    }
+
+    if mode == "caps" {
+        cells.push((
+            ']',
+            Style {
+                fg: bounds.color_at(0, 1),
+                bg: Color::None,
+                md: Modifier::Bold,
+            },
+        ));
+    }
+}
+
 pub fn draw(
     state: &MonitorState,
     b: &mut Box,
@@ -299,43 +379,140 @@ pub fn draw(
         return;
     }
 
-    let mut parts = Vec::new();
+    let mut groups: Vec<Vec<(char, Style)>> = Vec::new();
+    let bg_none = Gradient::Solid(Color::None);
 
-    if config.monitor_cpu {
-        parts.push(format!("CPU: {:>2}%", state.last_cpu));
+    if config.monitor_cpu != "off" {
+        let mut g = Vec::new();
+        push_text(&mut g, "CPU: ", &theme.monitor_cpu_key, &bg_none, Modifier::Bold);
+        if config.monitor_cpu == "pct" || config.monitor_cpu == "both" {
+            let spacing = if config.monitor_cpu == "both" { " " } else { "" };
+            push_text(
+                &mut g,
+                &format!("{:>2}%{}", state.last_cpu, spacing),
+                &theme.monitor_cpu_val,
+                &bg_none,
+                Modifier::None,
+            );
+        }
+        if config.monitor_cpu == "bar" || config.monitor_cpu == "both" {
+            push_bar(
+                &mut g,
+                state.last_cpu,
+                &theme.monitor_cpu_val,
+                &theme.monitor_bar_bounds,
+                &config.monitor_bar_mode,
+            );
+        }
+        groups.push(g);
     }
-    if config.monitor_gpu {
-        parts.push(format!("GPU: {:>2}%", state.last_gpu));
+
+    if config.monitor_gpu != "off" {
+        let mut g = Vec::new();
+        push_text(&mut g, "GPU: ", &theme.monitor_gpu_key, &bg_none, Modifier::Bold);
+        if config.monitor_gpu == "pct" || config.monitor_gpu == "both" {
+            let spacing = if config.monitor_gpu == "both" { " " } else { "" };
+            push_text(
+                &mut g,
+                &format!("{:>2}%{}", state.last_gpu, spacing),
+                &theme.monitor_gpu_val,
+                &bg_none,
+                Modifier::None,
+            );
+        }
+        if config.monitor_gpu == "bar" || config.monitor_gpu == "both" {
+            push_bar(
+                &mut g,
+                state.last_gpu,
+                &theme.monitor_gpu_val,
+                &theme.monitor_bar_bounds,
+                &config.monitor_bar_mode,
+            );
+        }
+        groups.push(g);
     }
-    if config.monitor_mem {
+
+    if config.monitor_mem != "off" {
+        let mut g = Vec::new();
+        push_text(&mut g, "MEM: ", &theme.monitor_mem_key, &bg_none, Modifier::Bold);
+
         let used = state.last_mem as f32 / 1024.0;
         let total = state.mem_total.load(Ordering::Relaxed) as f32 / 1024.0;
-        if total > 0.0 {
-            parts.push(format!("MEM: {:.1}/{:.1} GB", used, total));
+        let mem_pct = if total > 0.0 {
+            ((used / total) * 100.0) as u8
         } else {
-            parts.push(format!("MEM: {:.1} GB", used));
+            0
+        };
+
+        if config.monitor_mem == "used" {
+            let s = if total > 0.0 {
+                format!("{:.1}/{:.1} GB", used, total)
+            } else {
+                format!("{:.1} GB", used)
+            };
+            push_text(&mut g, &s, &theme.monitor_mem_val, &bg_none, Modifier::None);
+        } else {
+            if config.monitor_mem == "pct" || config.monitor_mem == "both" {
+                let spacing = if config.monitor_mem == "both" { " " } else { "" };
+                push_text(
+                    &mut g,
+                    &format!("{:>2}%{}", mem_pct, spacing),
+                    &theme.monitor_mem_val,
+                    &bg_none,
+                    Modifier::None,
+                );
+            }
+            if config.monitor_mem == "bar" || config.monitor_mem == "both" {
+                push_bar(
+                    &mut g,
+                    mem_pct,
+                    &theme.monitor_mem_val,
+                    &theme.monitor_bar_bounds,
+                    &config.monitor_bar_mode,
+                );
+            }
         }
-    }
-    if config.monitor_term {
-        parts.push(format!("TERM: {}x{}", term_w, term_h));
+        groups.push(g);
     }
 
-    let text = parts.join("  |  ");
-    let text_len = text.chars().count() as u16;
+    if config.monitor_term == "on" {
+        let mut g = Vec::new();
+        push_text(&mut g, "TERM: ", &theme.monitor_term_key, &bg_none, Modifier::Bold);
+        push_text(
+            &mut g,
+            &format!("{}x{}", term_w, term_h),
+            &theme.monitor_term_val,
+            &bg_none,
+            Modifier::None,
+        );
+        groups.push(g);
+    }
+
+    let mut final_cells = Vec::new();
+    let show_div = config.monitor_divider == "show";
+
+    for (i, mut g) in groups.into_iter().enumerate() {
+        if i > 0 {
+            if show_div {
+                push_text(&mut final_cells, "  |  ", &theme.monitor_divider, &bg_none, Modifier::None);
+            } else {
+                push_text(&mut final_cells, "   ", &bg_none, &bg_none, Modifier::None);
+            }
+        }
+        final_cells.append(&mut g);
+    }
 
     let inner_w = b.width.saturating_sub(b.padding * 2);
     let inner_h = b.height.saturating_sub(b.padding * 2);
 
-    let x = (inner_w.saturating_sub(text_len) / 2).max(0);
-    let y = (inner_h.saturating_sub(1) / 2).max(0);
+    let total_len = final_cells.len() as u16;
+    let x = (inner_w.saturating_sub(total_len) / 2).max(0) + b.padding;
+    let y = (inner_h.saturating_sub(1) / 2).max(0) + b.padding;
 
-    b.insert_text(
-        &text,
-        x as i16,
-        y as i16,
-        false,
-        theme.main_label.clone(),
-        Gradient::Solid(Color::None),
-        Modifier::Bold,
-    );
+    for (i, (c, style)) in final_cells.into_iter().enumerate() {
+        let cx = x + i as u16;
+        if cx < b.width.saturating_sub(b.padding) {
+            b.put_cell(crate::Cell { c, s: style }, cx, y);
+        }
+    }
 }
