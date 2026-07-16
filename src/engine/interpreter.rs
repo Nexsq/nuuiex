@@ -151,6 +151,185 @@ impl Interpreter {
         res
     }
 
+    fn assign_expr(&mut self, target: &Expr, value: Value) -> Result<(), String> {
+        match target {
+            Expr::Ident(name, line) => self
+                .env
+                .assign(name, value)
+                .map_err(|e| format!("Line {}: {}", line, e)),
+            Expr::Index(left, index_expr, line) => {
+                let mut left_val = self.eval_expr(left)?;
+                let index_val = self.eval_expr(index_expr)?;
+                if let Value::List(vec) = &mut left_val {
+                    if let Value::Number(n) = index_val {
+                        if n < 0.0 {
+                            return Err(format!("Line {}: List index cannot be negative", line));
+                        }
+                        let idx = n as usize;
+                        if idx < vec.len() {
+                            vec[idx] = value;
+                            self.assign_expr(left, left_val)
+                        } else {
+                            Err(format!("Line {}: Index out of bounds", line))
+                        }
+                    } else {
+                        Err(format!("Line {}: List index must be a number", line))
+                    }
+                } else {
+                    Err(format!("Line {}: Cannot index into non-list", line))
+                }
+            }
+            _ => Err("Invalid assignment target".to_string()),
+        }
+    }
+
+    fn try_assign_expr(&mut self, target: &Expr, value: Value) -> Result<(), String> {
+        match target {
+            Expr::Ident(name, line) => self
+                .env
+                .assign(name, value)
+                .map_err(|e| format!("Line {}: {}", line, e)),
+            Expr::Index(left, index_expr, line) => {
+                let mut left_val = self.eval_expr(left)?;
+                let index_val = self.eval_expr(index_expr)?;
+                if let Value::List(vec) = &mut left_val {
+                    if let Value::Number(n) = index_val {
+                        if n < 0.0 {
+                            return Err(format!("Line {}: List index cannot be negative", line));
+                        }
+                        let idx = n as usize;
+                        if idx < vec.len() {
+                            vec[idx] = value;
+                            self.try_assign_expr(left, left_val)
+                        } else {
+                            Err(format!("Line {}: Index out of bounds", line))
+                        }
+                    } else {
+                        Err(format!("Line {}: List index must be a number", line))
+                    }
+                } else {
+                    Err(format!("Line {}: Cannot index into non-list", line))
+                }
+            }
+            Expr::MethodCall(left, _, _, _) => self.try_assign_expr(left, value),
+            _ => Ok(()),
+        }
+    }
+
+    fn apply_method(
+        &mut self,
+        val: &mut Value,
+        method: &str,
+        args: Vec<Value>,
+        line: usize,
+    ) -> Result<Value, String> {
+        if let Value::List(vec) = val {
+            match method {
+                "append" => {
+                    if args.len() != 1 {
+                        return Err(format!("Line {}: 'append' expects 1 argument", line));
+                    }
+                    vec.push(args[0].clone());
+                    Ok(Value::List(vec.clone()))
+                }
+                "clear" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'clear' expects 0 arguments", line));
+                    }
+                    vec.clear();
+                    Ok(Value::List(vec.clone()))
+                }
+                "count" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'count' expects 0 arguments", line));
+                    }
+                    Ok(Value::Number(vec.len() as f64))
+                }
+                "extend" => {
+                    if args.len() != 1 {
+                        return Err(format!("Line {}: 'extend' expects 1 argument", line));
+                    }
+                    if let Value::List(other) = &args[0] {
+                        vec.extend(other.clone());
+                        Ok(Value::List(vec.clone()))
+                    } else {
+                        Err(format!("Line {}: 'extend' expects a list", line))
+                    }
+                }
+                "index" => {
+                    if args.len() != 1 {
+                        return Err(format!("Line {}: 'index' expects 1 argument", line));
+                    }
+                    if let Some(pos) = vec.iter().position(|x| x == &args[0]) {
+                        Ok(Value::Number(pos as f64))
+                    } else {
+                        Ok(Value::Nil)
+                    }
+                }
+                "insert" => {
+                    if args.len() != 2 {
+                        return Err(format!("Line {}: 'insert' expects 2 arguments", line));
+                    }
+                    let element = args[0].clone();
+                    if let Value::Number(pos) = args[1] {
+                        if pos < 0.0 {
+                            return Err(format!("Line {}: Position cannot be negative", line));
+                        }
+                        let idx = pos as usize;
+                        if idx <= vec.len() {
+                            vec.insert(idx, element);
+                            Ok(Value::List(vec.clone()))
+                        } else {
+                            Err(format!("Line {}: Index out of bounds", line))
+                        }
+                    } else {
+                        Err(format!("Line {}: Position must be a number", line))
+                    }
+                }
+                "pop" => {
+                    if args.len() == 0 {
+                        if let Some(popped) = vec.pop() {
+                            Ok(popped)
+                        } else {
+                            Err(format!("Line {}: pop from empty list", line))
+                        }
+                    } else if args.len() == 1 {
+                        if let Value::Number(pos) = args[0] {
+                            if pos < 0.0 {
+                                return Err(format!("Line {}: Position cannot be negative", line));
+                            }
+                            let idx = pos as usize;
+                            if idx < vec.len() {
+                                Ok(vec.remove(idx))
+                            } else {
+                                Err(format!("Line {}: Index out of bounds", line))
+                            }
+                        } else {
+                            Err(format!("Line {}: Position must be a number", line))
+                        }
+                    } else {
+                        Err(format!("Line {}: 'pop' expects 0 or 1 argument", line))
+                    }
+                }
+                "remove" => {
+                    if args.len() != 1 {
+                        return Err(format!("Line {}: 'remove' expects 1 argument", line));
+                    }
+                    if let Some(pos) = vec.iter().position(|x| x == &args[0]) {
+                        vec.remove(pos);
+                    }
+                    Ok(Value::List(vec.clone()))
+                }
+                _ => Err(format!("Line {}: Undefined list method '{}'", line, method)),
+            }
+        } else {
+            Err(format!(
+                "Line {}: Methods can only be called on lists",
+                line
+            ))
+        }
+    }
+
     fn execute_stmt(&mut self, stmt: &Stmt) -> Result<Signal, String> {
         match stmt {
             Stmt::Expr(expr) => {
@@ -171,23 +350,16 @@ impl Interpreter {
                 }
                 Ok(Signal::None)
             }
-            Stmt::Assign(name, expr, line) => {
+            Stmt::Assign(target, expr, _) => {
                 let val = self.eval_expr(expr)?;
-                if let Err(e) = self.env.assign(name, val) {
-                    return Err(format!("Line {}: {}", line, e));
-                }
+                self.assign_expr(target, val)?;
                 Ok(Signal::None)
             }
-            Stmt::AssignOp(name, op, expr, line) => {
+            Stmt::AssignOp(target, op, expr, line) => {
                 let right_val = self.eval_expr(expr)?;
-                let left_val = self
-                    .env
-                    .get(name)
-                    .ok_or_else(|| format!("Line {}: Undefined variable '{}'", line, name))?;
+                let left_val = self.eval_expr(target)?;
                 let new_val = self.eval_binary_op(&left_val, op, &right_val, *line)?;
-                if let Err(e) = self.env.assign(name, new_val) {
-                    return Err(format!("Line {}: {}", line, e));
-                }
+                self.assign_expr(target, new_val)?;
                 Ok(Signal::None)
             }
             Stmt::If(cond, then_b, elifs, else_b) => {
@@ -324,10 +496,11 @@ impl Interpreter {
 
     fn eval_expr(&mut self, expr: &Expr) -> Result<Value, String> {
         match expr {
-            Expr::Number(n, _) => Ok(Value::Number(*n)),
-            Expr::String(s, _) => Ok(Value::String(s.clone())),
-            Expr::Bool(b, _) => Ok(Value::Bool(*b)),
-            Expr::FormatString(parts, _) => {
+            Expr::Number(n) => Ok(Value::Number(*n)),
+            Expr::String(s) => Ok(Value::String(s.clone())),
+            Expr::Bool(b) => Ok(Value::Bool(*b)),
+            Expr::Nil => Ok(Value::Nil),
+            Expr::FormatString(parts) => {
                 let mut result = String::new();
                 for part in parts {
                     match part {
@@ -340,12 +513,50 @@ impl Interpreter {
                 }
                 Ok(Value::String(result))
             }
+            Expr::List(items) => {
+                let mut vec = Vec::with_capacity(items.len());
+                for item in items {
+                    vec.push(self.eval_expr(item)?);
+                }
+                Ok(Value::List(vec))
+            }
             Expr::Ident(name, line) => {
                 if let Some(val) = self.env.get(name) {
                     Ok(val.clone())
                 } else {
                     Err(format!("Line {}: Undefined variable '{}'", line, name))
                 }
+            }
+            Expr::Index(left, index_expr, line) => {
+                let left_val = self.eval_expr(left)?;
+                let index_val = self.eval_expr(index_expr)?;
+                if let Value::List(vec) = left_val {
+                    if let Value::Number(n) = index_val {
+                        if n < 0.0 {
+                            return Err(format!("Line {}: List index cannot be negative", line));
+                        }
+                        let idx = n as usize;
+                        if idx < vec.len() {
+                            Ok(vec[idx].clone())
+                        } else {
+                            Ok(Value::Nil)
+                        }
+                    } else {
+                        Err(format!("Line {}: List index must be a number", line))
+                    }
+                } else {
+                    Err(format!("Line {}: Cannot index into non-list", line))
+                }
+            }
+            Expr::MethodCall(left, method, args, line) => {
+                let mut eval_args = Vec::with_capacity(args.len());
+                for arg in args {
+                    eval_args.push(self.eval_expr(arg)?);
+                }
+                let mut left_val = self.eval_expr(left)?;
+                let res = self.apply_method(&mut left_val, method, eval_args, *line)?;
+                self.try_assign_expr(left, left_val)?;
+                Ok(res)
             }
             Expr::Binary(left, op, right, line) => {
                 let l = self.eval_expr(left)?;

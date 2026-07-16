@@ -79,12 +79,12 @@ impl Parser {
             || self.check(&TokenKind::PercentEq)
         {
             let op_token = self.advance().clone();
-            if let Expr::Ident(name, _) = expr {
+            if matches!(expr, Expr::Ident(..) | Expr::Index(..)) {
                 let value = self.parse_expression()?;
                 if self.check_statement_end() {
                     self.consume_statement_end();
                     if op_token.kind == TokenKind::Eq {
-                        return Some(Stmt::Assign(name, value, op_token.line));
+                        return Some(Stmt::Assign(expr, value, op_token.line));
                     } else {
                         let bin_op = match op_token.kind {
                             TokenKind::PlusEq => BinaryOp::Add,
@@ -94,7 +94,7 @@ impl Parser {
                             TokenKind::PercentEq => BinaryOp::Mod,
                             _ => unreachable!(),
                         };
-                        return Some(Stmt::AssignOp(name, bin_op, value, op_token.line));
+                        return Some(Stmt::AssignOp(expr, bin_op, value, op_token.line));
                     }
                 } else {
                     self.error("Expected newline after assignment.");
@@ -313,13 +313,72 @@ impl Parser {
             let op = BinaryOp::from_token(&token.kind).unwrap();
             let right = self.parse_unary()?;
             return Some(Expr::Binary(
-                Box::new(Expr::Number(0.0, token.line)),
+                Box::new(Expr::Number(0.0)),
                 op,
                 Box::new(right),
                 token.line,
             ));
         }
-        self.parse_primary()
+        self.parse_call()
+    }
+
+    fn parse_call(&mut self) -> Option<Expr> {
+        let mut expr = self.parse_primary()?;
+
+        loop {
+            if self.check(&TokenKind::LBracket) {
+                let line = self.advance().line;
+                let index = self.parse_expression()?;
+                if self.check(&TokenKind::RBracket) {
+                    self.advance();
+                    expr = Expr::Index(Box::new(expr), Box::new(index), line);
+                } else {
+                    self.error("Expected ']' after index.");
+                    return None;
+                }
+            } else if self.check(&TokenKind::DoubleColon) {
+                let line = self.advance().line;
+                if let TokenKind::Ident(method) = self.peek().kind.clone() {
+                    self.advance();
+                    if self.check(&TokenKind::LParen) {
+                        self.advance();
+                        let mut args = Vec::new();
+
+                        if !self.check(&TokenKind::RParen) {
+                            loop {
+                                if let Some(arg) = self.parse_expression() {
+                                    args.push(arg);
+                                } else {
+                                    return None;
+                                }
+                                if self.check(&TokenKind::Comma) {
+                                    self.advance();
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                        if self.check(&TokenKind::RParen) {
+                            self.advance();
+                            expr = Expr::MethodCall(Box::new(expr), method, args, line);
+                        } else {
+                            self.error("Expected ')' after arguments.");
+                            return None;
+                        }
+                    } else {
+                        self.error("Expected '(' after method name.");
+                        return None;
+                    }
+                } else {
+                    self.error("Expected method name after '::'.");
+                    return None;
+                }
+            } else {
+                break;
+            }
+        }
+
+        Some(expr)
     }
 
     fn parse_primary(&mut self) -> Option<Expr> {
@@ -331,9 +390,10 @@ impl Parser {
         let token = self.advance().clone();
         let line = token.line;
         match token.kind {
-            TokenKind::Number(n) => Some(Expr::Number(n, line)),
-            TokenKind::True => Some(Expr::Bool(true, line)),
-            TokenKind::False => Some(Expr::Bool(false, line)),
+            TokenKind::Number(n) => Some(Expr::Number(n)),
+            TokenKind::True => Some(Expr::Bool(true)),
+            TokenKind::False => Some(Expr::Bool(false)),
+            TokenKind::NoneValue => Some(Expr::Nil),
             TokenKind::String(s) => {
                 let mut parts = Vec::new();
                 let mut current_text = String::new();
@@ -415,7 +475,7 @@ impl Parser {
                 }
 
                 if has_expr {
-                    Some(Expr::FormatString(parts, line))
+                    Some(Expr::FormatString(parts))
                 } else {
                     let mut final_str = String::new();
                     for part in parts {
@@ -423,7 +483,7 @@ impl Parser {
                             final_str.push_str(&t);
                         }
                     }
-                    Some(Expr::String(final_str, line))
+                    Some(Expr::String(final_str))
                 }
             }
             TokenKind::Ident(name) => {
@@ -465,6 +525,30 @@ impl Parser {
                     Some(expr)
                 } else {
                     self.error("Expected ')' after expression.");
+                    None
+                }
+            }
+            TokenKind::LBracket => {
+                let mut items = Vec::new();
+                if !self.check(&TokenKind::RBracket) {
+                    loop {
+                        if let Some(item) = self.parse_expression() {
+                            items.push(item);
+                        } else {
+                            return None;
+                        }
+                        if self.check(&TokenKind::Comma) {
+                            self.advance();
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                if self.check(&TokenKind::RBracket) {
+                    self.advance();
+                    Some(Expr::List(items))
+                } else {
+                    self.error("Expected ']' after list items.");
                     None
                 }
             }

@@ -347,7 +347,7 @@ impl Canvas {
         self.buffer.clear();
 
         if self.needs_clear {
-            self.buffer.extend_from_slice(b"\x1b[H");
+            self.buffer.extend_from_slice(b"\x1b[2J\x1b[H");
             self.needs_clear = false;
         }
 
@@ -427,7 +427,13 @@ impl Canvas {
         self.old.clear();
         self.new.clear();
 
-        self.old.resize(size, Cell::default());
+        self.old.resize(
+            size,
+            Cell {
+                c: '\0',
+                s: Style::default(),
+            },
+        );
         self.new.resize(size, Cell::default());
 
         self.needs_clear = true;

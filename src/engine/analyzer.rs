@@ -53,26 +53,19 @@ impl Analyzer {
     fn analyze_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Expr(expr) => {
-                if !matches!(expr, Expr::Call(..)) {
-                    self.error(expr.line(), "Standalone expression value is unused.".into());
-                }
                 self.analyze_expr(expr);
             }
             Stmt::Let(name, expr, _) | Stmt::Const(name, expr, _) => {
                 self.analyze_expr(expr);
                 self.define(name);
             }
-            Stmt::Assign(name, expr, line) => {
+            Stmt::Assign(target, expr, line) => {
                 self.analyze_expr(expr);
-                if !self.is_defined(name) {
-                    self.error(*line, format!("Undefined variable '{}'", name));
-                }
+                self.check_lvalue(target, *line);
             }
-            Stmt::AssignOp(name, _, expr, line) => {
+            Stmt::AssignOp(target, _, expr, line) => {
                 self.analyze_expr(expr);
-                if !self.is_defined(name) {
-                    self.error(*line, format!("Undefined variable '{}'", name));
-                }
+                self.check_lvalue(target, *line);
             }
             Stmt::If(cond, then_b, elifs, else_b) => {
                 self.analyze_expr(cond);
@@ -109,17 +102,32 @@ impl Analyzer {
 
     fn analyze_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Number(_, _) | Expr::String(_, _) | Expr::Bool(_, _) => {}
-            Expr::FormatString(parts, _) => {
+            Expr::Number(_) | Expr::String(_) | Expr::Bool(_) | Expr::Nil => {}
+            Expr::FormatString(parts) => {
                 for part in parts {
                     if let StringPart::Expr(e) = part {
                         self.analyze_expr(e);
                     }
                 }
             }
+            Expr::List(items) => {
+                for item in items {
+                    self.analyze_expr(item);
+                }
+            }
             Expr::Ident(name, line) => {
                 if !self.is_defined(name) {
                     self.error(*line, format!("Undefined variable '{}'", name));
+                }
+            }
+            Expr::Index(left, index, _) => {
+                self.analyze_expr(left);
+                self.analyze_expr(index);
+            }
+            Expr::MethodCall(left, _, args, _) => {
+                self.analyze_expr(left);
+                for arg in args {
+                    self.analyze_expr(arg);
                 }
             }
             Expr::Binary(left, _, right, _) => {
@@ -130,11 +138,25 @@ impl Analyzer {
                 if name != "print" && name != "println" && name != "sleep" && name != "exit" {
                     self.error(*line, format!("Undefined function '{}'", name));
                 }
-
                 for arg in args {
                     self.analyze_expr(arg);
                 }
             }
+        }
+    }
+
+    fn check_lvalue(&mut self, expr: &Expr, line: usize) {
+        match expr {
+            Expr::Ident(name, _) => {
+                if !self.is_defined(name) {
+                    self.error(line, format!("Undefined variable '{}'", name));
+                }
+            }
+            Expr::Index(left, index, _) => {
+                self.check_lvalue(left, line);
+                self.analyze_expr(index);
+            }
+            _ => self.error(line, "Invalid assignment target".to_string()),
         }
     }
 }

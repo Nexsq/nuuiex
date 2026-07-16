@@ -5,6 +5,7 @@ pub enum TokenKind {
     String(String),
     True,
     False,
+    NoneValue,
     Plus,
     Minus,
     Star,
@@ -30,10 +31,13 @@ pub enum TokenKind {
     Else,
     Break,
     Colon,
+    DoubleColon,
     Indent,
     Dedent,
     LParen,
     RParen,
+    LBracket,
+    RBracket,
     Comma,
     Newline,
     EOF,
@@ -323,6 +327,13 @@ impl<'a> Lexer<'a> {
                 }
                 ':' => {
                     self.advance();
+                    if self.peek() == ':' {
+                        self.advance();
+                        return Token {
+                            kind: TokenKind::DoubleColon,
+                            line: self.line,
+                        };
+                    }
                     return Token {
                         kind: TokenKind::Colon,
                         line: self.line,
@@ -339,6 +350,20 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     return Token {
                         kind: TokenKind::RParen,
+                        line: self.line,
+                    };
+                }
+                '[' => {
+                    self.advance();
+                    return Token {
+                        kind: TokenKind::LBracket,
+                        line: self.line,
+                    };
+                }
+                ']' => {
+                    self.advance();
+                    return Token {
+                        kind: TokenKind::RBracket,
                         line: self.line,
                     };
                 }
@@ -452,8 +477,9 @@ impl<'a> Lexer<'a> {
             "elif" => TokenKind::Elif,
             "else" => TokenKind::Else,
             "break" => TokenKind::Break,
-            "true" => TokenKind::True,
-            "false" => TokenKind::False,
+            "True" => TokenKind::True,
+            "False" => TokenKind::False,
+            "None" => TokenKind::NoneValue,
             _ => TokenKind::Ident(text.to_string()),
         };
 

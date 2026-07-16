@@ -423,7 +423,11 @@ impl Editor {
                         }
                     }
                     k if k == Key::Char(config.bind_edit_paste) => {
-                        self.push_undo(EditAction::Bulk);
+                        if self.state.selection_start.is_some() {
+                            self.prepare_edit(true);
+                        } else {
+                            self.push_undo(EditAction::Bulk);
+                        }
                         self.paste_from_clipboard();
                         needs_analysis = true;
                     }
@@ -999,8 +1003,6 @@ impl Editor {
             if let Some(cb) = &mut self.clipboard {
                 let _ = cb.set_text(text);
             }
-            self.state.selection_start = None;
-            self.visual_mode = false;
         }
     }
 

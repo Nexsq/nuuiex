@@ -8,27 +8,17 @@ pub enum StringPart {
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Number(f64, usize),
-    String(String, usize),
-    Bool(bool, usize),
-    FormatString(Vec<StringPart>, usize),
+    Number(f64),
+    String(String),
+    Bool(bool),
+    Nil,
+    FormatString(Vec<StringPart>),
+    List(Vec<Expr>),
     Ident(String, usize),
+    Index(Box<Expr>, Box<Expr>, usize),
+    MethodCall(Box<Expr>, String, Vec<Expr>, usize),
     Binary(Box<Expr>, BinaryOp, Box<Expr>, usize),
     Call(String, Vec<Expr>, usize),
-}
-
-impl Expr {
-    pub fn line(&self) -> usize {
-        match self {
-            Expr::Number(_, l) => *l,
-            Expr::String(_, l) => *l,
-            Expr::Bool(_, l) => *l,
-            Expr::FormatString(_, l) => *l,
-            Expr::Ident(_, l) => *l,
-            Expr::Binary(_, _, _, l) => *l,
-            Expr::Call(_, _, l) => *l,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -70,8 +60,8 @@ pub enum Stmt {
     Expr(Expr),
     Let(String, Expr, usize),
     Const(String, Expr, usize),
-    Assign(String, Expr, usize),
-    AssignOp(String, BinaryOp, Expr, usize),
+    Assign(Expr, Expr, usize),
+    AssignOp(Expr, BinaryOp, Expr, usize),
     If(Expr, Vec<Stmt>, Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
     Loop(Vec<Stmt>),
     Break(usize),
