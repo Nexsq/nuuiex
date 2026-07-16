@@ -1,3 +1,7 @@
+add methods for strings
+
+possibly add method for floats
+
 test monitor on nvidia gpu on linux
 
 add to macro engine:
