@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -15,6 +15,9 @@ pub struct MonitorState {
     pub last_mem: u32,
     pub last_term_w: u16,
     pub last_term_h: u16,
+    pub is_active: Arc<AtomicBool>,
+    pub is_running: Arc<AtomicBool>,
+    thread_handle: Option<thread::JoinHandle<()>>,
 }
 
 impl MonitorState {
@@ -23,20 +26,29 @@ impl MonitorState {
         let gpu = Arc::new(AtomicU8::new(0));
         let mem_used = Arc::new(AtomicU32::new(0));
         let mem_total = Arc::new(AtomicU32::new(0));
+        let is_active = Arc::new(AtomicBool::new(false));
+        let is_running = Arc::new(AtomicBool::new(true));
 
         let c_cpu = cpu.clone();
         let c_gpu = gpu.clone();
         let c_mem_used = mem_used.clone();
         let c_mem_total = mem_total.clone();
+        let c_active = is_active.clone();
+        let c_running = is_running.clone();
 
-        thread::spawn(move || {
+        let thread_handle = thread::spawn(move || {
             #[cfg(target_os = "linux")]
             let (mut prev_idle, mut prev_non_idle) = (0u64, 0u64);
 
             #[cfg(target_os = "windows")]
             let (mut prev_idle, mut prev_kernel, mut prev_user) = (0u64, 0u64, 0u64);
 
-            loop {
+            while c_running.load(Ordering::Relaxed) {
+                if !c_active.load(Ordering::Relaxed) {
+                    thread::sleep(Duration::from_millis(200));
+                    continue;
+                }
+
                 #[cfg(target_os = "linux")]
                 let (cpu_val, mem_u, mem_t) = get_linux_metrics(&mut prev_idle, &mut prev_non_idle);
 
@@ -54,7 +66,12 @@ impl MonitorState {
                 c_mem_used.store(mem_u, Ordering::Relaxed);
                 c_mem_total.store(mem_t, Ordering::Relaxed);
 
-                thread::sleep(Duration::from_millis(1000));
+                for _ in 0..5 {
+                    if !c_running.load(Ordering::Relaxed) || !c_active.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(200));
+                }
             }
         });
 
@@ -68,7 +85,14 @@ impl MonitorState {
             last_mem: u32::MAX,
             last_term_w: 0,
             last_term_h: 0,
+            is_active,
+            is_running,
+            thread_handle: Some(thread_handle),
         }
+    }
+
+    pub fn set_active(&mut self, active: bool) {
+        self.is_active.store(active, Ordering::Relaxed);
     }
 
     pub fn tick(&mut self, term_w: u16, term_h: u16) -> bool {
@@ -90,6 +114,15 @@ impl MonitorState {
             true
         } else {
             false
+        }
+    }
+}
+
+impl Drop for MonitorState {
+    fn drop(&mut self) {
+        self.is_running.store(false, Ordering::Relaxed);
+        if let Some(handle) = self.thread_handle.take() {
+            let _ = handle.join();
         }
     }
 }
@@ -127,8 +160,8 @@ fn get_linux_metrics(prev_idle: &mut u64, prev_non_idle: &mut u64) -> (u8, u32, 
         }
     }
 
-    let mut mem_total = 0;
-    let mut mem_avail = 0;
+    let mut mem_total: u32 = 0;
+    let mut mem_avail: u32 = 0;
     if let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") {
         for line in meminfo.lines() {
             if line.starts_with("MemTotal:") {
@@ -136,7 +169,7 @@ fn get_linux_metrics(prev_idle: &mut u64, prev_non_idle: &mut u64) -> (u8, u32, 
                     .split_whitespace()
                     .nth(1)
                     .unwrap_or("0")
-                    .parse()
+                    .parse::<u32>()
                     .unwrap_or(0)
                     / 1024;
             } else if line.starts_with("MemAvailable:") {
@@ -144,7 +177,7 @@ fn get_linux_metrics(prev_idle: &mut u64, prev_non_idle: &mut u64) -> (u8, u32, 
                     .split_whitespace()
                     .nth(1)
                     .unwrap_or("0")
-                    .parse()
+                    .parse::<u32>()
                     .unwrap_or(0)
                     / 1024;
             }

@@ -381,6 +381,10 @@ impl MainView {
         } else {
             header_h
         };
+
+        self.monitor
+            .set_active(config.deck_mode == "widget" && config.deck_widget == "monitor");
+
         self.tabs_box =
             r#static::refresh_tabs(&self.theme, config, self.current_tab, &self.running_macros);
         self.title_box = r#static::refresh_title(&self.theme, config, self.term_w);

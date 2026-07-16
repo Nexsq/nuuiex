@@ -163,7 +163,7 @@ pub fn refresh_deck(
         );
     }
 
-    let border = if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+    let border = if config.deck_mode == "widget" {
         crate::Border::None
     } else {
         config.get_border()
