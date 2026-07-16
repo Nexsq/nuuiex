@@ -281,6 +281,12 @@ impl Interpreter {
                             line
                         ));
                     }
+                    if count > 1_000_000 {
+                        return Err(format!(
+                            "Line {}: String multiplication exceeds size limit",
+                            line
+                        ));
+                    }
                     Ok(Value::String(ls.repeat(count as usize)))
                 }
                 _ => Err(format!("Line {}: Unsupported string operation", line)),
@@ -291,6 +297,12 @@ impl Interpreter {
                     if count < 0 {
                         return Err(format!(
                             "Line {}: Cannot multiply string by a negative number",
+                            line
+                        ));
+                    }
+                    if count > 1_000_000 {
+                        return Err(format!(
+                            "Line {}: String multiplication exceeds size limit",
                             line
                         ));
                     }
@@ -354,11 +366,16 @@ impl Interpreter {
                         if ms < 0.0 {
                             return Err(format!("Line {}: 'sleep' time cannot be negative", line));
                         }
-                        if self.cancel_token.load(Ordering::SeqCst) {
-                            self.should_exit = true;
-                            return Ok(Value::Nil);
+
+                        let target =
+                            std::time::Instant::now() + std::time::Duration::from_millis(ms as u64);
+                        while std::time::Instant::now() < target {
+                            if self.cancel_token.load(Ordering::SeqCst) {
+                                self.should_exit = true;
+                                return Ok(Value::Nil);
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(10));
                         }
-                        std::thread::sleep(std::time::Duration::from_millis(ms as u64));
                         Ok(Value::Nil)
                     } else {
                         Err(format!("Line {}: 'sleep' expects a number", line))

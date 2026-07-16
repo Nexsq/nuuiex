@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::{Box, Color, Gradient, Modifier, Style, conf::Config, theme::themecore::Theme};
 
@@ -56,6 +56,9 @@ impl MonitorState {
             #[cfg(target_os = "windows")]
             let (mut prev_idle, mut prev_kernel, mut prev_user) = (0u64, 0u64, 0u64);
 
+            let mut last_gpu_val = 0;
+            let mut last_gpu_time = Instant::now().checked_sub(Duration::from_secs(10)).unwrap();
+
             while c_running.load(Ordering::Relaxed) {
                 if !c_active.load(Ordering::Relaxed) {
                     thread::sleep(Duration::from_millis(200));
@@ -72,7 +75,12 @@ impl MonitorState {
                 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
                 let (cpu_val, mem_u, mem_t) = (0, 0, 0);
 
-                let gpu_val = get_gpu_usage();
+                let now = Instant::now();
+                if now.duration_since(last_gpu_time).as_secs() >= 1 {
+                    last_gpu_val = get_gpu_usage();
+                    last_gpu_time = now;
+                }
+                let gpu_val = last_gpu_val;
 
                 c_cpu.store(cpu_val, Ordering::Relaxed);
                 c_gpu.store(gpu_val, Ordering::Relaxed);

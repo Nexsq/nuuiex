@@ -166,13 +166,13 @@ fn scan_lib(
             let path_a_str = a
                 .path()
                 .strip_prefix(root_path)
-                .unwrap()
+                .unwrap_or(a.path())
                 .to_str()
                 .unwrap_or("");
             let path_b_str = b
                 .path()
                 .strip_prefix(root_path)
-                .unwrap()
+                .unwrap_or(b.path())
                 .to_str()
                 .unwrap_or("");
 

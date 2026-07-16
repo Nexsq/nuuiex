@@ -40,6 +40,7 @@ pub struct Editor {
 
     pub undo_stack: Vec<(EditorState, EditAction)>,
     pub redo_stack: Vec<(EditorState, EditAction)>,
+    pub last_edit_pos: Option<(usize, usize)>,
 
     pub last_key_select_all: bool,
     pub last_key_file_bounds: bool,
@@ -80,6 +81,7 @@ impl Editor {
             clipboard: Clipboard::new().ok(),
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
+            last_edit_pos: None,
             last_key_select_all: false,
             last_key_file_bounds: false,
             last_key_delete: false,
@@ -131,6 +133,7 @@ impl Editor {
         self.visual_mode = false;
         self.undo_stack.clear();
         self.redo_stack.clear();
+        self.last_edit_pos = None;
         self.reset_keys();
         if self.is_editing {
             self.refresh_analysis();
@@ -173,7 +176,32 @@ impl Editor {
     }
 
     fn push_undo(&mut self, action: EditAction) {
-        self.undo_stack.push((self.state.clone(), action));
+        let current_pos = (self.state.cursor_x, self.state.cursor_y);
+
+        let mut contiguous = false;
+        if let Some(pos) = self.last_edit_pos {
+            if pos.1 == current_pos.1 && (pos.0 as isize - current_pos.0 as isize).abs() <= 1 {
+                contiguous = true;
+            } else if current_pos.1 == pos.1 + 1 && current_pos.0 == 0 {
+                contiguous = true;
+            }
+        }
+
+        let last_action = self.undo_stack.last().map(|(_, a)| *a);
+
+        let should_push = match (last_action, action) {
+            (_, EditAction::Bulk) => true,
+            (Some(EditAction::Char(last_ws)), EditAction::Char(curr_ws)) => {
+                last_ws != curr_ws || !contiguous
+            }
+            _ => true,
+        };
+
+        if should_push {
+            self.undo_stack.push((self.state.clone(), action));
+        }
+
+        self.last_edit_pos = Some(current_pos);
         self.redo_stack.clear();
     }
 
@@ -216,76 +244,6 @@ impl Editor {
         let (count, lines) = crate::engine::core::analyze_code(&source);
         self.error_count = count;
         self.error_lines = lines;
-    }
-
-    fn ctrl_undo(&mut self) {
-        let mut first = true;
-        let mut seen_non_ws = false;
-
-        while let Some((_, action)) = self.undo_stack.last() {
-            let action = *action;
-
-            if action == EditAction::Bulk {
-                if first {
-                    let (s, a) = self.undo_stack.pop().unwrap();
-                    let old = std::mem::replace(&mut self.state, s);
-                    self.redo_stack.push((old, a));
-                }
-                break;
-            }
-
-            let is_ws = match action {
-                EditAction::Char(ws) => ws,
-                _ => false,
-            };
-
-            if !first && seen_non_ws && is_ws {
-                break;
-            }
-            if !is_ws {
-                seen_non_ws = true;
-            }
-
-            let (s, a) = self.undo_stack.pop().unwrap();
-            let old = std::mem::replace(&mut self.state, s);
-            self.redo_stack.push((old, a));
-            first = false;
-        }
-    }
-
-    fn ctrl_redo(&mut self) {
-        let mut first = true;
-        let mut seen_non_ws = false;
-
-        while let Some((_, action)) = self.redo_stack.last() {
-            let action = *action;
-
-            if action == EditAction::Bulk {
-                if first {
-                    let (s, a) = self.redo_stack.pop().unwrap();
-                    let old = std::mem::replace(&mut self.state, s);
-                    self.undo_stack.push((old, a));
-                }
-                break;
-            }
-
-            let is_ws = match action {
-                EditAction::Char(ws) => ws,
-                _ => false,
-            };
-
-            if !first && seen_non_ws && is_ws {
-                break;
-            }
-            if !is_ws {
-                seen_non_ws = true;
-            }
-
-            let (s, a) = self.redo_stack.pop().unwrap();
-            let old = std::mem::replace(&mut self.state, s);
-            self.undo_stack.push((old, a));
-            first = false;
-        }
     }
 
     pub fn handle_key(&mut self, key: Key, config: &Config) -> bool {
@@ -473,6 +431,7 @@ impl Editor {
                         if let Some((state, a)) = self.undo_stack.pop() {
                             let old = std::mem::replace(&mut self.state, state);
                             self.redo_stack.push((old, a));
+                            self.last_edit_pos = None;
                             needs_analysis = true;
                         }
                     }
@@ -480,16 +439,9 @@ impl Editor {
                         if let Some((state, a)) = self.redo_stack.pop() {
                             let old = std::mem::replace(&mut self.state, state);
                             self.undo_stack.push((old, a));
+                            self.last_edit_pos = None;
                             needs_analysis = true;
                         }
-                    }
-                    k if k == Key::Ctrl(config.bind_edit_undo) => {
-                        self.ctrl_undo();
-                        needs_analysis = true;
-                    }
-                    k if k == Key::Ctrl(config.bind_edit_redo) => {
-                        self.ctrl_redo();
-                        needs_analysis = true;
                     }
                     k if k == Key::Char(config.bind_edit_save) => {
                         self.save();

@@ -347,7 +347,7 @@ impl Canvas {
         self.buffer.clear();
 
         if self.needs_clear {
-            self.buffer.extend_from_slice(b"\x1b[2J\x1b[H");
+            self.buffer.extend_from_slice(b"\x1b[H");
             self.needs_clear = false;
         }
 

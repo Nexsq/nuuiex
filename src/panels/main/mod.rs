@@ -138,6 +138,22 @@ impl MainView {
         view
     }
 
+    pub fn get_layout_heights(&self, config: &Config) -> (u16, u16) {
+        let header_h = self.theme.title.len().max(1) as u16;
+        let deck_h = if config.deck_mode == "widget" {
+            match config.deck_widget.as_str() {
+                "keyvis" => config.keyvis_height as u16,
+                "monitor" | "clock" => 3,
+                _ => header_h,
+            }
+        } else if config.deck_mode == "none" {
+            0
+        } else {
+            header_h
+        };
+        (header_h, deck_h)
+    }
+
     pub fn draw_background(
         &mut self,
         cvs: &mut Canvas,
@@ -184,20 +200,7 @@ impl MainView {
     }
 
     pub fn update_min_h(&mut self, config: &Config) {
-        let header_h = self.theme.title.len().max(1) as u16;
-        let deck_h = if config.deck_mode == "widget" {
-            if config.deck_widget == "keyvis" {
-                config.keyvis_height as u16
-            } else if config.deck_widget == "monitor" || config.deck_widget == "clock" {
-                3
-            } else {
-                header_h
-            }
-        } else if config.deck_mode == "none" {
-            0
-        } else {
-            header_h
-        };
+        let (_, deck_h) = self.get_layout_heights(config);
         self.min_h = 13 + deck_h;
     }
 
@@ -300,18 +303,7 @@ impl MainView {
         self.term_h = term_h;
         self.update_min_h(config);
 
-        let header_h = self.theme.title.len().max(1) as u16;
-        let deck_h = if config.deck_mode == "widget" {
-            if config.deck_widget == "keyvis" {
-                config.keyvis_height as u16
-            } else if config.deck_widget == "monitor" || config.deck_widget == "clock" {
-                3
-            } else {
-                header_h
-            }
-        } else {
-            header_h
-        };
+        let (header_h, deck_h) = self.get_layout_heights(config);
 
         let (main_pos, list_pos, tabs_pos, title_pos, deck_pos) = layout::get_positions(
             term_w,
@@ -377,18 +369,7 @@ impl MainView {
     }
 
     pub fn refresh_static_boxes(&mut self, config: &Config) {
-        let header_h = self.theme.title.len().max(1) as u16;
-        let deck_h = if config.deck_mode == "widget" {
-            if config.deck_widget == "keyvis" {
-                config.keyvis_height as u16
-            } else if config.deck_widget == "monitor" || config.deck_widget == "clock" {
-                3
-            } else {
-                header_h
-            }
-        } else {
-            header_h
-        };
+        let (_, deck_h) = self.get_layout_heights(config);
 
         self.monitor
             .set_active(config.deck_mode == "widget" && config.deck_widget == "monitor");

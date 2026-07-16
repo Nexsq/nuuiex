@@ -86,7 +86,7 @@ pub fn refresh(
 
     struct RenderItem<'a> {
         node: Option<&'a MacroNode>,
-        custom_text: Option<String>,
+        custom_text: Option<&'a str>,
         indent_spaces: usize,
         use_branch_prefix: bool,
         is_selectable: bool,
@@ -102,7 +102,7 @@ pub fn refresh(
     let push_empty_indicator = |items: &mut Vec<RenderItem>, indent: usize, branch: bool| {
         items.push(RenderItem {
             node: None,
-            custom_text: Some("...".to_string()),
+            custom_text: Some("..."),
             indent_spaces: indent,
             use_branch_prefix: branch,
             is_selectable: false,
@@ -123,7 +123,7 @@ pub fn refresh(
                     matches!(list_input, ListInputMode::Renaming(_)) && *list_selected == i;
                 let custom_text = if is_renaming {
                     if let ListInputMode::Renaming(n) = list_input {
-                        Some(n.clone())
+                        Some(n.as_str())
                     } else {
                         None
                     }
@@ -153,7 +153,7 @@ pub fn refresh(
                 ListInputMode::CreatingFile(n) | ListInputMode::CreatingFolder(n) => {
                     render_items.push(RenderItem {
                         node: None,
-                        custom_text: Some(n.clone()),
+                        custom_text: Some(n.as_str()),
                         indent_spaces: 0,
                         use_branch_prefix: false,
                         is_selectable: false,
@@ -207,7 +207,7 @@ pub fn refresh(
                                 && *list_selected == child_idx;
                             let custom_text = if is_renaming {
                                 if let ListInputMode::Renaming(n) = list_input {
-                                    Some(n.clone())
+                                    Some(n.as_str())
                                 } else {
                                     None
                                 }
@@ -240,7 +240,7 @@ pub fn refresh(
                         ListInputMode::CreatingFile(n) | ListInputMode::CreatingFolder(n) => {
                             render_items.push(RenderItem {
                                 node: None,
-                                custom_text: Some(n.clone()),
+                                custom_text: Some(n.as_str()),
                                 indent_spaces: 2,
                                 use_branch_prefix: children.is_empty(),
                                 is_selectable: false,
@@ -366,15 +366,15 @@ pub fn refresh(
         prefix.push_str(node_symbol);
 
         let mut base_name = if item.is_input {
-            if let Some(custom) = &item.custom_text {
-                custom.clone()
+            if let Some(custom) = item.custom_text {
+                custom.to_string()
             } else {
                 String::new()
             }
         } else if let Some(n) = item.node {
             n.name().to_string()
-        } else if let Some(custom) = &item.custom_text {
-            custom.clone()
+        } else if let Some(custom) = item.custom_text {
+            custom.to_string()
         } else {
             String::new()
         };
