@@ -258,9 +258,28 @@ fn get_gpu_usage() -> u8 {
 
     #[cfg(target_os = "linux")]
     {
-        if let Ok(s) = std::fs::read_to_string("/sys/class/drm/card0/device/gpu_busy_percent") {
-            if let Ok(usage) = s.trim().parse::<u8>() {
-                return usage;
+        if let Ok(entries) = std::fs::read_dir("/sys/class/drm") {
+            let mut max_usage = 0;
+            let mut found = false;
+
+            for entry in entries.filter_map(Result::ok) {
+                let path = entry.path();
+                if let Some(name) = path.file_name() {
+                    let name_str = name.to_string_lossy();
+                    if name_str.starts_with("card") && !name_str.contains('-') {
+                        let busy_path = path.join("device/gpu_busy_percent");
+                        if let Ok(s) = std::fs::read_to_string(&busy_path) {
+                            if let Ok(usage) = s.trim().parse::<u8>() {
+                                max_usage = max_usage.max(usage);
+                                found = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if found {
+                return max_usage;
             }
         }
     }
