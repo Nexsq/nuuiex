@@ -172,24 +172,68 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                             name: "Monitor CPU",
                             key: "monitor_cpu",
                             kind: SettingType::Choice(
-                                vec!["off".to_string(), "pct".to_string(), "bar".to_string(), "graph".to_string(), "both".to_string(), "both_graph".to_string()],
-                                match config.monitor_cpu.as_str() { "pct" => 1, "bar" => 2, "graph" => 3, "both" => 4, "both_graph" => 5, _ => 0 },
+                                vec![
+                                    "off".to_string(),
+                                    "pct".to_string(),
+                                    "bar".to_string(),
+                                    "graph".to_string(),
+                                    "pctbar".to_string(),
+                                    "pctgraph".to_string(),
+                                ],
+                                match config.monitor_cpu.as_str() {
+                                    "pct" => 1,
+                                    "bar" => 2,
+                                    "graph" => 3,
+                                    "pctbar" => 4,
+                                    "pctgraph" => 5,
+                                    _ => 0,
+                                },
                             ),
                         });
                         s.push(Setting {
                             name: "Monitor GPU",
                             key: "monitor_gpu",
                             kind: SettingType::Choice(
-                                vec!["off".to_string(), "pct".to_string(), "bar".to_string(), "graph".to_string(), "both".to_string(), "both_graph".to_string()],
-                                match config.monitor_gpu.as_str() { "pct" => 1, "bar" => 2, "graph" => 3, "both" => 4, "both_graph" => 5, _ => 0 },
+                                vec![
+                                    "off".to_string(),
+                                    "pct".to_string(),
+                                    "bar".to_string(),
+                                    "graph".to_string(),
+                                    "pctbar".to_string(),
+                                    "pctgraph".to_string(),
+                                ],
+                                match config.monitor_gpu.as_str() {
+                                    "pct" => 1,
+                                    "bar" => 2,
+                                    "graph" => 3,
+                                    "pctbar" => 4,
+                                    "pctgraph" => 5,
+                                    _ => 0,
+                                },
                             ),
                         });
                         s.push(Setting {
                             name: "Monitor MEM",
                             key: "monitor_mem",
                             kind: SettingType::Choice(
-                                vec!["off".to_string(), "pct".to_string(), "used".to_string(), "bar".to_string(), "graph".to_string(), "both".to_string(), "both_graph".to_string()],
-                                match config.monitor_mem.as_str() { "pct" => 1, "used" => 2, "bar" => 3, "graph" => 4, "both" => 5, "both_graph" => 6, _ => 0 },
+                                vec![
+                                    "off".to_string(),
+                                    "pct".to_string(),
+                                    "used".to_string(),
+                                    "bar".to_string(),
+                                    "graph".to_string(),
+                                    "pctbar".to_string(),
+                                    "pctgraph".to_string(),
+                                ],
+                                match config.monitor_mem.as_str() {
+                                    "pct" => 1,
+                                    "used" => 2,
+                                    "bar" => 3,
+                                    "graph" => 4,
+                                    "pctbar" => 5,
+                                    "pctgraph" => 6,
+                                    _ => 0,
+                                },
                             ),
                         });
                         s.push(Setting {
@@ -197,27 +241,50 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                             key: "monitor_term",
                             kind: SettingType::Choice(
                                 vec!["off".to_string(), "on".to_string()],
-                                match config.monitor_term.as_str() { "on" => 1, _ => 0 },
+                                match config.monitor_term.as_str() {
+                                    "on" => 1,
+                                    _ => 0,
+                                },
                             ),
                         });
                         s.push(Setting {
-                            name: "Divider",
+                            name: "Monitor Divider",
                             key: "monitor_divider",
                             kind: SettingType::Choice(
                                 vec!["show".to_string(), "hide".to_string()],
-                                match config.monitor_divider.as_str() { "hide" => 1, _ => 0 },
+                                match config.monitor_divider.as_str() {
+                                    "hide" => 1,
+                                    _ => 0,
+                                },
                             ),
                         });
                         s.push(Setting {
-                            name: "Bar Mode",
+                            name: "Monitor Bar",
                             key: "monitor_bar_mode",
                             kind: SettingType::Choice(
-                                vec!["background".to_string(), "caps".to_string()],
-                                match config.monitor_bar_mode.as_str() { "caps" => 1, _ => 0 },
+                                vec![
+                                    "background".to_string(),
+                                    "caps".to_string(),
+                                    "clean".to_string(),
+                                ],
+                                match config.monitor_bar_mode.as_str() {
+                                    "caps" => 1,
+                                    "clean" => 2,
+                                    _ => 0,
+                                },
                             ),
                         });
                         s.push(Setting {
-                            name: "Icons",
+                            name: "Monitor Bar Width",
+                            key: "monitor_bar_width",
+                            kind: SettingType::Custom {
+                                value: config.monitor_bar_width.to_string(),
+                                default: def.monitor_bar_width.to_string(),
+                                validation: CustomType::Int,
+                            },
+                        });
+                        s.push(Setting {
+                            name: "Monitor Icons",
                             key: "monitor_icons",
                             kind: SettingType::Choice(
                                 vec!["true".to_string(), "false".to_string()],
@@ -709,6 +776,7 @@ pub fn settings_modal(
                 apply_setting!(config, set, choice "monitor_term", monitor_term);
                 apply_setting!(config, set, choice "monitor_divider", monitor_divider);
                 apply_setting!(config, set, choice "monitor_bar_mode", monitor_bar_mode);
+                apply_setting!(config, set, parse_clamp "monitor_bar_width", monitor_bar_width, 4, 16);
                 apply_setting!(config, set, bool "monitor_icons", monitor_icons);
 
                 apply_setting!(config, set, char "bind_edit_insert", bind_edit_insert);

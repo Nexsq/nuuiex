@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -10,6 +10,11 @@ pub struct MonitorState {
     pub gpu: Arc<AtomicU8>,
     pub mem_used: Arc<AtomicU32>,
     pub mem_total: Arc<AtomicU32>,
+    pub cpu_hist: Arc<Mutex<Vec<u8>>>,
+    pub gpu_hist: Arc<Mutex<Vec<u8>>>,
+    pub mem_hist: Arc<Mutex<Vec<u8>>>,
+    pub tick_count: Arc<AtomicU32>,
+    pub last_tick: u32,
     pub last_cpu: u8,
     pub last_gpu: u8,
     pub last_mem: u32,
@@ -26,6 +31,10 @@ impl MonitorState {
         let gpu = Arc::new(AtomicU8::new(0));
         let mem_used = Arc::new(AtomicU32::new(0));
         let mem_total = Arc::new(AtomicU32::new(0));
+        let cpu_hist = Arc::new(Mutex::new(vec![0; 32]));
+        let gpu_hist = Arc::new(Mutex::new(vec![0; 32]));
+        let mem_hist = Arc::new(Mutex::new(vec![0; 32]));
+        let tick_count = Arc::new(AtomicU32::new(0));
         let is_active = Arc::new(AtomicBool::new(false));
         let is_running = Arc::new(AtomicBool::new(true));
 
@@ -33,6 +42,10 @@ impl MonitorState {
         let c_gpu = gpu.clone();
         let c_mem_used = mem_used.clone();
         let c_mem_total = mem_total.clone();
+        let c_cpu_hist = cpu_hist.clone();
+        let c_gpu_hist = gpu_hist.clone();
+        let c_mem_hist = mem_hist.clone();
+        let c_tick_count = tick_count.clone();
         let c_active = is_active.clone();
         let c_running = is_running.clone();
 
@@ -66,6 +79,35 @@ impl MonitorState {
                 c_mem_used.store(mem_u, Ordering::Relaxed);
                 c_mem_total.store(mem_t, Ordering::Relaxed);
 
+                {
+                    let mut ch = c_cpu_hist.lock().unwrap();
+                    ch.push(cpu_val);
+                    if ch.len() > 32 {
+                        ch.remove(0);
+                    }
+                }
+                {
+                    let mut gh = c_gpu_hist.lock().unwrap();
+                    gh.push(gpu_val);
+                    if gh.len() > 32 {
+                        gh.remove(0);
+                    }
+                }
+                {
+                    let mut mh = c_mem_hist.lock().unwrap();
+                    let mem_pct = if mem_t > 0 {
+                        ((mem_u as u64 * 100) / mem_t as u64) as u8
+                    } else {
+                        0
+                    };
+                    mh.push(mem_pct);
+                    if mh.len() > 32 {
+                        mh.remove(0);
+                    }
+                }
+
+                c_tick_count.fetch_add(1, Ordering::Relaxed);
+
                 for _ in 0..5 {
                     if !c_running.load(Ordering::Relaxed) || !c_active.load(Ordering::Relaxed) {
                         break;
@@ -80,6 +122,11 @@ impl MonitorState {
             gpu,
             mem_used,
             mem_total,
+            cpu_hist,
+            gpu_hist,
+            mem_hist,
+            tick_count,
+            last_tick: 0,
             last_cpu: 255,
             last_gpu: 255,
             last_mem: u32::MAX,
@@ -99,13 +146,16 @@ impl MonitorState {
         let cur_cpu = self.cpu.load(Ordering::Relaxed);
         let cur_gpu = self.gpu.load(Ordering::Relaxed);
         let cur_mem = self.mem_used.load(Ordering::Relaxed);
+        let cur_tick = self.tick_count.load(Ordering::Relaxed);
 
-        if cur_cpu != self.last_cpu
+        if cur_tick != self.last_tick
+            || cur_cpu != self.last_cpu
             || cur_gpu != self.last_gpu
             || cur_mem != self.last_mem
             || term_w != self.last_term_w
             || term_h != self.last_term_h
         {
+            self.last_tick = cur_tick;
             self.last_cpu = cur_cpu;
             self.last_gpu = cur_gpu;
             self.last_mem = cur_mem;
@@ -310,12 +360,13 @@ fn push_text(
 fn push_bar(
     cells: &mut Vec<(char, Style)>,
     usage: u8,
+    width: usize,
     fg: &Gradient,
     bounds: &Gradient,
     mode: &str,
 ) {
     let chars = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
-    let frac = (usage as u32 * 48) / 100;
+    let frac = (usage as u32 * (width as u32 * 8)) / 100;
     let full = (frac / 8) as usize;
     let rem = (frac % 8) as usize;
 
@@ -330,7 +381,7 @@ fn push_bar(
         ));
     }
 
-    for i in 0..6 {
+    for i in 0..width {
         let c = if i < full {
             chars[8]
         } else if i == full {
@@ -340,7 +391,7 @@ fn push_bar(
         };
 
         let bg_color = if mode == "background" {
-            bounds.color_at(i, 6)
+            bounds.color_at(i, width)
         } else {
             Color::None
         };
@@ -348,7 +399,102 @@ fn push_bar(
         cells.push((
             c,
             Style {
-                fg: fg.color_at(i, 6),
+                fg: fg.color_at(i, width),
+                bg: bg_color,
+                md: Modifier::None,
+            },
+        ));
+    }
+
+    if mode == "caps" {
+        cells.push((
+            ']',
+            Style {
+                fg: bounds.color_at(0, 1),
+                bg: Color::None,
+                md: Modifier::Bold,
+            },
+        ));
+    }
+}
+
+fn braille_char(v1: u8, v2: u8) -> char {
+    let h1 = match v1 {
+        0 => 0,
+        1..=24 => 1,
+        25..=49 => 2,
+        50..=74 => 3,
+        _ => 4,
+    };
+    let h2 = match v2 {
+        0 => 0,
+        1..=24 => 1,
+        25..=49 => 2,
+        50..=74 => 3,
+        _ => 4,
+    };
+    let left = match h1 {
+        1 => 0x40,
+        2 => 0x44,
+        3 => 0x46,
+        4 => 0x47,
+        _ => 0,
+    };
+    let right = match h2 {
+        1 => 0x80,
+        2 => 0xA0,
+        3 => 0xB0,
+        4 => 0xB8,
+        _ => 0,
+    };
+    std::char::from_u32(0x2800 + left + right).unwrap_or(' ')
+}
+
+fn push_graph(
+    cells: &mut Vec<(char, Style)>,
+    hist: &[u8],
+    width: usize,
+    fg: &Gradient,
+    bounds: &Gradient,
+    mode: &str,
+) {
+    let req_hist = width * 2;
+    let mut padded = vec![0; req_hist];
+
+    let take_count = hist.len().min(req_hist);
+    let offset = hist.len() - take_count;
+    let pad_offset = req_hist - take_count;
+
+    for i in 0..take_count {
+        padded[pad_offset + i] = hist[offset + i];
+    }
+
+    if mode == "caps" {
+        cells.push((
+            '[',
+            Style {
+                fg: bounds.color_at(0, 1),
+                bg: Color::None,
+                md: Modifier::Bold,
+            },
+        ));
+    }
+
+    for i in 0..width {
+        let v1 = padded[i * 2];
+        let v2 = padded[i * 2 + 1];
+        let c = braille_char(v1, v2);
+
+        let bg_color = if mode == "background" {
+            bounds.color_at(i, width)
+        } else {
+            Color::None
+        };
+
+        cells.push((
+            c,
+            Style {
+                fg: fg.color_at(i, width),
                 bg: bg_color,
                 md: Modifier::None,
             },
@@ -382,11 +528,43 @@ pub fn draw(
     let mut groups: Vec<Vec<(char, Style)>> = Vec::new();
     let bg_none = Gradient::Solid(Color::None);
 
+    let cpu_icon = if config.monitor_icons {
+        "◈ "
+    } else {
+        "CPU: "
+    };
+    let gpu_icon = if config.monitor_icons {
+        "◆ "
+    } else {
+        "GPU: "
+    };
+    let mem_icon = if config.monitor_icons {
+        "▣  "
+    } else {
+        "MEM: "
+    };
+    let term_icon = if config.monitor_icons {
+        "■ "
+    } else {
+        "TERM: "
+    };
+    let bar_w = config.monitor_bar_width.clamp(4, 16);
+
     if config.monitor_cpu != "off" {
         let mut g = Vec::new();
-        push_text(&mut g, "CPU: ", &theme.monitor_cpu_key, &bg_none, Modifier::Bold);
-        if config.monitor_cpu == "pct" || config.monitor_cpu == "both" {
-            let spacing = if config.monitor_cpu == "both" { " " } else { "" };
+        push_text(
+            &mut g,
+            cpu_icon,
+            &theme.monitor_cpu_key,
+            &bg_none,
+            Modifier::Bold,
+        );
+        if config.monitor_cpu == "pct" || config.monitor_cpu.starts_with("pct") {
+            let spacing = if config.monitor_cpu.starts_with("pct") {
+                " "
+            } else {
+                ""
+            };
             push_text(
                 &mut g,
                 &format!("{:>2}%{}", state.last_cpu, spacing),
@@ -395,10 +573,22 @@ pub fn draw(
                 Modifier::None,
             );
         }
-        if config.monitor_cpu == "bar" || config.monitor_cpu == "both" {
+        if config.monitor_cpu == "bar" || config.monitor_cpu == "pctbar" {
             push_bar(
                 &mut g,
                 state.last_cpu,
+                bar_w,
+                &theme.monitor_cpu_val,
+                &theme.monitor_bar_bounds,
+                &config.monitor_bar_mode,
+            );
+        }
+        if config.monitor_cpu == "graph" || config.monitor_cpu == "pctgraph" {
+            let hist = state.cpu_hist.lock().unwrap().clone();
+            push_graph(
+                &mut g,
+                &hist,
+                bar_w,
                 &theme.monitor_cpu_val,
                 &theme.monitor_bar_bounds,
                 &config.monitor_bar_mode,
@@ -409,9 +599,19 @@ pub fn draw(
 
     if config.monitor_gpu != "off" {
         let mut g = Vec::new();
-        push_text(&mut g, "GPU: ", &theme.monitor_gpu_key, &bg_none, Modifier::Bold);
-        if config.monitor_gpu == "pct" || config.monitor_gpu == "both" {
-            let spacing = if config.monitor_gpu == "both" { " " } else { "" };
+        push_text(
+            &mut g,
+            gpu_icon,
+            &theme.monitor_gpu_key,
+            &bg_none,
+            Modifier::Bold,
+        );
+        if config.monitor_gpu == "pct" || config.monitor_gpu.starts_with("pct") {
+            let spacing = if config.monitor_gpu.starts_with("pct") {
+                " "
+            } else {
+                ""
+            };
             push_text(
                 &mut g,
                 &format!("{:>2}%{}", state.last_gpu, spacing),
@@ -420,10 +620,22 @@ pub fn draw(
                 Modifier::None,
             );
         }
-        if config.monitor_gpu == "bar" || config.monitor_gpu == "both" {
+        if config.monitor_gpu == "bar" || config.monitor_gpu == "pctbar" {
             push_bar(
                 &mut g,
                 state.last_gpu,
+                bar_w,
+                &theme.monitor_gpu_val,
+                &theme.monitor_bar_bounds,
+                &config.monitor_bar_mode,
+            );
+        }
+        if config.monitor_gpu == "graph" || config.monitor_gpu == "pctgraph" {
+            let hist = state.gpu_hist.lock().unwrap().clone();
+            push_graph(
+                &mut g,
+                &hist,
+                bar_w,
                 &theme.monitor_gpu_val,
                 &theme.monitor_bar_bounds,
                 &config.monitor_bar_mode,
@@ -434,7 +646,13 @@ pub fn draw(
 
     if config.monitor_mem != "off" {
         let mut g = Vec::new();
-        push_text(&mut g, "MEM: ", &theme.monitor_mem_key, &bg_none, Modifier::Bold);
+        push_text(
+            &mut g,
+            mem_icon,
+            &theme.monitor_mem_key,
+            &bg_none,
+            Modifier::Bold,
+        );
 
         let used = state.last_mem as f32 / 1024.0;
         let total = state.mem_total.load(Ordering::Relaxed) as f32 / 1024.0;
@@ -452,8 +670,12 @@ pub fn draw(
             };
             push_text(&mut g, &s, &theme.monitor_mem_val, &bg_none, Modifier::None);
         } else {
-            if config.monitor_mem == "pct" || config.monitor_mem == "both" {
-                let spacing = if config.monitor_mem == "both" { " " } else { "" };
+            if config.monitor_mem == "pct" || config.monitor_mem.starts_with("pct") {
+                let spacing = if config.monitor_mem.starts_with("pct") {
+                    " "
+                } else {
+                    ""
+                };
                 push_text(
                     &mut g,
                     &format!("{:>2}%{}", mem_pct, spacing),
@@ -462,10 +684,22 @@ pub fn draw(
                     Modifier::None,
                 );
             }
-            if config.monitor_mem == "bar" || config.monitor_mem == "both" {
+            if config.monitor_mem == "bar" || config.monitor_mem == "pctbar" {
                 push_bar(
                     &mut g,
                     mem_pct,
+                    bar_w,
+                    &theme.monitor_mem_val,
+                    &theme.monitor_bar_bounds,
+                    &config.monitor_bar_mode,
+                );
+            }
+            if config.monitor_mem == "graph" || config.monitor_mem == "pctgraph" {
+                let hist = state.mem_hist.lock().unwrap().clone();
+                push_graph(
+                    &mut g,
+                    &hist,
+                    bar_w,
                     &theme.monitor_mem_val,
                     &theme.monitor_bar_bounds,
                     &config.monitor_bar_mode,
@@ -477,7 +711,13 @@ pub fn draw(
 
     if config.monitor_term == "on" {
         let mut g = Vec::new();
-        push_text(&mut g, "TERM: ", &theme.monitor_term_key, &bg_none, Modifier::Bold);
+        push_text(
+            &mut g,
+            term_icon,
+            &theme.monitor_term_key,
+            &bg_none,
+            Modifier::Bold,
+        );
         push_text(
             &mut g,
             &format!("{}x{}", term_w, term_h),
@@ -494,7 +734,13 @@ pub fn draw(
     for (i, mut g) in groups.into_iter().enumerate() {
         if i > 0 {
             if show_div {
-                push_text(&mut final_cells, "  |  ", &theme.monitor_divider, &bg_none, Modifier::None);
+                push_text(
+                    &mut final_cells,
+                    "  |  ",
+                    &theme.monitor_divider,
+                    &bg_none,
+                    Modifier::None,
+                );
             } else {
                 push_text(&mut final_cells, "   ", &bg_none, &bg_none, Modifier::None);
             }

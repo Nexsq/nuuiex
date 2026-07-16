@@ -20,6 +20,7 @@ pub struct Config {
     pub monitor_term: String,
     pub monitor_divider: String,
     pub monitor_bar_mode: String,
+    pub monitor_bar_width: usize,
     pub monitor_icons: bool,
 
     pub keyvis_width: usize,
@@ -77,6 +78,7 @@ impl Default for Config {
             monitor_term: String::new(),
             monitor_divider: String::new(),
             monitor_bar_mode: String::new(),
+            monitor_bar_width: 0,
             monitor_icons: false,
 
             keyvis_width: 0,
@@ -159,7 +161,13 @@ impl Config {
                     "monitor_term" => self.monitor_term = val.to_string(),
                     "monitor_divider" => self.monitor_divider = val.to_string(),
                     "monitor_bar_mode" => self.monitor_bar_mode = val.to_string(),
-                    "monitor_icons" => self.monitor_icons = val.parse().unwrap_or(self.monitor_icons),
+                    "monitor_bar_width" => {
+                        self.monitor_bar_width =
+                            val.parse().unwrap_or(self.monitor_bar_width).clamp(4, 16)
+                    }
+                    "monitor_icons" => {
+                        self.monitor_icons = val.parse().unwrap_or(self.monitor_icons)
+                    }
 
                     "keyvis_width" => self.keyvis_width = val.parse().unwrap_or(self.keyvis_width),
                     "keyvis_height" => {
@@ -391,6 +399,7 @@ impl Config {
         self.monitor_term = default.monitor_term;
         self.monitor_divider = default.monitor_divider;
         self.monitor_bar_mode = default.monitor_bar_mode;
+        self.monitor_bar_width = default.monitor_bar_width;
         self.monitor_icons = default.monitor_icons;
         self.keyvis_width = default.keyvis_width;
         self.keyvis_height = default.keyvis_height;
@@ -495,13 +504,48 @@ impl Config {
                             .unwrap()
                     }
 
-                    "monitor_cpu" => writeln!(&mut output, "{} = {}{}", key_str, self.monitor_cpu, comment).unwrap(),
-                    "monitor_gpu" => writeln!(&mut output, "{} = {}{}", key_str, self.monitor_gpu, comment).unwrap(),
-                    "monitor_mem" => writeln!(&mut output, "{} = {}{}", key_str, self.monitor_mem, comment).unwrap(),
-                    "monitor_term" => writeln!(&mut output, "{} = {}{}", key_str, self.monitor_term, comment).unwrap(),
-                    "monitor_divider" => writeln!(&mut output, "{} = {}{}", key_str, self.monitor_divider, comment).unwrap(),
-                    "monitor_bar_mode" => writeln!(&mut output, "{} = {}{}", key_str, self.monitor_bar_mode, comment).unwrap(),
-                    "monitor_icons" => writeln!(&mut output, "{} = {}{}", key_str, self.monitor_icons, comment).unwrap(),
+                    "monitor_cpu" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.monitor_cpu, comment)
+                            .unwrap()
+                    }
+                    "monitor_gpu" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.monitor_gpu, comment)
+                            .unwrap()
+                    }
+                    "monitor_mem" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.monitor_mem, comment)
+                            .unwrap()
+                    }
+                    "monitor_term" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.monitor_term, comment
+                    )
+                    .unwrap(),
+                    "monitor_divider" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.monitor_divider, comment
+                    )
+                    .unwrap(),
+                    "monitor_bar_mode" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.monitor_bar_mode, comment
+                    )
+                    .unwrap(),
+                    "monitor_bar_width" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.monitor_bar_width, comment
+                    )
+                    .unwrap(),
+                    "monitor_icons" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.monitor_icons, comment
+                    )
+                    .unwrap(),
 
                     "keyvis_width" => writeln!(
                         &mut output,
