@@ -268,7 +268,7 @@ dependencies = [
 
 [[package]]
 name = "nuui"
-version = "0.9.5"
+version = "0.9.8"
 dependencies = [
  "arboard",
  "chrono",
