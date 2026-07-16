@@ -1,4 +1,4 @@
-use super::layout::{LIST_W, TABS_W};
+use super::layout::TABS_W;
 use super::{ActivePanel, ListInputMode};
 use crate::{
     Box, Color, Gradient, Modifier, conf::Config, lib::MacroNode, theme::themecore::Theme,
@@ -52,9 +52,9 @@ pub fn refresh(
     };
 
     let list_w = if config.tabs_num == 1 {
-        LIST_W + TABS_W - 1
+        config.lib_width as u16 + TABS_W - 1
     } else {
-        LIST_W
+        config.lib_width as u16
     };
 
     let mut list_box = Box::new(

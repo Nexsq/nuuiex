@@ -11,6 +11,7 @@ pub struct Config {
     pub theme: String,
     pub lib_sorting: String,
     pub tabs_num: usize,
+    pub lib_width: usize,
     pub deck_mode: String,
     pub deck_widget: String,
 
@@ -22,6 +23,12 @@ pub struct Config {
     pub monitor_bar_mode: String,
     pub monitor_bar_width: usize,
     pub monitor_icons: bool,
+
+    pub clock_date: String,
+    pub clock_mode: String,
+    pub clock_position: String,
+    pub clock_format: String,
+    pub clock_seconds: bool,
 
     pub keyvis_width: usize,
     pub keyvis_height: usize,
@@ -69,6 +76,7 @@ impl Default for Config {
             theme: String::new(),
             lib_sorting: String::new(),
             tabs_num: 0,
+            lib_width: 24,
             deck_mode: String::new(),
             deck_widget: String::new(),
 
@@ -80,6 +88,12 @@ impl Default for Config {
             monitor_bar_mode: String::new(),
             monitor_bar_width: 0,
             monitor_icons: false,
+
+            clock_date: String::new(),
+            clock_mode: String::new(),
+            clock_position: String::new(),
+            clock_format: String::new(),
+            clock_seconds: true,
 
             keyvis_width: 0,
             keyvis_height: 0,
@@ -152,6 +166,9 @@ impl Config {
                     "theme" => self.theme = val.to_string(),
                     "lib_sorting" => self.lib_sorting = val.to_string(),
                     "tabs_num" => self.tabs_num = val.parse().unwrap_or(self.tabs_num).clamp(1, 6),
+                    "lib_width" => {
+                        self.lib_width = val.parse().unwrap_or(self.lib_width).clamp(16, 64)
+                    }
                     "deck_mode" => self.deck_mode = val.to_string(),
                     "deck_widget" => self.deck_widget = val.to_string(),
 
@@ -167,6 +184,14 @@ impl Config {
                     }
                     "monitor_icons" => {
                         self.monitor_icons = val.parse().unwrap_or(self.monitor_icons)
+                    }
+
+                    "clock_date" => self.clock_date = val.to_string(),
+                    "clock_mode" => self.clock_mode = val.to_string(),
+                    "clock_position" => self.clock_position = val.to_string(),
+                    "clock_format" => self.clock_format = val.to_string(),
+                    "clock_seconds" => {
+                        self.clock_seconds = val.parse().unwrap_or(self.clock_seconds)
                     }
 
                     "keyvis_width" => self.keyvis_width = val.parse().unwrap_or(self.keyvis_width),
@@ -387,6 +412,7 @@ impl Config {
         self.border_style = default.border_style;
         self.theme = default.theme;
         self.tabs_num = default.tabs_num;
+        self.lib_width = default.lib_width;
     }
 
     pub fn reset_deck(&mut self) {
@@ -401,6 +427,11 @@ impl Config {
         self.monitor_bar_mode = default.monitor_bar_mode;
         self.monitor_bar_width = default.monitor_bar_width;
         self.monitor_icons = default.monitor_icons;
+        self.clock_date = default.clock_date;
+        self.clock_mode = default.clock_mode;
+        self.clock_position = default.clock_position;
+        self.clock_format = default.clock_format;
+        self.clock_seconds = default.clock_seconds;
         self.keyvis_width = default.keyvis_width;
         self.keyvis_height = default.keyvis_height;
         self.keyvis_steps = default.keyvis_steps;
@@ -495,6 +526,10 @@ impl Config {
                     "tabs_num" => {
                         writeln!(&mut output, "{} = {}{}", key_str, self.tabs_num, comment).unwrap()
                     }
+                    "lib_width" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.lib_width, comment)
+                            .unwrap()
+                    }
                     "deck_mode" => {
                         writeln!(&mut output, "{} = {}{}", key_str, self.deck_mode, comment)
                             .unwrap()
@@ -544,6 +579,33 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.monitor_icons, comment
+                    )
+                    .unwrap(),
+
+                    "clock_date" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.clock_date, comment)
+                            .unwrap()
+                    }
+                    "clock_mode" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.clock_mode, comment)
+                            .unwrap()
+                    }
+                    "clock_position" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.clock_position, comment
+                    )
+                    .unwrap(),
+                    "clock_format" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.clock_format, comment
+                    )
+                    .unwrap(),
+                    "clock_seconds" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.clock_seconds, comment
                     )
                     .unwrap(),
 

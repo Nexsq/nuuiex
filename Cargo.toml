@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 directories = "6.0"
 arboard = { version = "3.4", default-features = false }
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.186"

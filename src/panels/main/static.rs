@@ -1,4 +1,4 @@
-use super::layout::{LIST_W, TABS_W};
+use super::layout::TABS_W;
 use crate::{Box, Color, Gradient, Modifier, Style, conf::Config, theme::themecore::Theme};
 
 pub fn refresh_tabs(
@@ -100,7 +100,7 @@ pub fn refresh_title(theme: &Theme, config: &Config, term_w: u16) -> Box {
     let width = if config.deck_mode == "title" {
         term_w
     } else {
-        TABS_W + LIST_W
+        TABS_W + config.lib_width as u16
     };
     let mut title_box = Box::new(
         width,
@@ -150,6 +150,7 @@ pub fn refresh_deck(
     config: &Config,
     keyvis: &crate::panels::widgets::keyvis::KeyvisState,
     monitor: &crate::panels::widgets::monitor::MonitorState,
+    clock: &crate::panels::widgets::clock::ClockState,
 ) -> Box {
     if config.deck_mode != "widget" {
         return Box::new(
@@ -170,7 +171,7 @@ pub fn refresh_deck(
     };
 
     let mut deck_box = Box::new(
-        term_w.saturating_sub(TABS_W + LIST_W - 1),
+        term_w.saturating_sub(TABS_W + config.lib_width as u16 - 1),
         deck_h,
         if border == crate::Border::None { 0 } else { 1 },
         border,
@@ -188,6 +189,8 @@ pub fn refresh_deck(
             term_w,
             term_h,
         );
+    } else if config.deck_widget == "clock" {
+        crate::panels::widgets::clock::draw(clock, &mut deck_box, config, theme);
     } else {
         crate::panels::widgets::keyvis::draw(keyvis, &mut deck_box, config, theme);
     }

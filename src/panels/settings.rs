@@ -129,6 +129,15 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     ),
                 },
                 Setting {
+                    name: "Lib Width",
+                    key: "lib_width",
+                    kind: SettingType::Custom {
+                        value: config.lib_width.to_string(),
+                        default: def.lib_width.to_string(),
+                        validation: CustomType::Int,
+                    },
+                },
+                Setting {
                     name: "Reset Appearance",
                     key: "reset_appearance",
                     kind: SettingType::Action,
@@ -159,9 +168,14 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                         name: "Deck Widget",
                         key: "deck_widget",
                         kind: SettingType::Choice(
-                            vec!["keyvis".to_string(), "monitor".to_string()],
+                            vec![
+                                "keyvis".to_string(),
+                                "monitor".to_string(),
+                                "clock".to_string(),
+                            ],
                             match config.deck_widget.as_str() {
                                 "monitor" => 1,
+                                "clock" => 2,
                                 _ => 0,
                             },
                         ),
@@ -365,6 +379,71 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                             kind: SettingType::Choice(
                                 vec!["true".to_string(), "false".to_string()],
                                 if config.keyvis_base { 0 } else { 1 },
+                            ),
+                        });
+                    } else if config.deck_widget == "clock" {
+                        s.push(Setting {
+                            name: "Date",
+                            key: "clock_date",
+                            kind: SettingType::Choice(
+                                vec![
+                                    "off".to_string(),
+                                    "eu".to_string(),
+                                    "us".to_string(),
+                                    "clean".to_string(),
+                                    "mon name".to_string(),
+                                    "rfc 2822".to_string(),
+                                ],
+                                match config.clock_date.as_str() {
+                                    "eu" => 1,
+                                    "us" => 2,
+                                    "clean" => 3,
+                                    "mon name" => 4,
+                                    "rfc 2822" => 5,
+                                    _ => 0,
+                                },
+                            ),
+                        });
+                        s.push(Setting {
+                            name: "Mode",
+                            key: "clock_mode",
+                            kind: SettingType::Choice(
+                                vec!["small".to_string(), "big".to_string()],
+                                match config.clock_mode.as_str() {
+                                    "big" => 1,
+                                    _ => 0,
+                                },
+                            ),
+                        });
+                        s.push(Setting {
+                            name: "Position",
+                            key: "clock_position",
+                            kind: SettingType::Choice(
+                                vec!["left".to_string(), "mid".to_string(), "right".to_string()],
+                                match config.clock_position.as_str() {
+                                    "mid" => 1,
+                                    "right" => 2,
+                                    _ => 0,
+                                },
+                            ),
+                        });
+                        s.push(Setting {
+                            name: "Format",
+                            key: "clock_format",
+                            kind: SettingType::Choice(
+                                vec!["12h".to_string(), "24h".to_string()],
+                                match config.clock_format.as_str() {
+                                    "12h" => 0,
+                                    _ => 1,
+                                },
+                            ),
+                        });
+                        s.push(Setting {
+                            name: "Show Seconds",
+                            key: "clock_seconds",
+                            kind: SettingType::Choice(
+                                vec!["true".to_string(), "false".to_string()],
+                                if config.clock_seconds { 0 } else { 1 },
                             ),
                         });
                     }
@@ -686,6 +765,7 @@ pub fn settings_modal(
     let mut prev_theme = config.theme.clone();
     let mut prev_sorting = config.lib_sorting.clone();
     let mut prev_tabs_num = config.tabs_num;
+    let mut prev_lib_width = config.lib_width;
     let mut prev_deck_mode = config.deck_mode.clone();
     let mut prev_deck_widget = config.deck_widget.clone();
     let mut dirty = true;
@@ -758,8 +838,15 @@ pub fn settings_modal(
                 apply_setting!(config, set, choice "indicator_style", indicator_style);
                 apply_setting!(config, set, choice "lib_sorting", lib_sorting);
                 apply_setting!(config, set, choice_offset "tabs_num", tabs_num, 1);
+                apply_setting!(config, set, parse_clamp "lib_width", lib_width, 16, 64);
                 apply_setting!(config, set, choice "deck_mode", deck_mode);
                 apply_setting!(config, set, choice "deck_widget", deck_widget);
+
+                apply_setting!(config, set, choice "clock_date", clock_date);
+                apply_setting!(config, set, choice "clock_mode", clock_mode);
+                apply_setting!(config, set, choice "clock_position", clock_position);
+                apply_setting!(config, set, choice "clock_format", clock_format);
+                apply_setting!(config, set, bool "clock_seconds", clock_seconds);
 
                 apply_setting!(config, set, parse "keyvis_width", keyvis_width);
                 apply_setting!(config, set, parse_clamp "keyvis_height", keyvis_height, 2, 32);
@@ -818,14 +905,26 @@ pub fn settings_modal(
         }
 
         let mut bg_dirty = false;
-        if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-            if main_view.keyvis.tick(
-                config.keyvis_gravity,
-                config.keyvis_steps,
-                config.keyvis_tension,
-            ) {
-                main_view.refresh_static_boxes(config);
-                bg_dirty = true;
+        if config.deck_mode == "widget" {
+            if config.deck_widget == "keyvis" {
+                if main_view.keyvis.tick(
+                    config.keyvis_gravity,
+                    config.keyvis_steps,
+                    config.keyvis_tension,
+                ) {
+                    main_view.refresh_static_boxes(config);
+                    bg_dirty = true;
+                }
+            } else if config.deck_widget == "monitor" {
+                if main_view.monitor.tick(current_w, current_h) {
+                    main_view.refresh_static_boxes(config);
+                    bg_dirty = true;
+                }
+            } else if config.deck_widget == "clock" {
+                if main_view.clock.tick(current_w, current_h, config) {
+                    main_view.refresh_static_boxes(config);
+                    bg_dirty = true;
+                }
             }
         }
 
@@ -1498,19 +1597,21 @@ pub fn settings_modal(
                 }
                 prev_sorting = config.lib_sorting.clone();
             }
-            if config.tabs_num != prev_tabs_num {
-                for i in config.tabs_num..6 {
-                    if let Some(token) = main_view.cancellation_tokens[i].take() {
-                        token.store(true, std::sync::atomic::Ordering::SeqCst);
+            if config.tabs_num != prev_tabs_num || config.lib_width != prev_lib_width {
+                if config.tabs_num != prev_tabs_num {
+                    for i in config.tabs_num..6 {
+                        if let Some(token) = main_view.cancellation_tokens[i].take() {
+                            token.store(true, std::sync::atomic::Ordering::SeqCst);
+                        }
+                        main_view.editors[i].process_rx = None;
+                        main_view.running_macros[i] = None;
+                        main_view.editors[i].file_path = None;
+                        main_view.editors[i].rel_path.clear();
+                        main_view.editors[i].state.lines = vec![String::new()];
+                        main_view.editors[i].is_editing = false;
+                        main_view.editors[i].error_count = 0;
+                        main_view.editors[i].error_lines.clear();
                     }
-                    main_view.editors[i].process_rx = None;
-                    main_view.running_macros[i] = None;
-                    main_view.editors[i].file_path = None;
-                    main_view.editors[i].rel_path.clear();
-                    main_view.editors[i].state.lines = vec![String::new()];
-                    main_view.editors[i].is_editing = false;
-                    main_view.editors[i].error_count = 0;
-                    main_view.editors[i].error_lines.clear();
                 }
                 main_view.current_tab =
                     main_view.current_tab.min(config.tabs_num.saturating_sub(1));
@@ -1520,6 +1621,7 @@ pub fn settings_modal(
                 main_view.resize(term_w, term_h, config);
 
                 prev_tabs_num = config.tabs_num;
+                prev_lib_width = config.lib_width;
             }
 
             if config.deck_mode != prev_deck_mode || config.deck_widget != prev_deck_widget {

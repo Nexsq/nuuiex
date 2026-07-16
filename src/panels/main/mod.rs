@@ -63,6 +63,7 @@ pub struct MainView {
 
     pub keyvis: crate::panels::widgets::keyvis::KeyvisState,
     pub monitor: crate::panels::widgets::monitor::MonitorState,
+    pub clock: crate::panels::widgets::clock::ClockState,
 
     pub theme: Theme,
     pub list_input: ListInputMode,
@@ -126,6 +127,7 @@ impl MainView {
             deck_y: 0,
             keyvis: crate::panels::widgets::keyvis::KeyvisState::new(),
             monitor: crate::panels::widgets::monitor::MonitorState::new(),
+            clock: crate::panels::widgets::clock::ClockState::new(),
             theme,
             list_input: ListInputMode::None,
         };
@@ -165,6 +167,11 @@ impl MainView {
                     self.refresh_static_boxes(config);
                     anim = true;
                 }
+            } else if config.deck_widget == "clock" {
+                if self.clock.tick(w, h, config) {
+                    self.refresh_static_boxes(config);
+                    anim = true;
+                }
             }
         }
         if w != self.term_w || h != self.term_h {
@@ -181,7 +188,7 @@ impl MainView {
         let deck_h = if config.deck_mode == "widget" {
             if config.deck_widget == "keyvis" {
                 config.keyvis_height as u16
-            } else if config.deck_widget == "monitor" {
+            } else if config.deck_widget == "monitor" || config.deck_widget == "clock" {
                 3
             } else {
                 header_h
@@ -297,7 +304,7 @@ impl MainView {
         let deck_h = if config.deck_mode == "widget" {
             if config.deck_widget == "keyvis" {
                 config.keyvis_height as u16
-            } else if config.deck_widget == "monitor" {
+            } else if config.deck_widget == "monitor" || config.deck_widget == "clock" {
                 3
             } else {
                 header_h
@@ -313,6 +320,7 @@ impl MainView {
             deck_h,
             config.tabs_num,
             &config.deck_mode,
+            config.lib_width as u16,
         );
 
         self.main_x = main_pos.0;
@@ -339,7 +347,7 @@ impl MainView {
         let main_h = self.term_h.saturating_sub(self.main_y as u16);
         self.main_box = self.editors[self.current_tab].render(
             self.term_w
-                .saturating_sub(layout::TABS_W + layout::LIST_W - 1),
+                .saturating_sub(layout::TABS_W + config.lib_width as u16 - 1),
             main_h,
             self.active == ActivePanel::Main,
             config,
@@ -373,7 +381,7 @@ impl MainView {
         let deck_h = if config.deck_mode == "widget" {
             if config.deck_widget == "keyvis" {
                 config.keyvis_height as u16
-            } else if config.deck_widget == "monitor" {
+            } else if config.deck_widget == "monitor" || config.deck_widget == "clock" {
                 3
             } else {
                 header_h
@@ -396,6 +404,7 @@ impl MainView {
             config,
             &self.keyvis,
             &self.monitor,
+            &self.clock,
         );
     }
 

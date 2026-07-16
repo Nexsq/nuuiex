@@ -1,5 +1,4 @@
 pub const TABS_W: u16 = 3;
-pub const LIST_W: u16 = 24;
 
 pub fn get_positions(
     _term_w: u16,
@@ -8,6 +7,7 @@ pub fn get_positions(
     deck_h: u16,
     tabs_num: usize,
     deck_mode: &str,
+    list_w: u16,
 ) -> ((i16, i16), (i16, i16), (i16, i16), (i16, i16), (i16, i16)) {
     let tabs_x = 0;
     let tabs_y = header_h as i16;
@@ -17,7 +17,7 @@ pub fn get_positions(
         (TABS_W - 1) as i16
     };
     let list_y = header_h as i16;
-    let main_x = (TABS_W + LIST_W - 1) as i16;
+    let main_x = (TABS_W + list_w - 1) as i16;
     let main_y = if deck_mode == "none" {
         0
     } else {
@@ -25,7 +25,7 @@ pub fn get_positions(
     };
     let title_x = 0;
     let title_y = 0;
-    let deck_x = (TABS_W + LIST_W - 1) as i16;
+    let deck_x = (TABS_W + list_w - 1) as i16;
     let deck_y = 0;
 
     (

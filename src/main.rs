@@ -211,6 +211,11 @@ fn main() {
                     main_view.refresh_static_boxes(&config);
                     anim_dirty = true;
                 }
+            } else if config.deck_widget == "clock" {
+                if main_view.clock.tick(term_w, term_h, &config) {
+                    main_view.refresh_static_boxes(&config);
+                    anim_dirty = true;
+                }
             }
         }
 

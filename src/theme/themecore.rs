@@ -64,6 +64,9 @@ pub struct Theme {
     pub monitor_term_val: Gradient,
     pub monitor_divider: Gradient,
     pub monitor_bar_bounds: Gradient,
+
+    pub clock_time_color: Gradient,
+    pub clock_date_color: Gradient,
 }
 
 impl Theme {
@@ -116,6 +119,9 @@ impl Theme {
             monitor_term_val: Gradient::default(),
             monitor_divider: Gradient::default(),
             monitor_bar_bounds: Gradient::default(),
+
+            clock_time_color: Gradient::default(),
+            clock_date_color: Gradient::default(),
         }
     }
 }
@@ -429,6 +435,9 @@ fn apply_theme_value(theme: &mut Theme, key: &str, val: &str) -> Result<(), Stri
         "monitor_term_val" => theme.monitor_term_val = parse_gradient(val)?,
         "monitor_divider" => theme.monitor_divider = parse_gradient(val)?,
         "monitor_bar_bounds" => theme.monitor_bar_bounds = parse_gradient(val)?,
+
+        "clock_time_color" => theme.clock_time_color = parse_gradient(val)?,
+        "clock_date_color" => theme.clock_date_color = parse_gradient(val)?,
         _ => {}
     }
     Ok(())
