@@ -193,7 +193,7 @@ fn main() {
         let mut anim_dirty = false;
         if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
             if key != Key::None {
-                main_view.keyvis.push_key(&key);
+                main_view.keyvis.push_key(&key, config.keyvis_force, config.keyvis_spread);
             }
             if main_view.keyvis.tick(
                 config.keyvis_gravity,

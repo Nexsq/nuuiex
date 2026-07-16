@@ -146,7 +146,7 @@ impl MainView {
         let mut anim = false;
         if config.deck_mode == "widget" && config.deck_widget == "keyvis" {
             if *k != Key::None {
-                self.keyvis.push_key(k);
+                self.keyvis.push_key(k, config.keyvis_force, config.keyvis_spread);
             }
             if self.keyvis.tick(
                 config.keyvis_gravity,

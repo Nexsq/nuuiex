@@ -200,6 +200,24 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                             ),
                         });
                         s.push(Setting {
+                            name: "Keyvis Spread",
+                            key: "keyvis_spread",
+                            kind: SettingType::Custom {
+                                value: config.keyvis_spread.to_string(),
+                                default: def.keyvis_spread.to_string(),
+                                validation: CustomType::Int,
+                            },
+                        });
+                        s.push(Setting {
+                            name: "Keyvis Force",
+                            key: "keyvis_force",
+                            kind: SettingType::Custom {
+                                value: config.keyvis_force.to_string(),
+                                default: def.keyvis_force.to_string(),
+                                validation: CustomType::FloatRange(0.1, 1.0),
+                            },
+                        });
+                        s.push(Setting {
                             name: "Keyvis Gravity",
                             key: "keyvis_gravity",
                             kind: SettingType::Custom {
@@ -575,6 +593,16 @@ pub fn settings_modal(
                 }
             }
         };
+        ($config:expr, $set:expr, parse_clamp $key:expr, $field:ident, $min:expr, $max:expr) => {
+            if $set.key == $key {
+                if let SettingType::Custom { value, .. } = &$set.kind {
+                    if let Ok(v) = value.parse() {
+                        $config.$field = v;
+                        $config.$field = $config.$field.clamp($min, $max);
+                    }
+                }
+            }
+        };
         ($config:expr, $set:expr, choice $key:expr, $field:ident) => {
             if $set.key == $key {
                 if let SettingType::Choice(opts, idx) = &$set.kind {
@@ -610,10 +638,12 @@ pub fn settings_modal(
                 apply_setting!(config, set, choice "deck_widget", deck_widget);
 
                 apply_setting!(config, set, parse "keyvis_width", keyvis_width);
-                apply_setting!(config, set, parse "keyvis_height", keyvis_height);
+                apply_setting!(config, set, parse_clamp "keyvis_height", keyvis_height, 2, 32);
                 apply_setting!(config, set, choice_offset "keyvis_steps", keyvis_steps, 1);
-                apply_setting!(config, set, parse "keyvis_gravity", keyvis_gravity);
-                apply_setting!(config, set, parse "keyvis_tension", keyvis_tension);
+                apply_setting!(config, set, parse_clamp "keyvis_spread", keyvis_spread, 2, 32);
+                apply_setting!(config, set, parse_clamp "keyvis_force", keyvis_force, 0.1, 1.0);
+                apply_setting!(config, set, parse_clamp "keyvis_gravity", keyvis_gravity, 0.1, 1.0);
+                apply_setting!(config, set, parse_clamp "keyvis_tension", keyvis_tension, 0.1, 1.0);
                 apply_setting!(config, set, bool "keyvis_base", keyvis_base);
 
                 apply_setting!(config, set, char "bind_edit_insert", bind_edit_insert);
@@ -951,7 +981,7 @@ pub fn settings_modal(
 
         let key = terminal.read_key(Duration::from_millis(16));
         if key != Key::None && config.deck_mode == "widget" && config.deck_widget == "keyvis" {
-            main_view.keyvis.push_key(&key);
+            main_view.keyvis.push_key(&key, config.keyvis_force, config.keyvis_spread);
         }
 
         if key == Key::None {

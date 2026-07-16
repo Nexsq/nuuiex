@@ -17,6 +17,8 @@ pub struct Config {
     pub keyvis_width: usize,
     pub keyvis_height: usize,
     pub keyvis_steps: usize,
+    pub keyvis_spread: usize,
+    pub keyvis_force: f32,
     pub keyvis_gravity: f32,
     pub keyvis_tension: f32,
     pub keyvis_base: bool,
@@ -64,6 +66,8 @@ impl Default for Config {
             keyvis_width: 0,
             keyvis_height: 0,
             keyvis_steps: 0,
+            keyvis_spread: 0,
+            keyvis_force: 0.0,
             keyvis_gravity: 0.0,
             keyvis_tension: 0.0,
             keyvis_base: false,
@@ -135,10 +139,16 @@ impl Config {
 
                     "keyvis_width" => self.keyvis_width = val.parse().unwrap_or(self.keyvis_width),
                     "keyvis_height" => {
-                        self.keyvis_height = val.parse().unwrap_or(self.keyvis_height).max(2)
+                        self.keyvis_height = val.parse().unwrap_or(self.keyvis_height).clamp(2, 32)
                     }
                     "keyvis_steps" => {
                         self.keyvis_steps = val.parse().unwrap_or(self.keyvis_steps).clamp(1, 4)
+                    }
+                    "keyvis_spread" => {
+                        self.keyvis_spread = val.parse().unwrap_or(self.keyvis_spread).clamp(2, 32)
+                    }
+                    "keyvis_force" => {
+                        self.keyvis_force = val.parse().unwrap_or(self.keyvis_force).clamp(0.1, 1.0)
                     }
                     "keyvis_gravity" => {
                         self.keyvis_gravity =
@@ -354,6 +364,8 @@ impl Config {
         self.keyvis_width = default.keyvis_width;
         self.keyvis_height = default.keyvis_height;
         self.keyvis_steps = default.keyvis_steps;
+        self.keyvis_spread = default.keyvis_spread;
+        self.keyvis_force = default.keyvis_force;
         self.keyvis_gravity = default.keyvis_gravity;
         self.keyvis_tension = default.keyvis_tension;
         self.keyvis_base = default.keyvis_base;
@@ -468,6 +480,18 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.keyvis_steps, comment
+                    )
+                    .unwrap(),
+                    "keyvis_spread" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_spread, comment
+                    )
+                    .unwrap(),
+                    "keyvis_force" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_force, comment
                     )
                     .unwrap(),
                     "keyvis_gravity" => writeln!(

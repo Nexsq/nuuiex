@@ -29,7 +29,7 @@ impl KeyvisState {
         (self.rand_seed >> 8) as f32 / 16777216.0
     }
 
-    pub fn push_key(&mut self, key: &Key) {
+    pub fn push_key(&mut self, key: &Key, config_force: f32, config_spread: usize) {
         let k_val = match key {
             Key::Char(c) | Key::Shift(c) | Key::Ctrl(c) => (*c as u32) as usize,
             Key::Enter => 13,
@@ -51,9 +51,9 @@ impl KeyvisState {
         self.rand_seed = self.rand_seed.wrapping_add(k_val as u32);
 
         let center = (k_val * 11) % NUM_BARS;
-        let force = 1.6 + self.next_rand() * 0.4;
+        let force = 1.0 + config_force + self.next_rand() * 0.4;
 
-        let spread = 6;
+        let spread = config_spread.clamp(2, 32);
         for i in (center.saturating_sub(spread))..=(center + spread).min(NUM_BARS - 1) {
             let dist = (center as i32 - i as i32).abs() as f32;
             let t = dist / (spread as f32 + 1.0);
@@ -64,10 +64,10 @@ impl KeyvisState {
     }
 
     pub fn tick(&mut self, gravity: f32, steps: usize, tension: f32) -> bool {
-        let stiffness = (gravity * 0.1).max(0.01);
+        let stiffness = (gravity * 0.08).max(0.008);
         let damping = 0.88;
 
-        let sim_tension = tension * 0.2;
+        let sim_tension = tension;
 
         for _ in 0..steps {
             let lap_left = self.heights[1] - self.heights[0];
