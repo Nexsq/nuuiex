@@ -13,6 +13,10 @@ pub const BUILTIN_THEMES: &[(&str, &str)] = &[
     ("sunset", include_str!("themes/sunset.conf")),
     ("borealis", include_str!("themes/borealis.conf")),
     ("solstice", include_str!("themes/solstice.conf")),
+    ("sanguine", include_str!("themes/sanguine.conf")),
+    ("sakura", include_str!("themes/sakura.conf")),
+    ("nebula", include_str!("themes/nebula.conf")),
+    ("neon", include_str!("themes/neon.conf")),
 ];
 
 #[derive(Debug, Clone)]
