@@ -115,6 +115,12 @@ impl Analyzer {
                     self.analyze_expr(item);
                 }
             }
+            Expr::Dict(items) => {
+                for (key, val) in items {
+                    self.analyze_expr(key);
+                    self.analyze_expr(val);
+                }
+            }
             Expr::Ident(name, line) => {
                 if !self.is_defined(name) {
                     self.error(*line, format!("Undefined variable '{}'", name));

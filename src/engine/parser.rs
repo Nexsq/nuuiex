@@ -528,6 +528,40 @@ impl Parser {
                     None
                 }
             }
+            TokenKind::LBrace => {
+                let mut items = Vec::new();
+                if !self.check(&TokenKind::RBrace) {
+                    loop {
+                        if let Some(key) = self.parse_expression() {
+                            if self.check(&TokenKind::Colon) {
+                                self.advance();
+                                if let Some(val) = self.parse_expression() {
+                                    items.push((key, val));
+                                } else {
+                                    return None;
+                                }
+                            } else {
+                                self.error("Expected ':' after dictionary key.");
+                                return None;
+                            }
+                        } else {
+                            return None;
+                        }
+                        if self.check(&TokenKind::Comma) {
+                            self.advance();
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                if self.check(&TokenKind::RBrace) {
+                    self.advance();
+                    Some(Expr::Dict(items))
+                } else {
+                    self.error("Expected '}' after dictionary.");
+                    None
+                }
+            }
             TokenKind::LBracket => {
                 let mut items = Vec::new();
                 if !self.check(&TokenKind::RBracket) {

@@ -14,6 +14,7 @@ pub enum Expr {
     Nil,
     FormatString(Vec<StringPart>),
     List(Vec<Expr>),
+    Dict(Vec<(Expr, Expr)>),
     Ident(String, usize),
     Index(Box<Expr>, Box<Expr>, usize),
     MethodCall(Box<Expr>, String, Vec<Expr>, usize),

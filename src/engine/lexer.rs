@@ -38,6 +38,8 @@ pub enum TokenKind {
     RParen,
     LBracket,
     RBracket,
+    LBrace,
+    RBrace,
     Comma,
     Newline,
     EOF,
@@ -364,6 +366,20 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     return Token {
                         kind: TokenKind::RBracket,
+                        line: self.line,
+                    };
+                }
+                '{' => {
+                    self.advance();
+                    return Token {
+                        kind: TokenKind::LBrace,
+                        line: self.line,
+                    };
+                }
+                '}' => {
+                    self.advance();
+                    return Token {
+                        kind: TokenKind::RBrace,
                         line: self.line,
                     };
                 }

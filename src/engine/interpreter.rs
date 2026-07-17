@@ -175,8 +175,11 @@ impl Interpreter {
                     } else {
                         Err(format!("Line {}: List index must be a number", line))
                     }
+                } else if let Value::Dict(map) = &mut left_val {
+                    map.insert(index_val, value);
+                    self.assign_expr(left, left_val)
                 } else {
-                    Err(format!("Line {}: Cannot index into non-list", line))
+                    Err(format!("Line {}: Cannot index into non-list/dict", line))
                 }
             }
             _ => Err("Invalid assignment target".to_string()),
@@ -207,8 +210,11 @@ impl Interpreter {
                     } else {
                         Err(format!("Line {}: List index must be a number", line))
                     }
+                } else if let Value::Dict(map) = &mut left_val {
+                    map.insert(index_val, value);
+                    self.try_assign_expr(left, left_val)
                 } else {
-                    Err(format!("Line {}: Cannot index into non-list", line))
+                    Err(format!("Line {}: Cannot index into non-list/dict", line))
                 }
             }
             Expr::MethodCall(left, _, _, _) => self.try_assign_expr(left, value),
@@ -322,9 +328,73 @@ impl Interpreter {
                 }
                 _ => Err(format!("Line {}: Undefined list method '{}'", line, method)),
             }
+        } else if let Value::Dict(map) = val {
+            match method {
+                "clear" => {
+                    if args.len() != 0 { return Err(format!("Line {}: 'clear' expects 0 arguments", line)); }
+                    map.clear();
+                    Ok(Value::Dict(map.clone()))
+                }
+                "get" => {
+                    if args.len() != 1 && args.len() != 2 { return Err(format!("Line {}: 'get' expects 1 or 2 arguments", line)); }
+                    if let Some(v) = map.get(&args[0]) {
+                        Ok(v.clone())
+                    } else if args.len() == 2 {
+                        Ok(args[1].clone())
+                    } else {
+                        Ok(Value::Nil)
+                    }
+                }
+                "keys" => {
+                    if args.len() != 0 { return Err(format!("Line {}: 'keys' expects 0 arguments", line)); }
+                    let keys: Vec<Value> = map.keys().cloned().collect();
+                    Ok(Value::List(keys))
+                }
+                "values" => {
+                    if args.len() != 0 { return Err(format!("Line {}: 'values' expects 0 arguments", line)); }
+                    let vals: Vec<Value> = map.values().cloned().collect();
+                    Ok(Value::List(vals))
+                }
+                "pop" => {
+                    if args.len() == 0 {
+                        let key = map.keys().next().cloned();
+                        if let Some(k) = key {
+                            let v = map.remove(&k).unwrap();
+                            Ok(Value::List(vec![k, v]))
+                        } else {
+                            Err(format!("Line {}: pop from empty dict", line))
+                        }
+                    } else if args.len() == 1 {
+                        if let Some(v) = map.remove(&args[0]) {
+                            Ok(v)
+                        } else {
+                            Err(format!("Line {}: KeyError", line))
+                        }
+                    } else {
+                        Err(format!("Line {}: 'pop' expects 0 or 1 argument", line))
+                    }
+                }
+                "update" => {
+                    if args.len() != 1 { return Err(format!("Line {}: 'update' expects 1 argument", line)); }
+                    if let Value::Dict(other) = &args[0] {
+                        for (k, v) in other {
+                            map.insert(k.clone(), v.clone());
+                        }
+                        Ok(Value::Dict(map.clone()))
+                    } else {
+                        Err(format!("Line {}: 'update' expects a dict", line))
+                    }
+                }
+                "set" => {
+                    if args.len() != 2 { return Err(format!("Line {}: 'set' expects 2 arguments", line)); }
+                    let res = map.entry(args[0].clone()).or_insert(args[1].clone()).clone();
+                    Ok(res)
+                }
+                _ => Err(format!("Line {}: Undefined dict method '{}'", line, method)),
+            }
         } else {
             Err(format!(
-                "Line {}: Methods can only be called on lists",
+                "Line {}: Methods can only be called on lists and dicts",
                 line
             ))
         }
@@ -520,6 +590,15 @@ impl Interpreter {
                 }
                 Ok(Value::List(vec))
             }
+            Expr::Dict(items) => {
+                let mut map = std::collections::HashMap::with_capacity(items.len());
+                for (k_expr, v_expr) in items {
+                    let k_val = self.eval_expr(k_expr)?;
+                    let v_val = self.eval_expr(v_expr)?;
+                    map.insert(k_val, v_val);
+                }
+                Ok(Value::Dict(map))
+            }
             Expr::Ident(name, line) => {
                 if let Some(val) = self.env.get(name) {
                     Ok(val.clone())
@@ -544,8 +623,14 @@ impl Interpreter {
                     } else {
                         Err(format!("Line {}: List index must be a number", line))
                     }
+                } else if let Value::Dict(map) = left_val {
+                    if let Some(v) = map.get(&index_val) {
+                        Ok(v.clone())
+                    } else {
+                        Ok(Value::Nil)
+                    }
                 } else {
-                    Err(format!("Line {}: Cannot index into non-list", line))
+                    Err(format!("Line {}: Cannot index into non-list/dict", line))
                 }
             }
             Expr::MethodCall(left, method, args, line) => {
