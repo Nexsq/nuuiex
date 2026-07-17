@@ -2,5 +2,4 @@ test monitor on nvidia gpu on linux
 
 add to macro engine:
 - user defined functions
-- while loops
-- for loops
+- range() function

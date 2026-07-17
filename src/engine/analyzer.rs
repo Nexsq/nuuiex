@@ -92,6 +92,23 @@ impl Analyzer {
                 self.pop_scope();
                 self.loop_depth -= 1;
             }
+            Stmt::While(cond, body) => {
+                self.analyze_expr(cond);
+                self.loop_depth += 1;
+                self.push_scope();
+                self.analyze(body);
+                self.pop_scope();
+                self.loop_depth -= 1;
+            }
+            Stmt::For(name, expr, body, _) => {
+                self.analyze_expr(expr);
+                self.loop_depth += 1;
+                self.push_scope();
+                self.define(name);
+                self.analyze(body);
+                self.pop_scope();
+                self.loop_depth -= 1;
+            }
             Stmt::Break(line) => {
                 if self.loop_depth == 0 {
                     self.error(*line, "Break statement outside of a loop".into());

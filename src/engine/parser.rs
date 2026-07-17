@@ -55,6 +55,12 @@ impl Parser {
         if self.check(&TokenKind::Loop) {
             return self.parse_loop();
         }
+        if self.check(&TokenKind::While) {
+            return self.parse_while();
+        }
+        if self.check(&TokenKind::For) {
+            return self.parse_for();
+        }
         if self.check(&TokenKind::If) {
             return self.parse_if();
         }
@@ -158,6 +164,58 @@ impl Parser {
 
         let body = self.parse_block()?;
         Some(Stmt::Loop(body))
+    }
+
+    fn parse_while(&mut self) -> Option<Stmt> {
+        self.advance();
+        let cond = self.parse_expression()?;
+        if !self.check(&TokenKind::Colon) {
+            self.error("Expected ':' after while condition.");
+            return None;
+        }
+        self.advance();
+        if !self.check_statement_end() {
+            self.error("Expected newline after ':'.");
+            return None;
+        }
+        self.consume_statement_end();
+
+        let body = self.parse_block()?;
+        Some(Stmt::While(cond, body))
+    }
+
+    fn parse_for(&mut self) -> Option<Stmt> {
+        let token = self.advance().clone();
+        let name = if let TokenKind::Ident(ref n) = self.peek().kind {
+            let name_str = n.clone();
+            self.advance();
+            name_str
+        } else {
+            self.error("Expected variable name after 'for'.");
+            return None;
+        };
+
+        if !self.check(&TokenKind::In) {
+            self.error("Expected 'in' after for loop variable.");
+            return None;
+        }
+        self.advance();
+
+        let iterable = self.parse_expression()?;
+
+        if !self.check(&TokenKind::Colon) {
+            self.error("Expected ':' after for loop iterable.");
+            return None;
+        }
+        self.advance();
+        if !self.check_statement_end() {
+            self.error("Expected newline after ':'.");
+            return None;
+        }
+        self.consume_statement_end();
+
+        let body = self.parse_block()?;
+        Some(Stmt::For(name, iterable, body, token.line))
     }
 
     fn parse_if(&mut self) -> Option<Stmt> {

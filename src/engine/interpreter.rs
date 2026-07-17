@@ -697,6 +697,50 @@ impl Interpreter {
                 }
                 Ok(Signal::None)
             }
+            Stmt::While(cond, body) => {
+                loop {
+                    if self.should_exit || self.cancel_token.load(Ordering::SeqCst) {
+                        self.should_exit = true;
+                        break;
+                    }
+
+                    let cond_val = self.eval_expr(cond)?;
+                    if !cond_val.is_truthy() {
+                        break;
+                    }
+
+                    match self.exec_block(body)? {
+                        Signal::Break => break,
+                        Signal::None => continue,
+                    }
+                }
+                Ok(Signal::None)
+            }
+            Stmt::For(name, expr, body, line) => {
+                let iterable_val = self.eval_expr(expr)?;
+                let items: Vec<Value> = match iterable_val {
+                    Value::List(l) => l,
+                    Value::String(s) => s.chars().map(|c| Value::String(c.to_string())).collect(),
+                    Value::Dict(d) => d.keys().cloned().collect(),
+                    _ => return Err(format!("Line {}: TypeError: value is not iterable", line)),
+                };
+
+                self.env.push();
+                let _ = self.env.define(name.clone(), Value::Nil, false);
+                for item in items {
+                    if self.should_exit || self.cancel_token.load(Ordering::SeqCst) {
+                        self.should_exit = true;
+                        break;
+                    }
+                    let _ = self.env.assign(name, item);
+                    match self.exec_block(body)? {
+                        Signal::Break => break,
+                        Signal::None => continue,
+                    }
+                }
+                self.env.pop();
+                Ok(Signal::None)
+            }
             Stmt::Break(_) => Ok(Signal::Break),
         }
     }
