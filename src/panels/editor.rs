@@ -44,8 +44,8 @@ pub struct Editor {
 
     pub folded_lines: HashSet<usize>,
 
-    pub undo_stack: Vec<(EditorState, EditAction)>,
-    pub redo_stack: Vec<(EditorState, EditAction)>,
+    pub undo_stack: Vec<(EditorState, HashSet<usize>, EditAction)>,
+    pub redo_stack: Vec<(EditorState, HashSet<usize>, EditAction)>,
     pub last_edit_pos: Option<(usize, usize)>,
 
     pub last_key_select_all: bool,
@@ -261,7 +261,7 @@ impl Editor {
             }
         }
 
-        let last_action = self.undo_stack.last().map(|(_, a)| *a);
+        let last_action = self.undo_stack.last().map(|(_, _, a)| *a);
 
         let should_push = match (last_action, action) {
             (_, EditAction::Bulk) => true,
@@ -272,7 +272,8 @@ impl Editor {
         };
 
         if should_push {
-            self.undo_stack.push((self.state.clone(), action));
+            self.undo_stack
+                .push((self.state.clone(), self.folded_lines.clone(), action));
         }
 
         self.last_edit_pos = Some(current_pos);
@@ -548,20 +549,20 @@ impl Editor {
                         needs_analysis = true;
                     }
                     k if k == Key::Char(config.bind_edit_undo) => {
-                        if let Some((state, a)) = self.undo_stack.pop() {
-                            let old = std::mem::replace(&mut self.state, state);
-                            self.redo_stack.push((old, a));
+                        if let Some((state, folds, a)) = self.undo_stack.pop() {
+                            let old_state = std::mem::replace(&mut self.state, state);
+                            let old_folds = std::mem::replace(&mut self.folded_lines, folds);
+                            self.redo_stack.push((old_state, old_folds, a));
                             self.last_edit_pos = None;
-                            self.folded_lines.clear();
                             needs_analysis = true;
                         }
                     }
                     k if k == Key::Char(config.bind_edit_redo) => {
-                        if let Some((state, a)) = self.redo_stack.pop() {
-                            let old = std::mem::replace(&mut self.state, state);
-                            self.undo_stack.push((old, a));
+                        if let Some((state, folds, a)) = self.redo_stack.pop() {
+                            let old_state = std::mem::replace(&mut self.state, state);
+                            let old_folds = std::mem::replace(&mut self.folded_lines, folds);
+                            self.undo_stack.push((old_state, old_folds, a));
                             self.last_edit_pos = None;
-                            self.folded_lines.clear();
                             needs_analysis = true;
                         }
                     }

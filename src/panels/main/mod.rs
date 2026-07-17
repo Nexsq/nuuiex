@@ -228,6 +228,7 @@ impl MainView {
                 self.running_macros[i] = None;
                 self.editors[i].process_rx = None;
                 self.editors[i].state.lines = vec![String::new()];
+                self.editors[i].folded_lines.clear();
                 self.editors[i].error_count = 0;
                 self.editors[i].error_lines.clear();
                 self.editors[i].defined_functions.clear();
@@ -275,6 +276,7 @@ impl MainView {
             editor.file_path = None;
             editor.rel_path.clear();
             editor.state.lines = vec![String::new()];
+            editor.folded_lines.clear();
             editor.is_editing = false;
             editor.error_count = 0;
             editor.error_lines.clear();
