@@ -294,6 +294,8 @@ fn get_windows_metrics(
 }
 
 fn get_gpu_usage() -> u8 {
+    let mut max_usage: u8 = 0;
+
     #[cfg(target_os = "windows")]
     use std::os::windows::process::CommandExt;
 
@@ -308,8 +310,10 @@ fn get_gpu_usage() -> u8 {
 
     if let Ok(output) = cmd.output() {
         if let Ok(s) = String::from_utf8(output.stdout) {
-            if let Ok(usage) = s.trim().parse::<u8>() {
-                return usage;
+            for line in s.lines() {
+                if let Ok(usage) = line.trim().parse::<u8>() {
+                    max_usage = max_usage.max(usage);
+                }
             }
         }
     }
@@ -317,9 +321,6 @@ fn get_gpu_usage() -> u8 {
     #[cfg(target_os = "linux")]
     {
         if let Ok(entries) = std::fs::read_dir("/sys/class/drm") {
-            let mut max_usage = 0;
-            let mut found = false;
-
             for entry in entries.filter_map(Result::ok) {
                 let path = entry.path();
                 if let Some(name) = path.file_name() {
@@ -329,20 +330,15 @@ fn get_gpu_usage() -> u8 {
                         if let Ok(s) = std::fs::read_to_string(&busy_path) {
                             if let Ok(usage) = s.trim().parse::<u8>() {
                                 max_usage = max_usage.max(usage);
-                                found = true;
                             }
                         }
                     }
                 }
             }
-
-            if found {
-                return max_usage;
-            }
         }
     }
 
-    0
+    max_usage
 }
 
 fn push_text(

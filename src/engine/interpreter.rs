@@ -1259,7 +1259,8 @@ impl Interpreter {
 
                             match cmd.output() {
                                 Ok(out) => {
-                                    let mut result = String::from_utf8_lossy(&out.stdout).into_owned();
+                                    let mut result =
+                                        String::from_utf8_lossy(&out.stdout).into_owned();
                                     let stderr = String::from_utf8_lossy(&out.stderr);
                                     if !stderr.is_empty() {
                                         if !result.is_empty() && !result.ends_with('\n') {
@@ -1269,7 +1270,12 @@ impl Interpreter {
                                     }
                                     return Ok(Value::String(result.trim_end().to_string()));
                                 }
-                                Err(e) => return Err(format!("Line {}: Failed to execute command: {}", line, e)),
+                                Err(e) => {
+                                    return Err(format!(
+                                        "Line {}: Failed to execute command: {}",
+                                        line, e
+                                    ));
+                                }
                             }
                         } else {
                             return Err(format!("Line {}: 'exec' expects a string", line));

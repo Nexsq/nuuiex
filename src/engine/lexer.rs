@@ -404,6 +404,7 @@ impl<'a> Lexer<'a> {
                     };
                 }
                 '"' => return self.string(),
+                '`' => return self.multiline_string(),
                 _ if c.is_ascii_digit() => return self.number(),
                 _ if c.is_alphabetic() || c == '_' => return self.identifier(),
                 _ => {
@@ -462,6 +463,62 @@ impl<'a> Lexer<'a> {
 
         Token {
             kind: TokenKind::String(val),
+            line: start_line,
+        }
+    }
+
+    fn multiline_string(&mut self) -> Token {
+        let start_line = self.line;
+        self.advance();
+        let mut val = String::new();
+
+        while !self.is_at_end() && self.peek() != '`' {
+            if self.peek() == '\n' {
+                val.push(self.advance());
+                self.line += 1;
+            } else if self.peek() == '\\' {
+                self.advance();
+                if self.is_at_end() {
+                    break;
+                }
+                match self.advance() {
+                    'n' => val.push('\n'),
+                    'r' => val.push('\r'),
+                    '\\' => val.push('\\'),
+                    '`' => val.push('`'),
+                    c => {
+                        val.push('\\');
+                        val.push(c);
+                    }
+                }
+            } else {
+                val.push(self.advance());
+            }
+        }
+
+        if self.is_at_end() {
+            return Token {
+                kind: TokenKind::Error("Unterminated multiline string".into()),
+                line: start_line,
+            };
+        }
+        self.advance();
+
+        let mut slice = val.as_str();
+        if slice.starts_with("\r\n") {
+            slice = &slice[2..];
+        } else if slice.starts_with('\n') {
+            slice = &slice[1..];
+        }
+
+        if slice.ends_with("\r\n") {
+            slice = &slice[..slice.len() - 2];
+        } else if slice.ends_with('\n') {
+            slice = &slice[..slice.len() - 1];
+        }
+
+        Token {
+            kind: TokenKind::String(slice.to_string()),
             line: start_line,
         }
     }

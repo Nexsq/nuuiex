@@ -1,4 +1,5 @@
 use super::analyzer;
+use super::ast;
 use super::interpreter;
 use super::lexer;
 use super::parser;
@@ -12,7 +13,7 @@ pub enum EngineMessage {
     InputRequest,
 }
 
-pub fn analyze_code(source: &str) -> (usize, HashSet<usize>) {
+pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {
     let mut lexer = lexer::Lexer::new(source);
     let tokens = lexer.tokenize();
 
@@ -28,7 +29,50 @@ pub fn analyze_code(source: &str) -> (usize, HashSet<usize>) {
     errors_count += analyzer.errors.len();
     error_lines.extend(analyzer.error_lines);
 
-    (errors_count, error_lines)
+    let mut funcs = HashSet::new();
+    for f in [
+        "print",
+        "println",
+        "sleep",
+        "exit",
+        "range",
+        "input",
+        "len",
+        "max",
+        "min",
+        "exec",
+        "onlinux",
+        "onwindows",
+    ] {
+        funcs.insert(f.to_string());
+    }
+
+    fn extract_funcs(stmts: &[ast::Stmt], funcs: &mut HashSet<String>) {
+        for stmt in stmts {
+            match stmt {
+                ast::Stmt::Fn(name, _, body, _) => {
+                    funcs.insert(name.clone());
+                    extract_funcs(body, funcs);
+                }
+                ast::Stmt::If(_, then_b, elifs, else_b) => {
+                    extract_funcs(then_b, funcs);
+                    for (_, elif_b) in elifs {
+                        extract_funcs(elif_b, funcs);
+                    }
+                    if let Some(e) = else_b {
+                        extract_funcs(e, funcs);
+                    }
+                }
+                ast::Stmt::Loop(b) | ast::Stmt::While(_, b) | ast::Stmt::For(_, _, b, _) => {
+                    extract_funcs(b, funcs);
+                }
+                _ => {}
+            }
+        }
+    }
+    extract_funcs(&ast, &mut funcs);
+
+    (errors_count, error_lines, funcs)
 }
 
 pub fn run_in_thread(

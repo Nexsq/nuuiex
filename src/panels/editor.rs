@@ -58,6 +58,7 @@ pub struct Editor {
 
     pub error_count: usize,
     pub error_lines: HashSet<usize>,
+    pub defined_functions: HashSet<String>,
 
     pub process_input_tx: Option<std::sync::mpsc::Sender<String>>,
     pub process_rx: Option<std::sync::mpsc::Receiver<crate::EngineMessage>>,
@@ -101,6 +102,7 @@ impl Editor {
             last_search: String::new(),
             error_count: 0,
             error_lines: HashSet::new(),
+            defined_functions: HashSet::new(),
             process_input_tx: None,
             process_rx: None,
         }
@@ -149,7 +151,7 @@ impl Editor {
         self.last_edit_pos = None;
         self.reset_keys();
         if self.is_editing {
-            self.refresh_analysis();
+            self.refresh_analysis(true);
         }
     }
 
@@ -168,7 +170,7 @@ impl Editor {
                 self.folded_lines.clear();
                 self.clamp_cursor();
                 if self.is_editing {
-                    self.refresh_analysis();
+                    self.refresh_analysis(true);
                 }
             }
         }
@@ -178,7 +180,7 @@ impl Editor {
         if let Some(path) = &self.file_path {
             let content = self.state.lines.join("\n");
             let _ = fs::write(path, content);
-            self.refresh_analysis();
+            self.refresh_analysis(true);
         }
     }
 
@@ -312,11 +314,16 @@ impl Editor {
         }
     }
 
-    pub fn refresh_analysis(&mut self) {
+    pub fn refresh_analysis(&mut self, force_errors: bool) {
         let source = self.state.lines.join("\n");
-        let (count, lines) = crate::engine::core::analyze_code(&source);
-        self.error_count = count;
-        self.error_lines = lines;
+        let (count, lines, funcs) = crate::engine::core::analyze_code(&source);
+
+        self.defined_functions = funcs;
+
+        if force_errors {
+            self.error_count = count;
+            self.error_lines = lines;
+        }
     }
 
     pub fn handle_key(&mut self, key: Key, config: &Config) -> bool {
@@ -659,8 +666,8 @@ impl Editor {
             },
         }
 
-        if needs_analysis && (saved || self.error_count > 0) {
-            self.refresh_analysis();
+        if needs_analysis {
+            self.refresh_analysis(saved);
         }
 
         saved
@@ -1502,7 +1509,8 @@ impl Editor {
                                 .push(theme.editor_comments.color_at(k - start, end - start));
                         }
                         break;
-                    } else if c == '"' {
+                    } else if c == '"' || c == '`' {
+                        let quote_char = c;
                         let start = idx;
                         idx += 1;
                         while idx < line_chars.len() {
@@ -1510,7 +1518,7 @@ impl Editor {
                             idx += 1;
                             if sc == '\\' && idx < line_chars.len() {
                                 idx += 1;
-                            } else if sc == '"' {
+                            } else if sc == quote_char {
                                 break;
                             }
                         }
@@ -1561,7 +1569,11 @@ impl Editor {
                         while j < line_chars.len() && line_chars[j].is_whitespace() {
                             j += 1;
                         }
-                        let is_func = j < line_chars.len() && line_chars[j] == '(';
+
+                        let word_str: String = word_chars.iter().collect();
+                        let is_func = j < line_chars.len()
+                            && line_chars[j] == '('
+                            && self.defined_functions.contains(&word_str);
 
                         let color = if is_kw {
                             &theme.editor_keywords

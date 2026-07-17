@@ -230,6 +230,7 @@ impl MainView {
                 self.editors[i].state.lines = vec![String::new()];
                 self.editors[i].error_count = 0;
                 self.editors[i].error_lines.clear();
+                self.editors[i].defined_functions.clear();
             }
         }
     }
@@ -268,7 +269,7 @@ impl MainView {
                 editor.load_file(path, should_edit, rp);
             } else if should_edit && !editor.is_editing {
                 editor.is_editing = true;
-                editor.refresh_analysis();
+                editor.refresh_analysis(true);
             }
         } else if is_folder {
             editor.file_path = None;
@@ -277,6 +278,7 @@ impl MainView {
             editor.is_editing = false;
             editor.error_count = 0;
             editor.error_lines.clear();
+            editor.defined_functions.clear();
 
             editor.scroll_x = 0;
             editor.scroll_y = 0;
