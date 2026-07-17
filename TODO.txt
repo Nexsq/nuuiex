@@ -1,1 +1,5 @@
-test monitor on nvidia gpu on linux
+mass commenting in visual mode
+
+error messages show after a newline
+
+ctrl + moving cursor up / down into a folded function bugs out
