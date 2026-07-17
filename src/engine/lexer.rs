@@ -72,6 +72,14 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    pub fn new_with_line(source: &'a str, start_line: usize) -> Self {
+        Self {
+            source,
+            chars: source.char_indices().peekable(),
+            line: start_line,
+        }
+    }
+
     pub fn tokenize(&mut self) -> Vec<Token> {
         let mut indents = vec![0];
         let mut tokens = Vec::new();

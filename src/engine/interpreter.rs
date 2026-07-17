@@ -550,6 +550,15 @@ impl Interpreter {
                         Err(format!("Line {}: 'endswith' expects a string", line))
                     }
                 }
+                "asnum" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'asnum' expects 0 arguments", line));
+                    }
+                    match s.trim().parse::<f64>() {
+                        Ok(num) => Ok(Value::Number(num)),
+                        Err(_) => Ok(Value::Nil),
+                    }
+                }
                 _ => Err(format!(
                     "Line {}: Undefined string method '{}'",
                     line, method
@@ -1226,6 +1235,57 @@ impl Interpreter {
                                 line, name
                             ));
                         }
+                    }
+                    "exec" => {
+                        if eval_args.len() != 1 {
+                            return Err(format!("Line {}: 'exec' expects 1 argument", line));
+                        }
+                        if let Value::String(cmd_str) = &eval_args[0].1 {
+                            let mut cmd = if cfg!(target_os = "windows") {
+                                let mut c = std::process::Command::new("powershell");
+                                c.args(["-NoProfile", "-Command", cmd_str]);
+                                c
+                            } else {
+                                let mut c = std::process::Command::new("sh");
+                                c.args(["-c", cmd_str]);
+                                c
+                            };
+
+                            #[cfg(target_os = "windows")]
+                            {
+                                use std::os::windows::process::CommandExt;
+                                cmd.creation_flags(0x08000000);
+                            }
+
+                            match cmd.output() {
+                                Ok(out) => {
+                                    let mut result = String::from_utf8_lossy(&out.stdout).into_owned();
+                                    let stderr = String::from_utf8_lossy(&out.stderr);
+                                    if !stderr.is_empty() {
+                                        if !result.is_empty() && !result.ends_with('\n') {
+                                            result.push('\n');
+                                        }
+                                        result.push_str(&stderr);
+                                    }
+                                    return Ok(Value::String(result.trim_end().to_string()));
+                                }
+                                Err(e) => return Err(format!("Line {}: Failed to execute command: {}", line, e)),
+                            }
+                        } else {
+                            return Err(format!("Line {}: 'exec' expects a string", line));
+                        }
+                    }
+                    "onlinux" => {
+                        if !eval_args.is_empty() {
+                            return Err(format!("Line {}: 'onlinux' expects 0 arguments", line));
+                        }
+                        return Ok(Value::Bool(cfg!(target_os = "linux")));
+                    }
+                    "onwindows" => {
+                        if !eval_args.is_empty() {
+                            return Err(format!("Line {}: 'onwindows' expects 0 arguments", line));
+                        }
+                        return Ok(Value::Bool(cfg!(target_os = "windows")));
                     }
                     _ => {}
                 }

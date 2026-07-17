@@ -59,7 +59,14 @@ impl std::hash::Hash for Value {
             }
             Value::Dict(d) => {
                 state.write_u8(5);
-                state.write_usize(d.len());
+                let mut dict_hash = 0u64;
+                for (k, v) in d {
+                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                    k.hash(&mut hasher);
+                    v.hash(&mut hasher);
+                    dict_hash ^= std::hash::Hasher::finish(&hasher);
+                }
+                state.write_u64(dict_hash);
             }
             Value::Function(f) => {
                 state.write_u8(6);

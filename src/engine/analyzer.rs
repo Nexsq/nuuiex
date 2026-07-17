@@ -191,6 +191,9 @@ impl Analyzer {
                     && name != "len"
                     && name != "max"
                     && name != "min"
+                    && name != "exec"
+                    && name != "onlinux"
+                    && name != "onwindows"
                 {
                     self.error(*line, format!("Undefined function '{}'", name));
                 }

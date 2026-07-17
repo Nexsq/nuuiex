@@ -597,7 +597,7 @@ impl Parser {
                             }
                         }
 
-                        let mut lexer = crate::engine::lexer::Lexer::new(&expr_str);
+                        let mut lexer = crate::engine::lexer::Lexer::new_with_line(&expr_str, line);
                         let tokens = lexer.tokenize();
                         let mut parser = Parser::new(tokens);
 
@@ -614,16 +614,14 @@ impl Parser {
                             parts.push(StringPart::Expr(expr));
                             has_expr = true;
                             self.errors.extend(parser.errors);
-                            self.error_lines
-                                .extend(parser.error_lines.iter().map(|_| line));
+                            self.error_lines.extend(parser.error_lines);
                         } else {
                             self.error(&format!(
                                 "Invalid expression in interpolation: {}",
                                 expr_str
                             ));
                             self.errors.extend(parser.errors);
-                            self.error_lines
-                                .extend(parser.error_lines.iter().map(|_| line));
+                            self.error_lines.extend(parser.error_lines);
                         }
                     } else {
                         current_text.push(c);
