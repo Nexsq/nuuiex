@@ -18,7 +18,11 @@ impl std::hash::Hash for Value {
         match self {
             Value::Number(n) => {
                 state.write_u8(1);
-                let bits = if *n == 0.0 { 0.0f64.to_bits() } else { n.to_bits() };
+                let bits = if *n == 0.0 {
+                    0.0f64.to_bits()
+                } else {
+                    n.to_bits()
+                };
                 state.write_u64(bits);
             }
             Value::String(s) => {

@@ -331,12 +331,16 @@ impl Interpreter {
         } else if let Value::Dict(map) = val {
             match method {
                 "clear" => {
-                    if args.len() != 0 { return Err(format!("Line {}: 'clear' expects 0 arguments", line)); }
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'clear' expects 0 arguments", line));
+                    }
                     map.clear();
                     Ok(Value::Dict(map.clone()))
                 }
                 "get" => {
-                    if args.len() != 1 && args.len() != 2 { return Err(format!("Line {}: 'get' expects 1 or 2 arguments", line)); }
+                    if args.len() != 1 && args.len() != 2 {
+                        return Err(format!("Line {}: 'get' expects 1 or 2 arguments", line));
+                    }
                     if let Some(v) = map.get(&args[0]) {
                         Ok(v.clone())
                     } else if args.len() == 2 {
@@ -346,12 +350,16 @@ impl Interpreter {
                     }
                 }
                 "keys" => {
-                    if args.len() != 0 { return Err(format!("Line {}: 'keys' expects 0 arguments", line)); }
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'keys' expects 0 arguments", line));
+                    }
                     let keys: Vec<Value> = map.keys().cloned().collect();
                     Ok(Value::List(keys))
                 }
                 "values" => {
-                    if args.len() != 0 { return Err(format!("Line {}: 'values' expects 0 arguments", line)); }
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'values' expects 0 arguments", line));
+                    }
                     let vals: Vec<Value> = map.values().cloned().collect();
                     Ok(Value::List(vals))
                 }
@@ -375,7 +383,9 @@ impl Interpreter {
                     }
                 }
                 "update" => {
-                    if args.len() != 1 { return Err(format!("Line {}: 'update' expects 1 argument", line)); }
+                    if args.len() != 1 {
+                        return Err(format!("Line {}: 'update' expects 1 argument", line));
+                    }
                     if let Value::Dict(other) = &args[0] {
                         for (k, v) in other {
                             map.insert(k.clone(), v.clone());
@@ -386,15 +396,241 @@ impl Interpreter {
                     }
                 }
                 "set" => {
-                    if args.len() != 2 { return Err(format!("Line {}: 'set' expects 2 arguments", line)); }
-                    let res = map.entry(args[0].clone()).or_insert(args[1].clone()).clone();
+                    if args.len() != 2 {
+                        return Err(format!("Line {}: 'set' expects 2 arguments", line));
+                    }
+                    let res = map
+                        .entry(args[0].clone())
+                        .or_insert(args[1].clone())
+                        .clone();
                     Ok(res)
                 }
                 _ => Err(format!("Line {}: Undefined dict method '{}'", line, method)),
             }
+        } else if let Value::String(s) = val {
+            match method {
+                "capitalize" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'capitalize' expects 0 arguments", line));
+                    }
+                    let res = if let Some(f) = s.chars().next() {
+                        f.to_uppercase().collect::<String>() + &s[f.len_utf8()..]
+                    } else {
+                        String::new()
+                    };
+                    Ok(Value::String(res))
+                }
+                "lower" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'lower' expects 0 arguments", line));
+                    }
+                    Ok(Value::String(s.to_lowercase()))
+                }
+                "upper" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'upper' expects 0 arguments", line));
+                    }
+                    Ok(Value::String(s.to_uppercase()))
+                }
+                "swapcase" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'swapcase' expects 0 arguments", line));
+                    }
+                    let res: String = s
+                        .chars()
+                        .map(|c| {
+                            if c.is_lowercase() {
+                                c.to_uppercase().to_string()
+                            } else {
+                                c.to_lowercase().to_string()
+                            }
+                        })
+                        .collect();
+                    Ok(Value::String(res))
+                }
+                "count" => {
+                    if args.len() != 1 {
+                        return Err(format!("Line {}: 'count' expects 1 argument", line));
+                    }
+                    if let Value::String(sub) = &args[0] {
+                        Ok(Value::Number(s.matches(sub).count() as f64))
+                    } else {
+                        Err(format!("Line {}: 'count' expects a string", line))
+                    }
+                }
+                "index" => {
+                    if args.len() != 1 {
+                        return Err(format!("Line {}: 'index' expects 1 argument", line));
+                    }
+                    if let Value::String(sub) = &args[0] {
+                        if let Some(idx) = s.find(sub) {
+                            let char_idx = s[..idx].chars().count();
+                            Ok(Value::Number(char_idx as f64))
+                        } else {
+                            Ok(Value::Nil)
+                        }
+                    } else {
+                        Err(format!("Line {}: 'index' expects a string", line))
+                    }
+                }
+                "trim" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'trim' expects 0 arguments", line));
+                    }
+                    Ok(Value::String(s.trim().to_string()))
+                }
+                "join" => {
+                    if args.len() != 1 {
+                        return Err(format!("Line {}: 'join' expects 1 argument", line));
+                    }
+                    if let Value::List(l) = &args[0] {
+                        let strings: Vec<String> = l.iter().map(|v| v.to_string()).collect();
+                        Ok(Value::String(strings.join(s)))
+                    } else {
+                        Err(format!("Line {}: 'join' expects a list", line))
+                    }
+                }
+                "split" => {
+                    if args.len() == 0 {
+                        let parts: Vec<Value> = s
+                            .split_whitespace()
+                            .map(|p| Value::String(p.to_string()))
+                            .collect();
+                        Ok(Value::List(parts))
+                    } else if args.len() == 1 {
+                        if let Value::String(sep) = &args[0] {
+                            let parts: Vec<Value> =
+                                s.split(sep).map(|p| Value::String(p.to_string())).collect();
+                            Ok(Value::List(parts))
+                        } else {
+                            Err(format!("Line {}: 'split' expects a string separator", line))
+                        }
+                    } else {
+                        Err(format!("Line {}: 'split' expects 0 or 1 argument", line))
+                    }
+                }
+                "replace" => {
+                    if args.len() != 2 {
+                        return Err(format!("Line {}: 'replace' expects 2 arguments", line));
+                    }
+                    if let (Value::String(old), Value::String(new)) = (&args[0], &args[1]) {
+                        Ok(Value::String(s.replace(old, new)))
+                    } else {
+                        Err(format!("Line {}: 'replace' expects string arguments", line))
+                    }
+                }
+                "startswith" => {
+                    if args.len() != 1 {
+                        return Err(format!("Line {}: 'startswith' expects 1 argument", line));
+                    }
+                    if let Value::String(sub) = &args[0] {
+                        Ok(Value::Bool(s.starts_with(sub)))
+                    } else {
+                        Err(format!("Line {}: 'startswith' expects a string", line))
+                    }
+                }
+                "endswith" => {
+                    if args.len() != 1 {
+                        return Err(format!("Line {}: 'endswith' expects 1 argument", line));
+                    }
+                    if let Value::String(sub) = &args[0] {
+                        Ok(Value::Bool(s.ends_with(sub)))
+                    } else {
+                        Err(format!("Line {}: 'endswith' expects a string", line))
+                    }
+                }
+                _ => Err(format!(
+                    "Line {}: Undefined string method '{}'",
+                    line, method
+                )),
+            }
+        } else if let Value::Number(n_ref) = val {
+            let n = *n_ref;
+            match method {
+                "abs" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'abs' expects 0 arguments", line));
+                    }
+                    Ok(Value::Number(n.abs()))
+                }
+                "neg" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'neg' expects 0 arguments", line));
+                    }
+                    Ok(Value::Number(-n))
+                }
+                "floor" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'floor' expects 0 arguments", line));
+                    }
+                    Ok(Value::Number(n.floor()))
+                }
+                "trunc" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'trunc' expects 0 arguments", line));
+                    }
+                    Ok(Value::Number(n.trunc()))
+                }
+                "ceil" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'ceil' expects 0 arguments", line));
+                    }
+                    Ok(Value::Number(n.ceil()))
+                }
+                "fract" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'fract' expects 0 arguments", line));
+                    }
+                    Ok(Value::Number(n.fract()))
+                }
+                "clamp" => {
+                    if args.len() != 2 {
+                        return Err(format!("Line {}: 'clamp' expects 2 arguments", line));
+                    }
+                    if let (Value::Number(min), Value::Number(max)) = (&args[0], &args[1]) {
+                        Ok(Value::Number(n.clamp(*min, *max)))
+                    } else {
+                        Err(format!("Line {}: 'clamp' expects numbers", line))
+                    }
+                }
+                "round" => {
+                    if args.len() == 0 {
+                        Ok(Value::Number(n.round()))
+                    } else if args.len() == 1 {
+                        if let Value::Number(places) = &args[0] {
+                            let factor = 10.0_f64.powf(*places);
+                            Ok(Value::Number((n * factor).round() / factor))
+                        } else {
+                            Err(format!("Line {}: 'round' expects a number", line))
+                        }
+                    } else {
+                        Err(format!("Line {}: 'round' expects 0 or 1 argument", line))
+                    }
+                }
+                "pow" => {
+                    if args.len() != 1 {
+                        return Err(format!("Line {}: 'pow' expects 1 argument", line));
+                    }
+                    if let Value::Number(exp) = &args[0] {
+                        Ok(Value::Number(n.powf(*exp)))
+                    } else {
+                        Err(format!("Line {}: 'pow' expects a number", line))
+                    }
+                }
+                "sqrt" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'sqrt' expects 0 arguments", line));
+                    }
+                    Ok(Value::Number(n.sqrt()))
+                }
+                _ => Err(format!(
+                    "Line {}: Undefined number method '{}'",
+                    line, method
+                )),
+            }
         } else {
             Err(format!(
-                "Line {}: Methods can only be called on lists and dicts",
+                "Line {}: Methods can only be called on lists, dicts, strings, and numbers",
                 line
             ))
         }
