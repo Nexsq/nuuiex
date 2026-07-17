@@ -13,6 +13,21 @@ pub enum EngineMessage {
     InputRequest,
 }
 
+pub const BUILTIN_FUNCS: &[&str] = &[
+    "print",
+    "println",
+    "sleep",
+    "exit",
+    "range",
+    "input",
+    "len",
+    "max",
+    "min",
+    "exec",
+    "onlinux",
+    "onwindows",
+];
+
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {
     let mut lexer = lexer::Lexer::new(source);
     let tokens = lexer.tokenize();
@@ -30,20 +45,7 @@ pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {
     error_lines.extend(analyzer.error_lines);
 
     let mut funcs = HashSet::new();
-    for f in [
-        "print",
-        "println",
-        "sleep",
-        "exit",
-        "range",
-        "input",
-        "len",
-        "max",
-        "min",
-        "exec",
-        "onlinux",
-        "onwindows",
-    ] {
+    for f in BUILTIN_FUNCS {
         funcs.insert(f.to_string());
     }
 

@@ -181,20 +181,7 @@ impl Analyzer {
                 self.analyze_expr(right);
             }
             Expr::Call(name, args, line) => {
-                if !self.is_defined(name)
-                    && name != "print"
-                    && name != "println"
-                    && name != "sleep"
-                    && name != "exit"
-                    && name != "range"
-                    && name != "input"
-                    && name != "len"
-                    && name != "max"
-                    && name != "min"
-                    && name != "exec"
-                    && name != "onlinux"
-                    && name != "onwindows"
-                {
+                if !self.is_defined(name) && !super::core::BUILTIN_FUNCS.contains(&name.as_str()) {
                     self.error(*line, format!("Undefined function '{}'", name));
                 }
                 for (_, arg) in args {

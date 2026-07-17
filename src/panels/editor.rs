@@ -315,15 +315,38 @@ impl Editor {
     }
 
     pub fn refresh_analysis(&mut self, force_errors: bool) {
+        if !force_errors {
+            let mut funcs = HashSet::new();
+            for f in crate::engine::core::BUILTIN_FUNCS {
+                funcs.insert(f.to_string());
+            }
+
+            for line in &self.state.lines {
+                let trimmed = line.trim_start();
+                if trimmed.starts_with("fn") {
+                    let after_fn = &trimmed[2..];
+                    if after_fn.starts_with(|c: char| c.is_whitespace()) {
+                        let rest = after_fn.trim_start();
+                        let end = rest
+                            .find(|c: char| !c.is_alphanumeric() && c != '_')
+                            .unwrap_or(rest.len());
+                        let name = &rest[..end];
+                        if !name.is_empty() {
+                            funcs.insert(name.to_string());
+                        }
+                    }
+                }
+            }
+            self.defined_functions = funcs;
+            return;
+        }
+
         let source = self.state.lines.join("\n");
         let (count, lines, funcs) = crate::engine::core::analyze_code(&source);
 
         self.defined_functions = funcs;
-
-        if force_errors {
-            self.error_count = count;
-            self.error_lines = lines;
-        }
+        self.error_count = count;
+        self.error_lines = lines;
     }
 
     pub fn handle_key(&mut self, key: Key, config: &Config) -> bool {
