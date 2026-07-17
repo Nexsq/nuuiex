@@ -117,6 +117,7 @@ impl Interpreter {
             res.extend(self.errors.clone());
         }
         if res.is_empty() || (res.len() == 1 && res[0].is_empty()) {
+            res.clear();
             res.push("Execution finished with no output.".to_string());
         }
 
