@@ -107,7 +107,9 @@ impl Interpreter {
 
         let mut res = self.output.clone();
 
-        res.push(self.current_line.clone());
+        if !self.current_line.is_empty() {
+            res.push(self.current_line.clone());
+        }
 
         if !self.errors.is_empty() {
             if !res.is_empty() && !res.last().unwrap().is_empty() {
@@ -116,8 +118,8 @@ impl Interpreter {
             res.push("--- Runtime Errors ---".to_string());
             res.extend(self.errors.clone());
         }
-        if res.is_empty() || (res.len() == 1 && res[0].is_empty()) {
-            res.clear();
+
+        if res.is_empty() {
             res.push("Execution finished with no output.".to_string());
         }
 

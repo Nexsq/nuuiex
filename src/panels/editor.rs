@@ -242,8 +242,7 @@ impl Editor {
         for &y in &self.folded_lines {
             if y < after_y {
                 new_folds.insert(y);
-            } else if y == after_y && delta < 0 {
-            } else {
+            } else if delta >= 0 || y >= (after_y as isize - delta) as usize {
                 new_folds.insert((y as isize + delta) as usize);
             }
         }
@@ -576,6 +575,12 @@ impl Editor {
                             needs_analysis = true;
                         }
                     }
+                    k if k == Key::Char('#') => {
+                        if self.visual_mode {
+                            self.toggle_comment_selection();
+                            needs_analysis = true;
+                        }
+                    }
                     _ => {}
                 }
 
@@ -802,8 +807,9 @@ impl Editor {
             .map(|(i, _)| i)
             .unwrap_or(line.len());
         let new_line = line.split_off(byte_idx);
-        self.state.lines.insert(self.state.cursor_y + 1, new_line);
+
         self.shift_folds(self.state.cursor_y + 1, 1);
+        self.state.lines.insert(self.state.cursor_y + 1, new_line);
         self.state.cursor_y += 1;
         self.state.cursor_x = 0;
     }
@@ -942,10 +948,11 @@ impl Editor {
                 .map(|(i, _)| i)
                 .unwrap();
             line.remove(byte_idx);
+            self.state.cursor_x -= 0;
             self.state.cursor_x -= 1;
         } else if self.state.cursor_y > 0 {
-            let current_line = self.state.lines.remove(self.state.cursor_y);
             self.shift_folds(self.state.cursor_y, -1);
+            let current_line = self.state.lines.remove(self.state.cursor_y);
             self.state.cursor_y -= 1;
             let prev_line = &mut self.state.lines[self.state.cursor_y];
             self.state.cursor_x = prev_line.chars().count();
@@ -996,8 +1003,6 @@ impl Editor {
                     return;
                 }
 
-                self.folded_lines.clear();
-
                 let line = &mut self.state.lines[self.state.cursor_y];
                 let byte_idx = line
                     .char_indices()
@@ -1029,6 +1034,7 @@ impl Editor {
                     new_lines.push(final_line);
 
                     let insert_idx = self.state.cursor_y + 1;
+                    self.shift_folds(insert_idx, (lines_to_insert.len() - 1) as isize);
                     self.state.lines.splice(insert_idx..insert_idx, new_lines);
                     self.state.cursor_y += lines_to_insert.len() - 1;
                 }
@@ -1077,8 +1083,6 @@ impl Editor {
 
     fn delete_selection(&mut self) {
         if let Some((start, end)) = self.get_selection_bounds() {
-            self.folded_lines.clear();
-
             if start.1 == end.1 {
                 let line = &self.state.lines[start.1];
                 let byte_start = line
@@ -1114,6 +1118,7 @@ impl Editor {
                 new_start_line.push_str(&end_line[byte_end..]);
 
                 if end.1 > start.1 {
+                    self.shift_folds(start.1 + 1, -((end.1 - start.1) as isize));
                     self.state.lines.drain((start.1 + 1)..=end.1);
                 }
 
@@ -1177,6 +1182,92 @@ impl Editor {
         }
     }
 
+    fn toggle_comment_selection(&mut self) {
+        if let Some((start, end)) = self.get_selection_bounds() {
+            self.push_undo(EditAction::Bulk);
+
+            let mut all_commented = true;
+            let mut min_indent = usize::MAX;
+
+            for y in start.1..=end.1 {
+                let line = &self.state.lines[y];
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let indent = line.chars().take_while(|c| c.is_whitespace()).count();
+                if indent < min_indent {
+                    min_indent = indent;
+                }
+                if !line[indent..].starts_with('#') {
+                    all_commented = false;
+                }
+            }
+
+            if min_indent == usize::MAX {
+                min_indent = 0;
+            }
+
+            for y in start.1..=end.1 {
+                let line = &mut self.state.lines[y];
+                if line.trim().is_empty() && !all_commented {
+                    continue;
+                }
+
+                let mut removed_len = 0;
+                let mut added_len = 0;
+
+                let indent = line.chars().take_while(|c| c.is_whitespace()).count();
+                let is_commented = line[indent..].starts_with('#');
+
+                if all_commented {
+                    if line[indent..].starts_with("# ") {
+                        let byte_idx_hash = line.char_indices().nth(indent).unwrap().0;
+                        let byte_idx_after = line
+                            .char_indices()
+                            .nth(indent + 2)
+                            .map(|x| x.0)
+                            .unwrap_or(line.len());
+                        line.replace_range(byte_idx_hash..byte_idx_after, "");
+                        removed_len = 2;
+                    } else if line[indent..].starts_with('#') {
+                        let byte_idx_hash = line.char_indices().nth(indent).unwrap().0;
+                        let byte_idx_after = line
+                            .char_indices()
+                            .nth(indent + 1)
+                            .map(|x| x.0)
+                            .unwrap_or(line.len());
+                        line.replace_range(byte_idx_hash..byte_idx_after, "");
+                        removed_len = 1;
+                    }
+                } else {
+                    if !is_commented {
+                        let byte_idx = line
+                            .char_indices()
+                            .nth(min_indent)
+                            .map(|x| x.0)
+                            .unwrap_or(line.len());
+                        line.insert_str(byte_idx, "# ");
+                        added_len = 2;
+                    }
+                }
+
+                if self.state.cursor_y == y && self.state.cursor_x >= min_indent {
+                    self.state.cursor_x = (self.state.cursor_x + added_len)
+                        .saturating_sub(removed_len)
+                        .max(min_indent);
+                }
+                if let Some(sel) = self.state.selection_start.as_mut() {
+                    if sel.1 == y && sel.0 >= min_indent {
+                        sel.0 = (sel.0 + added_len)
+                            .saturating_sub(removed_len)
+                            .max(min_indent);
+                    }
+                }
+            }
+            self.clamp_cursor();
+        }
+    }
+
     fn jump_word_forward(&mut self, select: bool) {
         if select {
             if self.state.selection_start.is_none() {
@@ -1188,9 +1279,17 @@ impl Editor {
 
         let line = &self.state.lines[self.state.cursor_y];
         if self.state.cursor_x >= line.chars().count() {
-            if self.state.cursor_y < self.state.lines.len() - 1 {
-                self.state.cursor_y += 1;
-                self.state.cursor_x = 0;
+            let d_lines = self.get_display_lines();
+            let current_d_idx = d_lines
+                .iter()
+                .position(|&x| x == self.state.cursor_y as isize)
+                .unwrap_or(0);
+            for i in (current_d_idx + 1)..d_lines.len() {
+                if d_lines[i] != -1 {
+                    self.state.cursor_y = d_lines[i] as usize;
+                    self.state.cursor_x = 0;
+                    break;
+                }
             }
             return;
         }
@@ -1224,9 +1323,17 @@ impl Editor {
         }
 
         if self.state.cursor_x == 0 {
-            if self.state.cursor_y > 0 {
-                self.state.cursor_y -= 1;
-                self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
+            let d_lines = self.get_display_lines();
+            let current_d_idx = d_lines
+                .iter()
+                .position(|&x| x == self.state.cursor_y as isize)
+                .unwrap_or(0);
+            for i in (0..current_d_idx).rev() {
+                if d_lines[i] != -1 {
+                    self.state.cursor_y = d_lines[i] as usize;
+                    self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
+                    break;
+                }
             }
             return;
         }
@@ -1269,19 +1376,40 @@ impl Editor {
             self.state.selection_start = None;
         }
 
-        let mut y = self.state.cursor_y;
-        let lines = &self.state.lines;
-        let max_y = lines.len().saturating_sub(1);
+        let d_lines = self.get_display_lines();
+        let current_d_idx = d_lines
+            .iter()
+            .position(|&x| x == self.state.cursor_y as isize)
+            .unwrap_or(0);
+        let max_idx = d_lines.len().saturating_sub(1);
 
-        if y < max_y {
-            let start_is_empty = lines[y].trim().is_empty();
-            y += 1;
-            while y < max_y && lines[y].trim().is_empty() == start_is_empty {
-                y += 1;
+        if current_d_idx < max_idx {
+            let start_y = d_lines[current_d_idx] as usize;
+            let start_is_empty = self.state.lines[start_y].trim().is_empty();
+
+            let mut target_d_idx = current_d_idx + 1;
+            while target_d_idx < max_idx {
+                let y = d_lines[target_d_idx];
+                if y != -1 && self.state.lines[y as usize].trim().is_empty() != start_is_empty {
+                    break;
+                }
+                target_d_idx += 1;
+            }
+
+            let mut final_y = d_lines[target_d_idx];
+            if final_y == -1 {
+                for i in (target_d_idx + 1)..=max_idx {
+                    if d_lines[i] != -1 {
+                        final_y = d_lines[i];
+                        break;
+                    }
+                }
+            }
+            if final_y != -1 {
+                self.state.cursor_y = final_y as usize;
             }
         }
 
-        self.state.cursor_y = y;
         self.clamp_cursor();
     }
 
@@ -1294,18 +1422,41 @@ impl Editor {
             self.state.selection_start = None;
         }
 
-        let mut y = self.state.cursor_y;
-        let lines = &self.state.lines;
+        let d_lines = self.get_display_lines();
+        let current_d_idx = d_lines
+            .iter()
+            .position(|&x| x == self.state.cursor_y as isize)
+            .unwrap_or(0);
 
-        if y > 0 {
-            let start_is_empty = lines[y].trim().is_empty();
-            y -= 1;
-            while y > 0 && lines[y].trim().is_empty() == start_is_empty {
-                y -= 1;
+        if current_d_idx > 0 {
+            let start_y = d_lines[current_d_idx] as usize;
+            let start_is_empty = self.state.lines[start_y].trim().is_empty();
+
+            let mut target_d_idx = current_d_idx - 1;
+            while target_d_idx > 0 {
+                let y = d_lines[target_d_idx];
+                if y != -1 && self.state.lines[y as usize].trim().is_empty() != start_is_empty {
+                    break;
+                }
+                target_d_idx -= 1;
+            }
+
+            let mut final_y = d_lines[target_d_idx];
+            if final_y == -1 {
+                for i in (0..target_d_idx).rev() {
+                    if d_lines[i] != -1 {
+                        final_y = d_lines[i];
+                        break;
+                    }
+                }
+            }
+            if final_y != -1 {
+                self.state.cursor_y = final_y as usize;
+            } else {
+                self.state.cursor_y = 0;
             }
         }
 
-        self.state.cursor_y = y;
         self.clamp_cursor();
     }
 
