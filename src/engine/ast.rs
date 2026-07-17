@@ -1,6 +1,19 @@
 use super::lexer::TokenKind;
 
 #[derive(Debug, Clone)]
+pub struct Param {
+    pub name: String,
+    pub default: Option<Expr>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionDef {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub body: Vec<Stmt>,
+}
+
+#[derive(Debug, Clone)]
 pub enum StringPart {
     Text(String),
     Expr(Expr),
@@ -17,9 +30,9 @@ pub enum Expr {
     Dict(Vec<(Expr, Expr)>),
     Ident(String, usize),
     Index(Box<Expr>, Box<Expr>, usize),
-    MethodCall(Box<Expr>, String, Vec<Expr>, usize),
+    MethodCall(Box<Expr>, String, Vec<(Option<String>, Expr)>, usize),
     Binary(Box<Expr>, BinaryOp, Box<Expr>, usize),
-    Call(String, Vec<Expr>, usize),
+    Call(String, Vec<(Option<String>, Expr)>, usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -68,4 +81,6 @@ pub enum Stmt {
     While(Expr, Vec<Stmt>),
     For(String, Expr, Vec<Stmt>, usize),
     Break(usize),
+    Fn(String, Vec<Param>, Vec<Stmt>, usize),
+    Return(Option<Expr>),
 }

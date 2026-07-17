@@ -5,7 +5,12 @@ use super::parser;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::sync::mpsc::SyncSender;
+use std::sync::mpsc::{Receiver, SyncSender};
+
+pub enum EngineMessage {
+    Output(Vec<String>),
+    InputRequest,
+}
 
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>) {
     let mut lexer = lexer::Lexer::new(source);
@@ -26,7 +31,12 @@ pub fn analyze_code(source: &str) -> (usize, HashSet<usize>) {
     (errors_count, error_lines)
 }
 
-pub fn run_in_thread(source: &str, tx: SyncSender<Vec<String>>, cancel_token: Arc<AtomicBool>) {
+pub fn run_in_thread(
+    source: &str,
+    tx: SyncSender<EngineMessage>,
+    input_rx: Receiver<String>,
+    cancel_token: Arc<AtomicBool>,
+) {
     let mut lexer = lexer::Lexer::new(source);
     let tokens = lexer.tokenize();
 
@@ -36,7 +46,7 @@ pub fn run_in_thread(source: &str, tx: SyncSender<Vec<String>>, cancel_token: Ar
     if !parser.errors.is_empty() {
         let mut res = vec!["--- Syntax Errors ---".to_string()];
         res.extend(parser.errors);
-        let _ = tx.send(res);
+        let _ = tx.send(EngineMessage::Output(res));
         return;
     }
 
@@ -46,10 +56,10 @@ pub fn run_in_thread(source: &str, tx: SyncSender<Vec<String>>, cancel_token: Ar
     if !analyzer.errors.is_empty() {
         let mut res = vec!["--- Analysis Errors ---".to_string()];
         res.extend(analyzer.errors);
-        let _ = tx.send(res);
+        let _ = tx.send(EngineMessage::Output(res));
         return;
     }
 
-    let mut interpreter = interpreter::Interpreter::new(tx, cancel_token);
+    let mut interpreter = interpreter::Interpreter::new(tx, input_rx, cancel_token);
     interpreter.exec(&ast);
 }

@@ -563,6 +563,15 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     },
                 },
                 Setting {
+                    name: "Fold",
+                    key: "bind_edit_fold",
+                    kind: SettingType::Custom {
+                        value: config.bind_edit_fold.to_string(),
+                        default: def.bind_edit_fold.to_string(),
+                        validation: CustomType::Char,
+                    },
+                },
+                Setting {
                     name: "Move Left",
                     key: "bind_edit_left",
                     kind: SettingType::Custom {
@@ -868,6 +877,7 @@ pub fn settings_modal(
 
                 apply_setting!(config, set, char "bind_edit_insert", bind_edit_insert);
                 apply_setting!(config, set, char "bind_edit_visual", bind_edit_visual);
+                apply_setting!(config, set, char "bind_edit_fold", bind_edit_fold);
                 apply_setting!(config, set, char "bind_edit_left", bind_edit_left);
                 apply_setting!(config, set, char "bind_edit_right", bind_edit_right);
                 apply_setting!(config, set, char "bind_edit_up", bind_edit_up);

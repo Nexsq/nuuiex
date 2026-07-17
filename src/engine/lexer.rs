@@ -25,6 +25,8 @@ pub enum TokenKind {
     GreaterEq,
     Let,
     Const,
+    Fn,
+    Return,
     Loop,
     While,
     For,
@@ -491,6 +493,8 @@ impl<'a> Lexer<'a> {
         let kind = match text {
             "let" => TokenKind::Let,
             "const" => TokenKind::Const,
+            "fn" => TokenKind::Fn,
+            "return" => TokenKind::Return,
             "loop" => TokenKind::Loop,
             "while" => TokenKind::While,
             "for" => TokenKind::For,

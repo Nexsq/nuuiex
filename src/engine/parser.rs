@@ -1,4 +1,4 @@
-use super::ast::{BinaryOp, Expr, Stmt, StringPart};
+use super::ast::{BinaryOp, Expr, Param, Stmt, StringPart};
 use super::lexer::{Token, TokenKind};
 use std::collections::HashSet;
 
@@ -51,6 +51,12 @@ impl Parser {
         }
         if self.check(&TokenKind::Const) {
             return self.parse_variable_declaration(true);
+        }
+        if self.check(&TokenKind::Fn) {
+            return self.parse_fn();
+        }
+        if self.check(&TokenKind::Return) {
+            return self.parse_return();
         }
         if self.check(&TokenKind::Loop) {
             return self.parse_loop();
@@ -117,6 +123,91 @@ impl Parser {
             Some(Stmt::Expr(expr))
         } else {
             self.error("Expected newline after expression.");
+            None
+        }
+    }
+
+    fn parse_fn(&mut self) -> Option<Stmt> {
+        let line = self.advance().line;
+        let name = if let TokenKind::Ident(ref n) = self.peek().kind {
+            let name_str = n.clone();
+            self.advance();
+            name_str
+        } else {
+            self.error("Expected function name.");
+            return None;
+        };
+
+        if !self.check(&TokenKind::LParen) {
+            self.error("Expected '(' after function name.");
+            return None;
+        }
+        self.advance();
+
+        let mut params = Vec::new();
+        if !self.check(&TokenKind::RParen) {
+            loop {
+                let p_name = if let TokenKind::Ident(ref n) = self.peek().kind {
+                    let name_str = n.clone();
+                    self.advance();
+                    name_str
+                } else {
+                    self.error("Expected parameter name.");
+                    return None;
+                };
+
+                let mut default = None;
+                if self.check(&TokenKind::Eq) {
+                    self.advance();
+                    default = self.parse_expression();
+                }
+
+                params.push(Param {
+                    name: p_name,
+                    default,
+                });
+
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if self.check(&TokenKind::RParen) {
+            self.advance();
+        } else {
+            self.error("Expected ')' after parameters.");
+            return None;
+        }
+
+        if !self.check(&TokenKind::Colon) {
+            self.error("Expected ':' after function signature.");
+            return None;
+        }
+        self.advance();
+        if !self.check_statement_end() {
+            self.error("Expected newline after ':'.");
+            return None;
+        }
+        self.consume_statement_end();
+
+        let body = self.parse_block()?;
+        Some(Stmt::Fn(name, params, body, line))
+    }
+
+    fn parse_return(&mut self) -> Option<Stmt> {
+        self.advance();
+        let mut value = None;
+        if !self.check_statement_end() {
+            value = self.parse_expression();
+        }
+        if self.check_statement_end() {
+            self.consume_statement_end();
+            Some(Stmt::Return(value))
+        } else {
+            self.error("Expected newline after return value.");
             None
         }
     }
@@ -404,8 +495,19 @@ impl Parser {
 
                         if !self.check(&TokenKind::RParen) {
                             loop {
+                                let mut kw_name = None;
+                                if let TokenKind::Ident(ref n) = self.peek().kind {
+                                    if self.tokens.get(self.current + 1).map(|t| &t.kind)
+                                        == Some(&TokenKind::Eq)
+                                    {
+                                        kw_name = Some(n.clone());
+                                        self.advance();
+                                        self.advance();
+                                    }
+                                }
+
                                 if let Some(arg) = self.parse_expression() {
-                                    args.push(arg);
+                                    args.push((kw_name, arg));
                                 } else {
                                     return None;
                                 }
@@ -553,8 +655,19 @@ impl Parser {
 
                     if !self.check(&TokenKind::RParen) {
                         loop {
+                            let mut kw_name = None;
+                            if let TokenKind::Ident(ref n) = self.peek().kind {
+                                if self.tokens.get(self.current + 1).map(|t| &t.kind)
+                                    == Some(&TokenKind::Eq)
+                                {
+                                    kw_name = Some(n.clone());
+                                    self.advance();
+                                    self.advance();
+                                }
+                            }
+
                             if let Some(arg) = self.parse_expression() {
-                                args.push(arg);
+                                args.push((kw_name, arg));
                             } else {
                                 return None;
                             }

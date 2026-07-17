@@ -1,14 +1,32 @@
+use super::ast::FunctionDef;
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Number(f64),
     String(String),
     Bool(bool),
     List(Vec<Value>),
     Dict(HashMap<Value, Value>),
+    Function(Arc<FunctionDef>),
     Nil,
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Number(a), Value::Number(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::List(a), Value::List(b)) => a == b,
+            (Value::Dict(a), Value::Dict(b)) => a == b,
+            (Value::Function(a), Value::Function(b)) => Arc::ptr_eq(a, b),
+            (Value::Nil, Value::Nil) => true,
+            _ => false,
+        }
+    }
 }
 
 impl Eq for Value {}
@@ -43,8 +61,12 @@ impl std::hash::Hash for Value {
                 state.write_u8(5);
                 state.write_usize(d.len());
             }
-            Value::Nil => {
+            Value::Function(f) => {
                 state.write_u8(6);
+                state.write_usize(Arc::as_ptr(f) as usize);
+            }
+            Value::Nil => {
+                state.write_u8(7);
             }
         }
     }
@@ -58,6 +80,7 @@ impl Value {
             Value::Bool(b) => *b,
             Value::List(l) => !l.is_empty(),
             Value::Dict(d) => !d.is_empty(),
+            Value::Function(_) => true,
             Value::Nil => false,
         }
     }
@@ -102,6 +125,7 @@ impl fmt::Display for Value {
                 }
                 write!(f, "}}")
             }
+            Value::Function(func) => write!(f, "<function {}>", func.name),
             Value::Nil => write!(f, "None"),
         }
     }

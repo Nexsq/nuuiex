@@ -1,9 +1,9 @@
-use super::ast::{BinaryOp, Expr, Stmt, StringPart};
+use super::ast::{BinaryOp, Expr, FunctionDef, Stmt, StringPart};
 use super::value::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::SyncSender;
+use std::sync::mpsc::{Receiver, SyncSender};
 
 pub struct Environment {
     pub scopes: Vec<HashMap<String, Value>>,
@@ -67,7 +67,8 @@ pub struct Interpreter {
     pub output: Vec<String>,
     pub errors: Vec<String>,
     current_line: String,
-    tx: SyncSender<Vec<String>>,
+    tx: SyncSender<crate::EngineMessage>,
+    input_rx: Receiver<String>,
     pub should_exit: bool,
     pub env: Environment,
     cancel_token: Arc<AtomicBool>,
@@ -75,17 +76,23 @@ pub struct Interpreter {
 
 #[derive(PartialEq)]
 pub enum Signal {
-    None,
+    Empty,
     Break,
+    Return(Value),
 }
 
 impl Interpreter {
-    pub fn new(tx: SyncSender<Vec<String>>, cancel_token: Arc<AtomicBool>) -> Self {
+    pub fn new(
+        tx: SyncSender<crate::EngineMessage>,
+        input_rx: Receiver<String>,
+        cancel_token: Arc<AtomicBool>,
+    ) -> Self {
         Self {
             output: Vec::new(),
             errors: Vec::new(),
             current_line: String::new(),
             tx,
+            input_rx,
             should_exit: false,
             env: Environment::new(),
             cancel_token,
@@ -99,9 +106,9 @@ impl Interpreter {
         }
 
         let mut res = self.output.clone();
-        if !self.current_line.is_empty() {
-            res.push(self.current_line.clone());
-        }
+
+        res.push(self.current_line.clone());
+
         if !self.errors.is_empty() {
             if !res.is_empty() && !res.last().unwrap().is_empty() {
                 res.push("".to_string());
@@ -113,7 +120,7 @@ impl Interpreter {
             res.push("Execution finished with no output.".to_string());
         }
 
-        if self.tx.send(res).is_err() {
+        if self.tx.send(crate::EngineMessage::Output(res)).is_err() {
             self.should_exit = true;
         }
     }
@@ -125,10 +132,10 @@ impl Interpreter {
 
     fn exec_block(&mut self, stmts: &[Stmt]) -> Result<Signal, String> {
         self.env.push();
-        let mut res = Ok(Signal::None);
+        let mut res = Ok(Signal::Empty);
 
         for stmt in stmts {
-            if self.should_exit || self.cancel_token.load(Ordering::SeqCst) {
+            if self.should_exit || self.cancel_token.load(Ordering::Relaxed) {
                 self.should_exit = true;
                 break;
             }
@@ -137,11 +144,15 @@ impl Interpreter {
                     res = Ok(Signal::Break);
                     break;
                 }
-                Ok(Signal::None) => continue,
+                Ok(Signal::Return(val)) => {
+                    res = Ok(Signal::Return(val));
+                    break;
+                }
+                Ok(Signal::Empty) => continue,
                 Err(err) => {
                     self.errors.push(err);
                     self.should_exit = true;
-                    res = Ok(Signal::None);
+                    res = Ok(Signal::Empty);
                     break;
                 }
             }
@@ -640,33 +651,33 @@ impl Interpreter {
         match stmt {
             Stmt::Expr(expr) => {
                 self.eval_expr(expr)?;
-                Ok(Signal::None)
+                Ok(Signal::Empty)
             }
             Stmt::Let(name, expr, line) => {
                 let val = self.eval_expr(expr)?;
                 if let Err(e) = self.env.define(name.clone(), val, false) {
                     return Err(format!("Line {}: {}", line, e));
                 }
-                Ok(Signal::None)
+                Ok(Signal::Empty)
             }
             Stmt::Const(name, expr, line) => {
                 let val = self.eval_expr(expr)?;
                 if let Err(e) = self.env.define(name.clone(), val, true) {
                     return Err(format!("Line {}: {}", line, e));
                 }
-                Ok(Signal::None)
+                Ok(Signal::Empty)
             }
             Stmt::Assign(target, expr, _) => {
                 let val = self.eval_expr(expr)?;
                 self.assign_expr(target, val)?;
-                Ok(Signal::None)
+                Ok(Signal::Empty)
             }
             Stmt::AssignOp(target, op, expr, line) => {
                 let right_val = self.eval_expr(expr)?;
                 let left_val = self.eval_expr(target)?;
                 let new_val = self.eval_binary_op(&left_val, op, &right_val, *line)?;
                 self.assign_expr(target, new_val)?;
-                Ok(Signal::None)
+                Ok(Signal::Empty)
             }
             Stmt::If(cond, then_b, elifs, else_b) => {
                 let cond_val = self.eval_expr(cond)?;
@@ -682,24 +693,25 @@ impl Interpreter {
                 if let Some(e_b) = else_b {
                     return self.exec_block(e_b);
                 }
-                Ok(Signal::None)
+                Ok(Signal::Empty)
             }
             Stmt::Loop(body) => {
                 loop {
-                    if self.should_exit || self.cancel_token.load(Ordering::SeqCst) {
+                    if self.should_exit || self.cancel_token.load(Ordering::Relaxed) {
                         self.should_exit = true;
                         break;
                     }
                     match self.exec_block(body)? {
                         Signal::Break => break,
-                        Signal::None => continue,
+                        Signal::Return(v) => return Ok(Signal::Return(v)),
+                        Signal::Empty => continue,
                     }
                 }
-                Ok(Signal::None)
+                Ok(Signal::Empty)
             }
             Stmt::While(cond, body) => {
                 loop {
-                    if self.should_exit || self.cancel_token.load(Ordering::SeqCst) {
+                    if self.should_exit || self.cancel_token.load(Ordering::Relaxed) {
                         self.should_exit = true;
                         break;
                     }
@@ -711,10 +723,11 @@ impl Interpreter {
 
                     match self.exec_block(body)? {
                         Signal::Break => break,
-                        Signal::None => continue,
+                        Signal::Return(v) => return Ok(Signal::Return(v)),
+                        Signal::Empty => continue,
                     }
                 }
-                Ok(Signal::None)
+                Ok(Signal::Empty)
             }
             Stmt::For(name, expr, body, line) => {
                 let iterable_val = self.eval_expr(expr)?;
@@ -728,20 +741,46 @@ impl Interpreter {
                 self.env.push();
                 let _ = self.env.define(name.clone(), Value::Nil, false);
                 for item in items {
-                    if self.should_exit || self.cancel_token.load(Ordering::SeqCst) {
+                    if self.should_exit || self.cancel_token.load(Ordering::Relaxed) {
                         self.should_exit = true;
                         break;
                     }
                     let _ = self.env.assign(name, item);
                     match self.exec_block(body)? {
                         Signal::Break => break,
-                        Signal::None => continue,
+                        Signal::Return(v) => {
+                            self.env.pop();
+                            return Ok(Signal::Return(v));
+                        }
+                        Signal::Empty => continue,
                     }
                 }
                 self.env.pop();
-                Ok(Signal::None)
+                Ok(Signal::Empty)
             }
             Stmt::Break(_) => Ok(Signal::Break),
+            Stmt::Fn(name, params, body, line) => {
+                let func_def = Arc::new(FunctionDef {
+                    name: name.clone(),
+                    params: params.clone(),
+                    body: body.clone(),
+                });
+                if let Err(e) = self
+                    .env
+                    .define(name.clone(), Value::Function(func_def), false)
+                {
+                    return Err(format!("Line {}: {}", line, e));
+                }
+                Ok(Signal::Empty)
+            }
+            Stmt::Return(expr) => {
+                let val = if let Some(e) = expr {
+                    self.eval_expr(e)?
+                } else {
+                    Value::Nil
+                };
+                Ok(Signal::Return(val))
+            }
         }
     }
 
@@ -915,7 +954,13 @@ impl Interpreter {
             }
             Expr::MethodCall(left, method, args, line) => {
                 let mut eval_args = Vec::with_capacity(args.len());
-                for arg in args {
+                for (kw_opt, arg) in args {
+                    if kw_opt.is_some() {
+                        return Err(format!(
+                            "Line {}: keyword arguments not supported in method calls",
+                            line
+                        ));
+                    }
                     eval_args.push(self.eval_expr(arg)?);
                 }
                 let mut left_val = self.eval_expr(left)?;
@@ -930,65 +975,321 @@ impl Interpreter {
             }
             Expr::Call(name, args, line) => {
                 let mut eval_args = Vec::with_capacity(args.len());
-                for arg in args {
-                    eval_args.push(self.eval_expr(arg)?);
+                for (kw_opt, arg) in args {
+                    eval_args.push((kw_opt.clone(), self.eval_expr(arg)?));
                 }
 
-                if name == "sleep" {
-                    if eval_args.len() != 1 {
-                        return Err(format!("Line {}: 'sleep' expects 1 argument", line));
-                    }
-                    if let Value::Number(ms) = eval_args[0] {
-                        if ms < 0.0 {
-                            return Err(format!("Line {}: 'sleep' time cannot be negative", line));
+                match name.as_str() {
+                    "print" | "println" => {
+                        let mut combined = String::new();
+                        for (i, (_, arg)) in eval_args.iter().enumerate() {
+                            if i > 0 {
+                                combined.push(' ');
+                            }
+                            combined.push_str(&arg.to_string());
                         }
 
-                        let target =
-                            std::time::Instant::now() + std::time::Duration::from_millis(ms as u64);
-                        while std::time::Instant::now() < target {
-                            if self.cancel_token.load(Ordering::SeqCst) {
+                        let segments: Vec<&str> = combined.split('\n').collect();
+                        for (i, segment) in segments.iter().enumerate() {
+                            if i == 0 {
+                                self.current_line.push_str(segment);
+                            } else {
+                                self.output.push(std::mem::take(&mut self.current_line));
+                                self.current_line = segment.to_string();
+                            }
+                        }
+
+                        if name == "println" {
+                            self.output.push(std::mem::take(&mut self.current_line));
+                        }
+
+                        self.send_output();
+                        return Ok(Value::Nil);
+                    }
+                    "sleep" => {
+                        if eval_args.len() != 1 {
+                            return Err(format!("Line {}: 'sleep' expects 1 argument", line));
+                        }
+                        if let Value::Number(ms) = eval_args[0].1 {
+                            if ms < 0.0 {
+                                return Err(format!(
+                                    "Line {}: 'sleep' time cannot be negative",
+                                    line
+                                ));
+                            }
+
+                            let target = std::time::Instant::now()
+                                + std::time::Duration::from_millis(ms as u64);
+                            while std::time::Instant::now() < target {
+                                if self.cancel_token.load(Ordering::Relaxed) {
+                                    self.should_exit = true;
+                                    return Ok(Value::Nil);
+                                }
+                                std::thread::sleep(std::time::Duration::from_millis(10));
+                            }
+                            return Ok(Value::Nil);
+                        } else {
+                            return Err(format!("Line {}: 'sleep' expects a number", line));
+                        }
+                    }
+                    "exit" => {
+                        if eval_args.len() != 0 {
+                            return Err(format!("Line {}: 'exit' expects 0 arguments", line));
+                        }
+                        self.should_exit = true;
+                        return Ok(Value::Nil);
+                    }
+                    "range" => {
+                        let (start, stop, step) = match eval_args.len() {
+                            1 => {
+                                if let Value::Number(stop) = eval_args[0].1 {
+                                    (0.0, stop, 1.0)
+                                } else {
+                                    return Err(format!("Line {}: range() expects numbers", line));
+                                }
+                            }
+                            2 => {
+                                if let (Value::Number(start), Value::Number(stop)) =
+                                    (&eval_args[0].1, &eval_args[1].1)
+                                {
+                                    (*start, *stop, 1.0)
+                                } else {
+                                    return Err(format!("Line {}: range() expects numbers", line));
+                                }
+                            }
+                            3 => {
+                                if let (
+                                    Value::Number(start),
+                                    Value::Number(stop),
+                                    Value::Number(step),
+                                ) = (&eval_args[0].1, &eval_args[1].1, &eval_args[2].1)
+                                {
+                                    if *step == 0.0 {
+                                        return Err(format!(
+                                            "Line {}: range() step cannot be zero",
+                                            line
+                                        ));
+                                    }
+                                    (*start, *stop, *step)
+                                } else {
+                                    return Err(format!("Line {}: range() expects numbers", line));
+                                }
+                            }
+                            _ => {
+                                return Err(format!(
+                                    "Line {}: range() expects 1 to 3 arguments",
+                                    line
+                                ));
+                            }
+                        };
+
+                        let mut items = Vec::new();
+                        let mut curr = start;
+                        if step > 0.0 {
+                            while curr < stop {
+                                items.push(Value::Number(curr));
+                                curr += step;
+                            }
+                        } else {
+                            while curr > stop {
+                                items.push(Value::Number(curr));
+                                curr += step;
+                            }
+                        }
+                        return Ok(Value::List(items));
+                    }
+                    "input" => {
+                        if !eval_args.is_empty() {
+                            let prompt = eval_args[0].1.to_string();
+                            self.current_line.push_str(&prompt);
+                        }
+                        self.send_output();
+
+                        if self.tx.send(crate::EngineMessage::InputRequest).is_err() {
+                            self.should_exit = true;
+                            return Ok(Value::Nil);
+                        }
+
+                        let result = loop {
+                            if self.cancel_token.load(Ordering::Relaxed) {
                                 self.should_exit = true;
                                 return Ok(Value::Nil);
                             }
-                            std::thread::sleep(std::time::Duration::from_millis(10));
-                        }
-                        Ok(Value::Nil)
-                    } else {
-                        Err(format!("Line {}: 'sleep' expects a number", line))
-                    }
-                } else if name == "exit" {
-                    if eval_args.len() != 0 {
-                        return Err(format!("Line {}: 'exit' expects 0 arguments", line));
-                    }
-                    self.should_exit = true;
-                    Ok(Value::Nil)
-                } else if name == "print" || name == "println" {
-                    let mut combined = String::new();
-                    for (i, arg) in eval_args.iter().enumerate() {
-                        if i > 0 {
-                            combined.push(' ');
-                        }
-                        combined.push_str(&arg.to_string());
-                    }
+                            if let Ok(line_in) = self
+                                .input_rx
+                                .recv_timeout(std::time::Duration::from_millis(16))
+                            {
+                                break line_in;
+                            }
+                        };
 
-                    if name == "println" {
-                        combined.push('\n');
+                        self.current_line.push_str(&result);
+                        return Ok(Value::String(result));
                     }
+                    "len" => {
+                        if eval_args.len() != 1 {
+                            return Err(format!("Line {}: len() expects 1 argument", line));
+                        }
+                        match &eval_args[0].1 {
+                            Value::String(s) => return Ok(Value::Number(s.chars().count() as f64)),
+                            Value::List(l) => return Ok(Value::Number(l.len() as f64)),
+                            Value::Dict(d) => return Ok(Value::Number(d.len() as f64)),
+                            _ => return Err(format!("Line {}: object has no len()", line)),
+                        }
+                    }
+                    "max" | "min" => {
+                        if eval_args.is_empty() {
+                            return Err(format!(
+                                "Line {}: {}() expects at least 1 argument",
+                                line, name
+                            ));
+                        }
 
-                    let segments: Vec<&str> = combined.split('\n').collect();
-                    for (i, segment) in segments.iter().enumerate() {
-                        if i == 0 {
-                            self.current_line.push_str(segment);
+                        let items = if eval_args.len() == 1 {
+                            match &eval_args[0].1 {
+                                Value::List(l) => l.clone(),
+                                Value::String(s) => {
+                                    s.chars().map(|c| Value::String(c.to_string())).collect()
+                                }
+                                _ => {
+                                    return Err(format!(
+                                        "Line {}: {}() arg is an empty sequence or not iterable",
+                                        line, name
+                                    ));
+                                }
+                            }
                         } else {
-                            self.output.push(self.current_line.clone());
-                            self.current_line = segment.to_string();
+                            eval_args.into_iter().map(|(_, v)| v).collect()
+                        };
+
+                        if items.is_empty() {
+                            return Err(format!(
+                                "Line {}: {}() arg is an empty sequence",
+                                line, name
+                            ));
+                        }
+
+                        let first = &items[0];
+                        if let Value::Number(_) = first {
+                            let mut best = if let Value::Number(n) = first {
+                                *n
+                            } else {
+                                0.0
+                            };
+                            for item in items.iter().skip(1) {
+                                if let Value::Number(n) = item {
+                                    if name == "max" {
+                                        if *n > best {
+                                            best = *n;
+                                        }
+                                    } else {
+                                        if *n < best {
+                                            best = *n;
+                                        }
+                                    }
+                                } else {
+                                    return Err(format!(
+                                        "Line {}: {}() with mixed types",
+                                        line, name
+                                    ));
+                                }
+                            }
+                            return Ok(Value::Number(best));
+                        } else if let Value::String(_) = first {
+                            let mut best = if let Value::String(s) = first {
+                                s.clone()
+                            } else {
+                                String::new()
+                            };
+                            for item in items.iter().skip(1) {
+                                if let Value::String(s) = item {
+                                    if name == "max" {
+                                        if s > &best {
+                                            best = s.clone();
+                                        }
+                                    } else {
+                                        if s < &best {
+                                            best = s.clone();
+                                        }
+                                    }
+                                } else {
+                                    return Err(format!(
+                                        "Line {}: {}() with mixed types",
+                                        line, name
+                                    ));
+                                }
+                            }
+                            return Ok(Value::String(best));
+                        } else {
+                            return Err(format!(
+                                "Line {}: {}() only supports numbers and strings",
+                                line, name
+                            ));
+                        }
+                    }
+                    _ => {}
+                }
+
+                let func_val = if let Some(v) = self.env.get(name) {
+                    v
+                } else {
+                    return Err(format!("Line {}: Undefined function '{}'", line, name));
+                };
+
+                if let Value::Function(func_def) = func_val {
+                    let mut final_args = std::collections::HashMap::new();
+                    let mut positional_count = 0;
+
+                    for (kw_opt, val) in eval_args {
+                        if let Some(kw) = kw_opt {
+                            if final_args.contains_key(&kw) {
+                                return Err(format!(
+                                    "Line {}: duplicate keyword argument '{}'",
+                                    line, kw
+                                ));
+                            }
+                            final_args.insert(kw, val);
+                        } else {
+                            if positional_count >= func_def.params.len() {
+                                return Err(format!(
+                                    "Line {}: too many positional arguments",
+                                    line
+                                ));
+                            }
+                            let param_name = &func_def.params[positional_count].name;
+                            final_args.insert(param_name.clone(), val);
+                            positional_count += 1;
                         }
                     }
 
-                    self.send_output();
-                    Ok(Value::Nil)
+                    for param in &func_def.params {
+                        if !final_args.contains_key(&param.name) {
+                            if let Some(default_expr) = &param.default {
+                                let default_val = self.eval_expr(default_expr)?;
+                                final_args.insert(param.name.clone(), default_val);
+                            } else {
+                                return Err(format!(
+                                    "Line {}: missing required argument '{}'",
+                                    line, param.name
+                                ));
+                            }
+                        }
+                    }
+
+                    self.env.push();
+                    for param in &func_def.params {
+                        let val = final_args.remove(&param.name).unwrap();
+                        let _ = self.env.define(param.name.clone(), val, false);
+                    }
+
+                    let res = match self.exec_block(&func_def.body)? {
+                        Signal::Return(v) => v,
+                        _ => Value::Nil,
+                    };
+                    self.env.pop();
+                    return Ok(res);
                 } else {
-                    Err(format!("Line {}: Undefined function '{}'", line, name))
+                    return Err(format!("Line {}: '{}' is not callable", line, name));
                 }
             }
         }

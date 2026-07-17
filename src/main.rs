@@ -127,7 +127,7 @@ fn main() {
                 let mut processed = 0;
                 loop {
                     match rx.try_recv() {
-                        Ok(lines) => {
+                        Ok(nuui::EngineMessage::Output(lines)) => {
                             main_view.editors[i].state.lines = lines;
                             main_view.editors[i].error_count = 0;
                             main_view.editors[i].error_lines.clear();
@@ -136,6 +136,12 @@ fn main() {
                             if processed > 500 {
                                 break;
                             }
+                        }
+                        Ok(nuui::EngineMessage::InputRequest) => {
+                            main_view.editors[i].is_waiting_for_input = true;
+                            main_view.editors[i].input_buffer.clear();
+                            tabs_updated[i] = true;
+                            break;
                         }
                         Err(std::sync::mpsc::TryRecvError::Empty) => break,
                         Err(std::sync::mpsc::TryRecvError::Disconnected) => {
@@ -146,6 +152,8 @@ fn main() {
                 }
                 if disconnected {
                     main_view.editors[i].process_rx = None;
+                    main_view.editors[i].process_input_tx = None;
+                    main_view.editors[i].is_waiting_for_input = false;
                     main_view.running_macros[i] = None;
                     tabs_updated[i] = true;
                 }
@@ -219,6 +227,23 @@ fn main() {
             }
         }
 
+        for i in 0..6 {
+            if !main_view.editors[i].is_editing && main_view.editors[i].is_waiting_for_input {
+                let time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis();
+                let blink = time % 1000 < 500;
+                if blink != main_view.editors[i].last_blink_state {
+                    main_view.editors[i].last_blink_state = blink;
+                    if main_view.current_tab == i {
+                        main_view.refresh_main(&config);
+                        anim_dirty = true;
+                    }
+                }
+            }
+        }
+
         if anim_dirty {
             dirty = true;
         }
@@ -226,51 +251,86 @@ fn main() {
         match key {
             Key::None => continue,
             key => {
-                if main_view.active == main::ActivePanel::Main
-                    && main_view.editors[main_view.current_tab].is_editing
-                {
-                    if key == Key::Char('\x03') {
-                        break;
+                if main_view.active == main::ActivePanel::Main {
+                    let editor = &mut main_view.editors[main_view.current_tab];
+
+                    if editor.is_waiting_for_input && !editor.is_editing {
+                        if !matches!(
+                            key,
+                            Key::Tab | Key::Esc | Key::Up | Key::Down | Key::Left | Key::Right
+                        ) {
+                            match key {
+                                Key::Char('\x03') => {
+                                    if let Some(token) =
+                                        main_view.cancellation_tokens[main_view.current_tab].take()
+                                    {
+                                        token.store(true, std::sync::atomic::Ordering::SeqCst);
+                                    }
+                                }
+                                Key::Enter => {
+                                    if let Some(tx) = &editor.process_input_tx {
+                                        let _ = tx.send(editor.input_buffer.clone());
+                                    }
+                                    editor.is_waiting_for_input = false;
+                                    editor.input_buffer.clear();
+                                }
+                                Key::Backspace | Key::CtrlBackspace => {
+                                    editor.input_buffer.pop();
+                                }
+                                Key::Char(c) if !c.is_control() => {
+                                    editor.input_buffer.push(c);
+                                }
+                                Key::Shift(c) if !c.is_control() => {
+                                    editor.input_buffer.push(c.to_ascii_uppercase());
+                                }
+                                _ => {}
+                            }
+
+                            main_view.refresh_main(&config);
+                            dirty = true;
+                            continue;
+                        }
                     }
-                    if main_view.editors[main_view.current_tab].mode == nuui::editor::Mode::Command
-                        && key == Key::Char('q')
-                    {
-                        break;
-                    }
-                    if main_view.editors[main_view.current_tab].mode == nuui::editor::Mode::Command
-                        && (key == Key::Tab)
-                    {
-                        main_view.toggle_focus(&config);
-                        dirty = true;
-                        continue;
-                    }
-                    if main_view.editors[main_view.current_tab].mode == nuui::editor::Mode::Insert
-                        && key == Key::Tab
-                    {
-                        main_view.editors[main_view.current_tab].handle_key(key, &config);
+
+                    if editor.is_editing {
+                        if key == Key::Char('\x03') {
+                            break;
+                        }
+                        if editor.mode == nuui::editor::Mode::Command && key == Key::Char('q') {
+                            break;
+                        }
+                        if editor.mode == nuui::editor::Mode::Command
+                            && key == Key::Tab
+                            && !editor.visual_mode
+                        {
+                            main_view.toggle_focus(&config);
+                            dirty = true;
+                            continue;
+                        }
+                        if editor.mode == nuui::editor::Mode::Insert && key == Key::Tab {
+                            editor.handle_key(key, &config);
+                            main_view.refresh_main(&config);
+                            dirty = true;
+                            continue;
+                        }
+
+                        let saved = editor.handle_key(key, &config);
+                        if saved {
+                            if let Some(path) = editor.file_path.clone() {
+                                for i in 0..6 {
+                                    if i != main_view.current_tab
+                                        && main_view.editors[i].file_path == Some(path.clone())
+                                    {
+                                        main_view.editors[i].reload_file();
+                                    }
+                                }
+                            }
+                        }
+
                         main_view.refresh_main(&config);
                         dirty = true;
                         continue;
                     }
-
-                    let saved = main_view.editors[main_view.current_tab].handle_key(key, &config);
-                    if saved {
-                        if let Some(path) =
-                            main_view.editors[main_view.current_tab].file_path.clone()
-                        {
-                            for i in 0..6 {
-                                if i != main_view.current_tab
-                                    && main_view.editors[i].file_path == Some(path.clone())
-                                {
-                                    main_view.editors[i].reload_file();
-                                }
-                            }
-                        }
-                    }
-
-                    main_view.refresh_main(&config);
-                    dirty = true;
-                    continue;
                 }
 
                 if main_view.list_input != main::ListInputMode::None {

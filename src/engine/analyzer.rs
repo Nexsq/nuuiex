@@ -46,6 +46,11 @@ impl Analyzer {
 
     pub fn analyze(&mut self, stmts: &[Stmt]) {
         for stmt in stmts {
+            if let Stmt::Fn(name, _, _, _) = stmt {
+                self.define(name);
+            }
+        }
+        for stmt in stmts {
             self.analyze_stmt(stmt);
         }
     }
@@ -114,6 +119,24 @@ impl Analyzer {
                     self.error(*line, "Break statement outside of a loop".into());
                 }
             }
+            Stmt::Fn(_, params, body, _) => {
+                for param in params {
+                    if let Some(default) = &param.default {
+                        self.analyze_expr(default);
+                    }
+                }
+                self.push_scope();
+                for param in params {
+                    self.define(&param.name);
+                }
+                self.analyze(body);
+                self.pop_scope();
+            }
+            Stmt::Return(expr) => {
+                if let Some(e) = expr {
+                    self.analyze_expr(e);
+                }
+            }
         }
     }
 
@@ -149,7 +172,7 @@ impl Analyzer {
             }
             Expr::MethodCall(left, _, args, _) => {
                 self.analyze_expr(left);
-                for arg in args {
+                for (_, arg) in args {
                     self.analyze_expr(arg);
                 }
             }
@@ -158,10 +181,20 @@ impl Analyzer {
                 self.analyze_expr(right);
             }
             Expr::Call(name, args, line) => {
-                if name != "print" && name != "println" && name != "sleep" && name != "exit" {
+                if !self.is_defined(name)
+                    && name != "print"
+                    && name != "println"
+                    && name != "sleep"
+                    && name != "exit"
+                    && name != "range"
+                    && name != "input"
+                    && name != "len"
+                    && name != "max"
+                    && name != "min"
+                {
                     self.error(*line, format!("Undefined function '{}'", name));
                 }
-                for arg in args {
+                for (_, arg) in args {
                     self.analyze_expr(arg);
                 }
             }

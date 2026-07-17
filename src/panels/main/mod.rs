@@ -615,6 +615,8 @@ impl MainView {
             }
             self.running_macros[self.current_tab] = None;
             self.editors[self.current_tab].process_rx = None;
+            self.editors[self.current_tab].process_input_tx = None;
+            self.editors[self.current_tab].is_waiting_for_input = false;
 
             self.editors[self.current_tab].load_file(path, true, rp);
             self.active = ActivePanel::Main;
@@ -644,13 +646,16 @@ impl MainView {
 
             if let Ok(source) = std::fs::read_to_string(&path) {
                 let (tx, rx) = std::sync::mpsc::sync_channel(1024);
+                let (input_tx, input_rx) = std::sync::mpsc::channel();
+
                 let cancel_token = Arc::new(AtomicBool::new(false));
                 let thread_cancel_token = Arc::clone(&cancel_token);
                 std::thread::spawn(move || {
-                    crate::engine::core::run_in_thread(&source, tx, thread_cancel_token);
+                    crate::engine::core::run_in_thread(&source, tx, input_rx, thread_cancel_token);
                 });
 
                 self.editors[self.current_tab].process_rx = Some(rx);
+                self.editors[self.current_tab].process_input_tx = Some(input_tx);
                 self.editors[self.current_tab].state.lines = vec![String::new()];
                 self.cancellation_tokens[self.current_tab] = Some(cancel_token);
             } else {
@@ -663,6 +668,8 @@ impl MainView {
             self.editors[self.current_tab].state.cursor_x = 0;
             self.editors[self.current_tab].state.cursor_y = 0;
             self.editors[self.current_tab].state.selection_start = None;
+            self.editors[self.current_tab].is_waiting_for_input = false;
+            self.editors[self.current_tab].input_buffer.clear();
 
             self.editors[self.current_tab].file_path = None;
             self.running_macros[self.current_tab] = Some(path);

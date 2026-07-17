@@ -29,6 +29,10 @@ pub enum EditAction {
 
 pub struct Editor {
     pub is_editing: bool,
+    pub is_waiting_for_input: bool,
+    pub input_buffer: String,
+    pub last_blink_state: bool,
+
     pub mode: Mode,
     pub visual_mode: bool,
     pub state: EditorState,
@@ -37,6 +41,8 @@ pub struct Editor {
     pub file_path: Option<PathBuf>,
     pub rel_path: String,
     pub clipboard: Option<Clipboard>,
+
+    pub folded_lines: HashSet<usize>,
 
     pub undo_stack: Vec<(EditorState, EditAction)>,
     pub redo_stack: Vec<(EditorState, EditAction)>,
@@ -53,7 +59,8 @@ pub struct Editor {
     pub error_count: usize,
     pub error_lines: HashSet<usize>,
 
-    pub process_rx: Option<std::sync::mpsc::Receiver<Vec<String>>>,
+    pub process_input_tx: Option<std::sync::mpsc::Sender<String>>,
+    pub process_rx: Option<std::sync::mpsc::Receiver<crate::EngineMessage>>,
 }
 
 impl Default for Editor {
@@ -66,6 +73,9 @@ impl Editor {
     pub fn new() -> Self {
         Self {
             is_editing: false,
+            is_waiting_for_input: false,
+            input_buffer: String::new(),
+            last_blink_state: false,
             mode: Mode::Command,
             visual_mode: false,
             state: EditorState {
@@ -79,6 +89,7 @@ impl Editor {
             file_path: None,
             rel_path: String::new(),
             clipboard: Clipboard::new().ok(),
+            folded_lines: HashSet::new(),
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             last_edit_pos: None,
@@ -90,6 +101,7 @@ impl Editor {
             last_search: String::new(),
             error_count: 0,
             error_lines: HashSet::new(),
+            process_input_tx: None,
             process_rx: None,
         }
     }
@@ -131,6 +143,7 @@ impl Editor {
         self.scroll_y = 0;
         self.mode = Mode::Command;
         self.visual_mode = false;
+        self.folded_lines.clear();
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.last_edit_pos = None;
@@ -152,6 +165,7 @@ impl Editor {
                         .collect()
                 };
                 self.state.lines = lines;
+                self.folded_lines.clear();
                 self.clamp_cursor();
                 if self.is_editing {
                     self.refresh_analysis();
@@ -173,6 +187,65 @@ impl Editor {
         self.last_key_file_bounds = false;
         self.last_key_delete = false;
         self.last_key_copy = false;
+    }
+
+    pub fn get_block_end(&self, start_idx: usize) -> usize {
+        let lines = &self.state.lines;
+        if start_idx >= lines.len() {
+            return start_idx;
+        }
+
+        let start_line = &lines[start_idx];
+        let base_indent = start_line.chars().take_while(|c| c.is_whitespace()).count();
+
+        let mut end_idx = start_idx;
+
+        for i in (start_idx + 1)..lines.len() {
+            let line = &lines[i];
+            if line.trim().is_empty() {
+                continue;
+            }
+            let indent = line.chars().take_while(|c| c.is_whitespace()).count();
+            if indent <= base_indent {
+                break;
+            }
+            end_idx = i;
+        }
+        end_idx
+    }
+
+    pub fn get_display_lines(&self) -> Vec<isize> {
+        let mut result = Vec::with_capacity(self.state.lines.len());
+        let mut i = 0;
+        while i < self.state.lines.len() {
+            result.push(i as isize);
+            if self.folded_lines.contains(&i) {
+                let end = self.get_block_end(i);
+                if end > i {
+                    result.push(-1);
+                    i = end + 1;
+                    continue;
+                }
+            }
+            i += 1;
+        }
+        result
+    }
+
+    fn shift_folds(&mut self, after_y: usize, delta: isize) {
+        if self.folded_lines.is_empty() {
+            return;
+        }
+        let mut new_folds = HashSet::new();
+        for &y in &self.folded_lines {
+            if y < after_y {
+                new_folds.insert(y);
+            } else if y == after_y && delta < 0 {
+            } else {
+                new_folds.insert((y as isize + delta) as usize);
+            }
+        }
+        self.folded_lines = new_folds;
     }
 
     fn push_undo(&mut self, action: EditAction) {
@@ -313,6 +386,20 @@ impl Editor {
                                 Some((self.state.cursor_x, self.state.cursor_y));
                         }
                     }
+                    k if k == Key::Char(config.bind_edit_fold) => {
+                        let y = self.state.cursor_y;
+                        if self.folded_lines.contains(&y) {
+                            self.folded_lines.remove(&y);
+                        } else {
+                            let line = &self.state.lines[y];
+                            if line.trim_start().starts_with("fn ") {
+                                let end = self.get_block_end(y);
+                                if end > y {
+                                    self.folded_lines.insert(y);
+                                }
+                            }
+                        }
+                    }
                     k if k == Key::Left || k == Key::Char(config.bind_edit_left) => {
                         self.move_cursor(-1, 0, self.visual_mode)
                     }
@@ -436,6 +523,7 @@ impl Editor {
                             let old = std::mem::replace(&mut self.state, state);
                             self.redo_stack.push((old, a));
                             self.last_edit_pos = None;
+                            self.folded_lines.clear();
                             needs_analysis = true;
                         }
                     }
@@ -444,12 +532,19 @@ impl Editor {
                             let old = std::mem::replace(&mut self.state, state);
                             self.undo_stack.push((old, a));
                             self.last_edit_pos = None;
+                            self.folded_lines.clear();
                             needs_analysis = true;
                         }
                     }
                     k if k == Key::Char(config.bind_edit_save) => {
                         self.save();
                         saved = true;
+                    }
+                    Key::Tab => {
+                        if self.visual_mode {
+                            self.indent_selection();
+                            needs_analysis = true;
+                        }
                     }
                     _ => {}
                 }
@@ -618,12 +713,31 @@ impl Editor {
             self.state.selection_start = None;
         }
 
-        let y = self.state.cursor_y as isize + dy;
-        let y = y.clamp(0, self.state.lines.len().saturating_sub(1) as isize) as usize;
-        self.state.cursor_y = y;
+        let d_lines = self.get_display_lines();
+        let current_d_idx = d_lines
+            .iter()
+            .position(|&x| x == self.state.cursor_y as isize)
+            .unwrap_or(0);
+
+        let mut target_d_idx = current_d_idx as isize + dy;
+        target_d_idx = target_d_idx.clamp(0, d_lines.len().saturating_sub(1) as isize);
+
+        let mut new_y = d_lines[target_d_idx as usize];
+        if new_y == -1 {
+            if dy > 0 {
+                target_d_idx = (target_d_idx + 1).min(d_lines.len() as isize - 1);
+            } else if dy < 0 {
+                target_d_idx = (target_d_idx - 1).max(0);
+            }
+            new_y = d_lines[target_d_idx as usize];
+        }
+
+        if new_y != -1 {
+            self.state.cursor_y = new_y as usize;
+        }
 
         let x = self.state.cursor_x as isize + dx;
-        let max_x = self.state.lines[y].chars().count();
+        let max_x = self.state.lines[self.state.cursor_y].chars().count();
         let x = x.clamp(0, max_x as isize) as usize;
         self.state.cursor_x = x;
     }
@@ -659,6 +773,7 @@ impl Editor {
             .unwrap_or(line.len());
         let new_line = line.split_off(byte_idx);
         self.state.lines.insert(self.state.cursor_y + 1, new_line);
+        self.shift_folds(self.state.cursor_y + 1, 1);
         self.state.cursor_y += 1;
         self.state.cursor_x = 0;
     }
@@ -730,6 +845,7 @@ impl Editor {
         if self.state.cursor_x >= line_len {
             if self.state.cursor_y < self.state.lines.len().saturating_sub(1) {
                 let next_line = self.state.lines.remove(self.state.cursor_y + 1);
+                self.shift_folds(self.state.cursor_y + 1, -1);
                 self.state.lines[self.state.cursor_y].push_str(&next_line);
             }
             return;
@@ -799,6 +915,7 @@ impl Editor {
             self.state.cursor_x -= 1;
         } else if self.state.cursor_y > 0 {
             let current_line = self.state.lines.remove(self.state.cursor_y);
+            self.shift_folds(self.state.cursor_y, -1);
             self.state.cursor_y -= 1;
             let prev_line = &mut self.state.lines[self.state.cursor_y];
             self.state.cursor_x = prev_line.chars().count();
@@ -818,6 +935,7 @@ impl Editor {
             line.remove(byte_idx);
         } else if self.state.cursor_y < self.state.lines.len().saturating_sub(1) {
             let next_line = self.state.lines.remove(self.state.cursor_y + 1);
+            self.shift_folds(self.state.cursor_y + 1, -1);
             self.state.lines[self.state.cursor_y].push_str(&next_line);
         }
         self.clamp_cursor();
@@ -825,6 +943,7 @@ impl Editor {
 
     fn delete_current_line(&mut self) {
         self.state.lines.remove(self.state.cursor_y);
+        self.shift_folds(self.state.cursor_y, -1);
         if self.state.lines.is_empty() {
             self.state.lines.push(String::new());
         }
@@ -846,6 +965,8 @@ impl Editor {
                 if lines_to_insert.is_empty() {
                     return;
                 }
+
+                self.folded_lines.clear();
 
                 let line = &mut self.state.lines[self.state.cursor_y];
                 let byte_idx = line
@@ -906,8 +1027,28 @@ impl Editor {
         }
     }
 
+    fn indent_selection(&mut self) {
+        if let Some((start, end)) = self.get_selection_bounds() {
+            self.push_undo(EditAction::Bulk);
+            for y in start.1..=end.1 {
+                let mut new_line = String::from("    ");
+                new_line.push_str(&self.state.lines[y]);
+                self.state.lines[y] = new_line;
+            }
+
+            self.state.cursor_x += 4;
+            if let Some(sel) = self.state.selection_start.as_mut() {
+                sel.0 += 4;
+            }
+
+            self.clamp_cursor();
+        }
+    }
+
     fn delete_selection(&mut self) {
         if let Some((start, end)) = self.get_selection_bounds() {
+            self.folded_lines.clear();
+
             if start.1 == end.1 {
                 let line = &self.state.lines[start.1];
                 let byte_start = line
@@ -1251,10 +1392,16 @@ impl Editor {
 
         let text_inner_w = inner_w.saturating_sub(prefix_width);
 
-        if self.state.cursor_y < self.scroll_y {
-            self.scroll_y = self.state.cursor_y;
-        } else if self.state.cursor_y >= self.scroll_y + text_inner_h && text_inner_h > 0 {
-            self.scroll_y = self.state.cursor_y - text_inner_h + 1;
+        let d_lines = self.get_display_lines();
+        let cursor_d_idx = d_lines
+            .iter()
+            .position(|&x| x == self.state.cursor_y as isize)
+            .unwrap_or(0);
+
+        if cursor_d_idx < self.scroll_y {
+            self.scroll_y = cursor_d_idx;
+        } else if cursor_d_idx >= self.scroll_y + text_inner_h && text_inner_h > 0 {
+            self.scroll_y = cursor_d_idx - text_inner_h + 1;
         }
 
         if self.state.cursor_x < self.scroll_x {
@@ -1268,15 +1415,36 @@ impl Editor {
         let mut line_chars: Vec<_> = Vec::with_capacity(128);
         let mut syntax_colors = Vec::with_capacity(128);
 
-        for (i, line) in self
-            .state
-            .lines
+        for (display_idx, &actual_y) in d_lines
             .iter()
             .enumerate()
             .skip(self.scroll_y)
             .take(text_inner_h)
         {
-            let display_y = (i - self.scroll_y) as i16;
+            let display_y = (display_idx - self.scroll_y) as i16;
+
+            if actual_y == -1 {
+                if show_line_numbers {
+                    let dot_str = ".".repeat(max_num_width);
+                    let prefix_style = Style {
+                        fg: Color::DarkGray,
+                        bg: Color::None,
+                        md: Modifier::Dim,
+                    };
+                    for (idx, c) in dot_str.chars().enumerate() {
+                        if idx < inner_w {
+                            b.put_cell(
+                                crate::Cell { c, s: prefix_style },
+                                idx as u16 + 1,
+                                display_y as u16 + 1,
+                            );
+                        }
+                    }
+                }
+                continue;
+            }
+
+            let i = actual_y as usize;
 
             if show_line_numbers {
                 let prefix_str = format!("{:>w$}", i + 1, w = max_num_width);
@@ -1299,8 +1467,28 @@ impl Editor {
 
             let is_error_line = self.is_editing && self.error_lines.contains(&(i + 1));
             line_chars.clear();
-            line_chars.extend(line.chars());
+
+            let mut line_str = self.state.lines[i].as_str();
+            if self.folded_lines.contains(&i) {
+                if let Some(pos) = line_str.rfind(':') {
+                    line_str = &line_str[..pos];
+                }
+            }
+            line_chars.extend(line_str.chars());
+
             syntax_colors.clear();
+
+            if !self.is_editing
+                && self.is_waiting_for_input
+                && i == self.state.lines.len().saturating_sub(1)
+            {
+                line_chars.extend(self.input_buffer.chars());
+                if self.last_blink_state {
+                    line_chars.push('_');
+                } else {
+                    line_chars.push(' ');
+                }
+            }
 
             if self.is_editing {
                 let mut idx = 0;
@@ -1355,6 +1543,8 @@ impl Editor {
                             word_chars,
                             ['l', 'e', 't']
                                 | ['c', 'o', 'n', 's', 't']
+                                | ['f', 'n']
+                                | ['r', 'e', 't', 'u', 'r', 'n']
                                 | ['l', 'o', 'o', 'p']
                                 | ['w', 'h', 'i', 'l', 'e']
                                 | ['f', 'o', 'r']

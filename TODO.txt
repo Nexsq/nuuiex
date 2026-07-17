@@ -1,5 +1,3 @@
 test monitor on nvidia gpu on linux
 
-add to macro engine:
-- user defined functions
-- range() function
+add isnum() or something like this to validate user gave a number in input

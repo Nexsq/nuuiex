@@ -1,5 +1,5 @@
 mod config;
-mod engine;
+pub mod engine;
 mod library;
 mod panels;
 mod render;
@@ -10,6 +10,7 @@ pub use render::style::{Border, Color, Gradient, Modifier, Style};
 pub use render::terminal::{Key, Terminal};
 
 pub use config::conf;
+pub use engine::core::EngineMessage;
 pub use library::lib;
 pub use panels::{editor, error, main, result::PanelResult, settings, toosmall};
 pub use theme::themecore;

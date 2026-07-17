@@ -41,6 +41,7 @@ pub struct Config {
 
     pub bind_edit_insert: char,
     pub bind_edit_visual: char,
+    pub bind_edit_fold: char,
     pub bind_edit_left: char,
     pub bind_edit_right: char,
     pub bind_edit_up: char,
@@ -106,6 +107,7 @@ impl Default for Config {
 
             bind_edit_insert: '\0',
             bind_edit_visual: '\0',
+            bind_edit_fold: '\0',
             bind_edit_left: '\0',
             bind_edit_right: '\0',
             bind_edit_up: '\0',
@@ -229,6 +231,13 @@ impl Config {
                             .chars()
                             .next()
                             .unwrap_or(self.bind_edit_visual)
+                            .to_ascii_lowercase()
+                    }
+                    "bind_edit_fold" => {
+                        self.bind_edit_fold = val
+                            .chars()
+                            .next()
+                            .unwrap_or(self.bind_edit_fold)
                             .to_ascii_lowercase()
                     }
                     "bind_edit_left" => {
@@ -446,6 +455,7 @@ impl Config {
         let default = Config::default();
         self.bind_edit_insert = default.bind_edit_insert;
         self.bind_edit_visual = default.bind_edit_visual;
+        self.bind_edit_fold = default.bind_edit_fold;
         self.bind_edit_left = default.bind_edit_left;
         self.bind_edit_right = default.bind_edit_right;
         self.bind_edit_up = default.bind_edit_up;
@@ -666,6 +676,12 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.bind_edit_visual, comment
+                    )
+                    .unwrap(),
+                    "bind_edit_fold" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_edit_fold, comment
                     )
                     .unwrap(),
                     "bind_edit_left" => writeln!(
