@@ -816,6 +816,7 @@ fn simulate_key(key: &str, down: bool) -> Result<(), String> {
     let fd = get_or_create_uinput()?;
 
     #[repr(C)]
+    #[derive(Clone, Copy)]
     struct input_event {
         time: libc::timeval,
         type_: u16,
@@ -823,39 +824,41 @@ fn simulate_key(key: &str, down: bool) -> Result<(), String> {
         value: i32,
     }
 
-    let mut evs = Vec::with_capacity(8);
+    let mut evs: Vec<input_event> = Vec::with_capacity(8);
 
-    let mut add_ev = |code: u16, val: i32| {
-        let mut ev: input_event = unsafe { std::mem::zeroed() };
-        ev.type_ = 1;
-        ev.code = code;
-        ev.value = val;
-        evs.push(ev);
-    };
+    macro_rules! add_ev {
+        ($code:expr, $val:expr) => {
+            let mut ev: input_event = unsafe { std::mem::zeroed() };
+            ev.type_ = 1;
+            ev.code = $code;
+            ev.value = $val;
+            evs.push(ev);
+        };
+    }
 
     if down {
         if info.req_shift {
-            add_ev(42, 1);
+            add_ev!(42, 1);
         }
         if info.req_ctrl {
-            add_ev(29, 1);
+            add_ev!(29, 1);
         }
         if info.req_alt {
-            add_ev(56, 1);
+            add_ev!(56, 1);
         }
     }
 
-    add_ev(info.code, if down { 1 } else { 0 });
+    add_ev!(info.code, if down { 1 } else { 0 });
 
     if !down {
         if info.req_alt {
-            add_ev(56, 0);
+            add_ev!(56, 0);
         }
         if info.req_ctrl {
-            add_ev(29, 0);
+            add_ev!(29, 0);
         }
         if info.req_shift {
-            add_ev(42, 0);
+            add_ev!(42, 0);
         }
     }
 
@@ -881,6 +884,7 @@ fn simulate_write(text: &str) -> Result<(), String> {
     let fd = get_or_create_uinput()?;
 
     #[repr(C)]
+    #[derive(Clone, Copy)]
     struct input_event {
         time: libc::timeval,
         type_: u16,
@@ -896,27 +900,29 @@ fn simulate_write(text: &str) -> Result<(), String> {
         };
 
         if let Ok(info) = parse_linux_key(&key_str) {
-            let mut evs = Vec::with_capacity(4);
+            let mut evs: Vec<input_event> = Vec::with_capacity(8);
 
-            let mut add_ev = |code: u16, val: i32| {
-                let mut ev: input_event = unsafe { std::mem::zeroed() };
-                ev.type_ = 1;
-                ev.code = code;
-                ev.value = val;
-                evs.push(ev);
-            };
+            macro_rules! add_ev {
+                ($code:expr, $val:expr) => {
+                    let mut ev: input_event = unsafe { std::mem::zeroed() };
+                    ev.type_ = 1;
+                    ev.code = $code;
+                    ev.value = $val;
+                    evs.push(ev);
+                };
+            }
 
             if info.req_shift {
-                add_ev(42, 1);
+                add_ev!(42, 1);
             }
             if info.req_ctrl {
-                add_ev(29, 1);
+                add_ev!(29, 1);
             }
             if info.req_alt {
-                add_ev(56, 1);
+                add_ev!(56, 1);
             }
 
-            add_ev(info.code, 1);
+            add_ev!(info.code, 1);
 
             let mut syn: input_event = unsafe { std::mem::zeroed() };
             syn.type_ = 0;
@@ -935,16 +941,16 @@ fn simulate_write(text: &str) -> Result<(), String> {
             std::thread::sleep(std::time::Duration::from_millis(2));
 
             evs.clear();
-            add_ev(info.code, 0);
+            add_ev!(info.code, 0);
 
             if info.req_alt {
-                add_ev(56, 0);
+                add_ev!(56, 0);
             }
             if info.req_ctrl {
-                add_ev(29, 0);
+                add_ev!(29, 0);
             }
             if info.req_shift {
-                add_ev(42, 0);
+                add_ev!(42, 0);
             }
 
             evs.push(syn);
