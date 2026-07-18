@@ -28,12 +28,15 @@ pub const BUILTIN_FUNCS: &[&str] = &[
     "onwindows",
     "isdown",
     "isup",
+    "isdownfocus",
+    "isupfocus",
     "keydown",
     "keyup",
     "write",
     "cursorx",
     "cursory",
     "setcursor",
+    "clear",
 ];
 
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {

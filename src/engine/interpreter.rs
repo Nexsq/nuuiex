@@ -202,6 +202,134 @@ fn parse_win_key(key: &str) -> Result<WinKeyInfo, String> {
     Ok(info)
 }
 
+fn check_key_down_focus(key_str: &str) -> Result<bool, String> {
+    use crate::render::terminal::{FOCUSED_KEY, Key};
+    let target_key = match key_str.to_lowercase().as_str() {
+        "alt" | "menu" => Key::None,
+        "shift" => Key::None,
+        "ctrl" | "control" => Key::None,
+        "up" => Key::Up,
+        "down" => Key::Down,
+        "left" => Key::Left,
+        "right" => Key::Right,
+        "shiftup" => Key::ShiftUp,
+        "shiftdown" => Key::ShiftDown,
+        "shiftleft" => Key::ShiftLeft,
+        "shiftright" => Key::ShiftRight,
+        "ctrlup" => Key::CtrlUp,
+        "ctrldown" => Key::CtrlDown,
+        "ctrlleft" => Key::CtrlLeft,
+        "ctrlright" => Key::CtrlRight,
+        "ctrlshiftup" => Key::CtrlShiftUp,
+        "ctrlshiftdown" => Key::CtrlShiftDown,
+        "ctrlshiftleft" => Key::CtrlShiftLeft,
+        "ctrlshiftright" => Key::CtrlShiftRight,
+        "del" | "delete" => Key::Delete,
+        "ctrldelete" => Key::CtrlDelete,
+        "esc" | "escape" => Key::Esc,
+        "enter" | "return" | "\n" => Key::Enter,
+        "tab" | "\t" => Key::Tab,
+        "backspace" | "back" => Key::Backspace,
+        "ctrlbackspace" => Key::CtrlBackspace,
+        "f1" => Key::F(1),
+        "f2" => Key::F(2),
+        "f3" => Key::F(3),
+        "f4" => Key::F(4),
+        "f5" => Key::F(5),
+        "f6" => Key::F(6),
+        "f7" => Key::F(7),
+        "f8" => Key::F(8),
+        "f9" => Key::F(9),
+        "f10" => Key::F(10),
+        "f11" => Key::F(11),
+        "f12" => Key::F(12),
+        "f13" => Key::F(13),
+        "f14" => Key::F(14),
+        "f15" => Key::F(15),
+        "f16" => Key::F(16),
+        "f17" => Key::F(17),
+        "f18" => Key::F(18),
+        "f19" => Key::F(19),
+        "f20" => Key::F(20),
+        "f21" => Key::F(21),
+        "f22" => Key::F(22),
+        "f23" => Key::F(23),
+        "f24" => Key::F(24),
+        "space" => Key::Char(' '),
+        "lwin" | "rwin" | "cmd" | "super" | "win" => Key::None,
+        s if s.chars().count() == 1 => {
+            let c = s.chars().next().unwrap();
+            if key_str.chars().next().unwrap().is_ascii_uppercase() {
+                Key::Shift(c.to_ascii_lowercase())
+            } else {
+                Key::Char(c)
+            }
+        }
+        _ => return Err(format!("Unrecognized focus key: '{}'", key_str)),
+    };
+
+    if let Ok(fk) = FOCUSED_KEY.lock() {
+        if let Some((ref k, time)) = *fk {
+            if time.elapsed() < std::time::Duration::from_millis(40) {
+                if key_str == "alt" || key_str == "menu" {
+                    if matches!(k, Key::Alt(_)) {
+                        return Ok(true);
+                    }
+                }
+                if key_str == "shift" {
+                    if matches!(
+                        k,
+                        Key::Shift(_)
+                            | Key::ShiftUp
+                            | Key::ShiftDown
+                            | Key::ShiftLeft
+                            | Key::ShiftRight
+                            | Key::CtrlShiftUp
+                            | Key::CtrlShiftDown
+                            | Key::CtrlShiftLeft
+                            | Key::CtrlShiftRight
+                    ) {
+                        return Ok(true);
+                    }
+                }
+                if key_str == "ctrl" || key_str == "control" {
+                    if matches!(
+                        k,
+                        Key::Ctrl(_)
+                            | Key::CtrlUp
+                            | Key::CtrlDown
+                            | Key::CtrlLeft
+                            | Key::CtrlRight
+                            | Key::CtrlShiftUp
+                            | Key::CtrlShiftDown
+                            | Key::CtrlShiftLeft
+                            | Key::CtrlShiftRight
+                            | Key::CtrlBackspace
+                            | Key::CtrlDelete
+                    ) {
+                        return Ok(true);
+                    }
+                }
+                if k == &target_key && target_key != Key::None {
+                    return Ok(true);
+                }
+                match (&target_key, k) {
+                    (Key::Char(t), Key::Shift(p))
+                    | (Key::Shift(t), Key::Char(p))
+                    | (Key::Char(t), Key::Alt(p))
+                    | (Key::Char(t), Key::Ctrl(p)) => {
+                        if t.to_ascii_lowercase() == p.to_ascii_lowercase() {
+                            return Ok(true);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
 #[cfg(windows)]
 fn check_key_down(key: &str) -> Result<bool, String> {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
@@ -1133,6 +1261,11 @@ fn get_cursor_pos() -> Result<(i32, i32), String> {
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]
+fn check_key_down(key: &str) -> Result<bool, String> {
+    Err("Key checking is not supported on this OS".to_string())
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 fn get_cursor_pos() -> Result<(i32, i32), String> {
     Err("Cursor position is not supported on this OS".to_string())
 }
@@ -1283,6 +1416,12 @@ impl Environment {
             true,
         )
         .unwrap();
+        env.define(
+            "Color".to_string(),
+            Value::BuiltinEnum("Color".to_string()),
+            true,
+        )
+        .unwrap();
         env
     }
 
@@ -1303,11 +1442,10 @@ impl Environment {
         let mut last_consts = self.constants.last().unwrap().lock().unwrap();
 
         if last_scope.contains_key(&name) {
-            if last_consts.contains(&name) {
-                return Err(format!("Cannot modify constant '{}'", name));
-            }
-            last_scope.insert(name.clone(), val);
-            return Ok(());
+            return Err(format!(
+                "Variable '{}' is already defined in this scope",
+                name
+            ));
         }
 
         last_scope.insert(name.clone(), val);
@@ -1379,7 +1517,7 @@ impl Interpreter {
         }
     }
 
-    fn send_output(&mut self) {
+    fn send_output(&mut self, is_finished: bool) {
         let mut out_lock = self.output.lock().unwrap();
         let cur_lock = self.current_line.lock().unwrap();
         let err_lock = self.errors.lock().unwrap();
@@ -1403,7 +1541,7 @@ impl Interpreter {
             res.extend(err_lock.clone());
         }
 
-        if res.is_empty() {
+        if is_finished && res.is_empty() {
             res.push("Finished with no output.".to_string());
         }
 
@@ -1418,7 +1556,7 @@ impl Interpreter {
 
     pub fn exec(&mut self, stmts: &[Stmt]) {
         let _ = self.exec_block(stmts);
-        self.send_output();
+        self.send_output(true);
     }
 
     fn exec_block(&mut self, stmts: &[Stmt]) -> Result<Signal, String> {
@@ -2086,7 +2224,7 @@ impl Interpreter {
                     };
 
                     let _ = async_interp.exec_block(&body_clone);
-                    async_interp.send_output();
+                    async_interp.send_output(false);
                 });
 
                 Ok(Signal::Empty)
@@ -2315,6 +2453,10 @@ impl Interpreter {
                                 line, prop
                             ));
                         }
+                    } else if enum_name == "Color" {
+                        if crate::theme::themecore::parse_color(&prop).is_err() {
+                            return Err(format!("Line {}: Invalid color variant '{}'", line, prop));
+                        }
                     }
                     Ok(Value::EnumVariant(enum_name, prop.clone(), None))
                 } else {
@@ -2418,18 +2560,32 @@ impl Interpreter {
                                 line, method
                             ));
                         }
-                    }
-                    if eval_args.len() != 1 {
-                        return Err(format!(
-                            "Line {}: Enum variant constructor expects exactly 1 argument",
-                            line
+                        if eval_args.len() != 1 {
+                            return Err(format!(
+                                "Line {}: Enum variant constructor expects exactly 1 argument",
+                                line
+                            ));
+                        }
+                        return Ok(Value::EnumVariant(
+                            enum_name.clone(),
+                            method.clone(),
+                            Some(Box::new(eval_args[0].clone())),
                         ));
+                    } else if enum_name == "Color" {
+                        if crate::theme::themecore::parse_color(&method).is_err() {
+                            return Err(format!(
+                                "Line {}: Invalid color variant '{}'",
+                                line, method
+                            ));
+                        }
+                        if !eval_args.is_empty() {
+                            return Err(format!(
+                                "Line {}: Color variant does not take arguments",
+                                line
+                            ));
+                        }
+                        return Ok(Value::EnumVariant(enum_name.clone(), method.clone(), None));
                     }
-                    return Ok(Value::EnumVariant(
-                        enum_name.clone(),
-                        method.clone(),
-                        Some(Box::new(eval_args[0].clone())),
-                    ));
                 }
 
                 let res = self.apply_method(&mut left_val, method, eval_args, *line)?;
@@ -2493,7 +2649,7 @@ impl Interpreter {
                             self.output.lock().unwrap().push(prev_line);
                         }
 
-                        self.send_output();
+                        self.send_output(false);
                         return Ok(Value::Nil);
                     }
                     "sleep" => {
@@ -2596,7 +2752,7 @@ impl Interpreter {
                             let prompt = eval_args[0].1.to_string();
                             self.current_line.lock().unwrap().push_str(&prompt);
                         }
-                        self.send_output();
+                        self.send_output(false);
 
                         if self.tx.send(crate::EngineMessage::InputRequest).is_err() {
                             self.should_exit = true;
@@ -2779,7 +2935,7 @@ impl Interpreter {
                         }
                         return Ok(Value::Bool(cfg!(target_os = "linux")));
                     }
-                    "isdown" | "isup" => {
+                    "isdown" | "isup" | "isdownfocus" | "isupfocus" => {
                         if eval_args.len() != 1 {
                             return Err(format!(
                                 "Line {}: '{}' expects exactly 1 argument",
@@ -2792,12 +2948,19 @@ impl Interpreter {
                             Err(e) => return Err(format!("Line {}: {}", line, e)),
                         };
 
-                        let is_down = match check_key_down(&key_str) {
-                            Ok(b) => b,
-                            Err(e) => return Err(format!("Line {}: {}", line, e)),
+                        let is_down = if name.ends_with("focus") {
+                            match check_key_down_focus(&key_str) {
+                                Ok(b) => b,
+                                Err(e) => return Err(format!("Line {}: {}", line, e)),
+                            }
+                        } else {
+                            match check_key_down(&key_str) {
+                                Ok(b) => b,
+                                Err(e) => return Err(format!("Line {}: {}", line, e)),
+                            }
                         };
 
-                        if name == "isdown" {
+                        if name.starts_with("isdown") {
                             return Ok(Value::Bool(is_down));
                         } else {
                             return Ok(Value::Bool(!is_down));
@@ -2891,6 +3054,18 @@ impl Interpreter {
                         };
                         set_cursor_pos(x, y, relative)
                             .map_err(|e| format!("Line {}: {}", line, e))?;
+                        return Ok(Value::Nil);
+                    }
+                    "clear" => {
+                        if eval_args.len() != 0 {
+                            return Err(format!(
+                                "Line {}: 'clear' expects exactly 0 arguments",
+                                line
+                            ));
+                        }
+                        self.output.lock().unwrap().clear();
+                        self.current_line.lock().unwrap().clear();
+                        self.send_output(false);
                         return Ok(Value::Nil);
                     }
                     _ => {}

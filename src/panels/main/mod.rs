@@ -227,6 +227,7 @@ impl MainView {
                 self.editors[i].file_path = None;
                 self.running_macros[i] = None;
                 self.editors[i].process_rx = None;
+                self.editors[i].is_output = false;
                 self.editors[i].state.lines = vec![String::new()];
                 self.editors[i].folded_lines.clear();
                 self.editors[i].error_count = 0;
@@ -679,6 +680,7 @@ impl MainView {
             self.running_macros[self.current_tab] = Some(path);
             self.active = ActivePanel::Main;
             self.editors[self.current_tab].is_editing = false;
+            self.editors[self.current_tab].is_output = true;
             self.editors[self.current_tab].error_count = 0;
             self.editors[self.current_tab].error_lines.clear();
             self.refresh_main(config);

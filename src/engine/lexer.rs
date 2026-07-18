@@ -575,15 +575,29 @@ impl<'a> Lexer<'a> {
 
     fn number(&mut self) -> Token {
         let start = self.current_byte_pos();
+        let mut has_dot = false;
 
         while self.peek().is_ascii_digit() {
             self.advance();
         }
         if self.peek() == '.' {
+            has_dot = true;
             self.advance();
             while self.peek().is_ascii_digit() {
                 self.advance();
             }
+        }
+
+        if !has_dot && (self.peek().is_alphabetic() || self.peek() == '_') {
+            while self.peek().is_alphanumeric() || self.peek() == '_' {
+                self.advance();
+            }
+            let end = self.current_byte_pos();
+            let text = &self.source[start..end];
+            return Token {
+                kind: TokenKind::Ident(text.to_string()),
+                line: self.line,
+            };
         }
 
         let end = self.current_byte_pos();

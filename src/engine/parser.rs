@@ -543,53 +543,61 @@ impl Parser {
                 }
             } else if !self.in_dict_key
                 && self.check(&TokenKind::Colon)
-                && matches!(self.peek_next_kind(), Some(TokenKind::Ident(_)))
+                && (matches!(self.peek_next_kind(), Some(TokenKind::Ident(_)))
+                    || matches!(self.peek_next_kind(), Some(TokenKind::Number(_))))
             {
                 let line = self.advance().line;
-                if let TokenKind::Ident(method) = self.peek().kind.clone() {
+                let method = match self.peek().kind.clone() {
+                    TokenKind::Ident(m) => m,
+                    TokenKind::Number(n) => {
+                        if n.fract() == 0.0 && n >= 0.0 && n <= 999999.0 {
+                            format!("{:06}", n as u64)
+                        } else {
+                            n.to_string()
+                        }
+                    }
+                    _ => unreachable!(),
+                };
+                self.advance();
+
+                if self.check(&TokenKind::LParen) {
                     self.advance();
-                    if self.check(&TokenKind::LParen) {
-                        self.advance();
-                        let mut args = Vec::new();
+                    let mut args = Vec::new();
 
-                        if !self.check(&TokenKind::RParen) {
-                            loop {
-                                let mut kw_name = None;
-                                if let TokenKind::Ident(ref n) = self.peek().kind {
-                                    if self.tokens.get(self.current + 1).map(|t| &t.kind)
-                                        == Some(&TokenKind::Eq)
-                                    {
-                                        kw_name = Some(n.clone());
-                                        self.advance();
-                                        self.advance();
-                                    }
-                                }
-
-                                if let Some(arg) = self.parse_expression() {
-                                    args.push((kw_name, arg));
-                                } else {
-                                    return None;
-                                }
-                                if self.check(&TokenKind::Comma) {
+                    if !self.check(&TokenKind::RParen) {
+                        loop {
+                            let mut kw_name = None;
+                            if let TokenKind::Ident(ref n) = self.peek().kind {
+                                if self.tokens.get(self.current + 1).map(|t| &t.kind)
+                                    == Some(&TokenKind::Eq)
+                                {
+                                    kw_name = Some(n.clone());
                                     self.advance();
-                                } else {
-                                    break;
+                                    self.advance();
                                 }
                             }
+
+                            if let Some(arg) = self.parse_expression() {
+                                args.push((kw_name, arg));
+                            } else {
+                                return None;
+                            }
+                            if self.check(&TokenKind::Comma) {
+                                self.advance();
+                            } else {
+                                break;
+                            }
                         }
-                        if self.check(&TokenKind::RParen) {
-                            self.advance();
-                            expr = Expr::MethodCall(Box::new(expr), method, args, line);
-                        } else {
-                            self.error("Expected ')' after arguments.");
-                            return None;
-                        }
+                    }
+                    if self.check(&TokenKind::RParen) {
+                        self.advance();
+                        expr = Expr::MethodCall(Box::new(expr), method, args, line);
                     } else {
-                        expr = Expr::StaticAccess(Box::new(expr), method, line);
+                        self.error("Expected ')' after arguments.");
+                        return None;
                     }
                 } else {
-                    self.error("Expected identifier after ':'.");
-                    return None;
+                    expr = Expr::StaticAccess(Box::new(expr), method, line);
                 }
             } else {
                 break;

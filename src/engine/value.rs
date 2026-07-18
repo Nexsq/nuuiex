@@ -152,7 +152,9 @@ impl fmt::Display for Value {
             Value::Function(func) => write!(f, "<function {}>", func.name),
             Value::BuiltinEnum(s) => write!(f, "{}", s),
             Value::EnumVariant(e, v, inner) => {
-                if let Some(i) = inner {
+                if e == "Color" {
+                    write!(f, "{{Color:{}}}", v)
+                } else if let Some(i) = inner {
                     write!(f, "{}::{}({})", e, v, i)
                 } else {
                     write!(f, "{}::{}", e, v)

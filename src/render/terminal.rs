@@ -3,7 +3,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::Duration;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Key {
     Up,
     Down,
@@ -26,6 +26,7 @@ pub enum Key {
     Char(char),
     Shift(char),
     Ctrl(char),
+    Alt(char),
     Esc,
     Enter,
     Tab,
@@ -34,6 +35,9 @@ pub enum Key {
     None,
     F(u8),
 }
+
+pub static FOCUSED_KEY: std::sync::Mutex<Option<(Key, std::time::Instant)>> =
+    std::sync::Mutex::new(None);
 
 pub struct Terminal {
     _raw_guard: sys::RawModeGuard,
@@ -92,68 +96,72 @@ impl Terminal {
             9 => Key::Tab,
             13 => Key::Enter,
             127 => Key::Backspace,
-            27 => {
-                match self.key_rx.recv_timeout(Duration::from_millis(16)) {
-                    Ok(127) | Ok(8) => return Key::CtrlBackspace,
-                    Ok(b'[') => {
-                        let mut seq = Vec::new();
-                        loop {
-                            match self.key_rx.recv_timeout(Duration::from_millis(16)) {
-                                Ok(b) => {
-                                    seq.push(b);
-                                    if b.is_ascii_alphabetic() || b == b'~' {
-                                        break;
-                                    }
+            27 => match self.key_rx.recv_timeout(Duration::from_millis(16)) {
+                Ok(127) | Ok(8) => return Key::CtrlBackspace,
+                Ok(b'[') => {
+                    let mut seq = Vec::new();
+                    loop {
+                        match self.key_rx.recv_timeout(Duration::from_millis(16)) {
+                            Ok(b) => {
+                                seq.push(b);
+                                if b.is_ascii_alphabetic() || b == b'~' {
+                                    break;
                                 }
-                                Err(_) => break,
                             }
+                            Err(_) => break,
                         }
-                        return match seq.as_slice() {
-                            b"A" => Key::Up,
-                            b"B" => Key::Down,
-                            b"C" => Key::Right,
-                            b"D" => Key::Left,
-                            b"1;2A" => Key::ShiftUp,
-                            b"1;2B" => Key::ShiftDown,
-                            b"1;2C" => Key::ShiftRight,
-                            b"1;2D" => Key::ShiftLeft,
-                            b"1;5A" => Key::CtrlUp,
-                            b"1;5B" => Key::CtrlDown,
-                            b"1;5C" => Key::CtrlRight,
-                            b"1;5D" => Key::CtrlLeft,
-                            b"1;6A" => Key::CtrlShiftUp,
-                            b"1;6B" => Key::CtrlShiftDown,
-                            b"1;6C" => Key::CtrlShiftRight,
-                            b"1;6D" => Key::CtrlShiftLeft,
-                            b"3~" => Key::Delete,
-                            b"3;5~" => Key::CtrlDelete,
-                            b"127;5u" => Key::CtrlBackspace,
-                            b"11~" => Key::F(1),
-                            b"12~" => Key::F(2),
-                            b"13~" => Key::F(3),
-                            b"14~" => Key::F(4),
-                            b"15~" => Key::F(5),
-                            b"17~" => Key::F(6),
-                            b"18~" => Key::F(7),
-                            b"19~" => Key::F(8),
-                            b"20~" => Key::F(9),
-                            b"21~" => Key::F(10),
-                            b"23~" => Key::F(11),
-                            b"24~" => Key::F(12),
-                            _ => Key::None,
-                        };
                     }
-                    Ok(b'O') => match self.key_rx.recv_timeout(Duration::from_millis(16)) {
-                        Ok(b'P') => return Key::F(1),
-                        Ok(b'Q') => return Key::F(2),
-                        Ok(b'R') => return Key::F(3),
-                        Ok(b'S') => return Key::F(4),
-                        _ => return Key::Esc,
-                    },
-                    _ => {}
+                    return match seq.as_slice() {
+                        b"A" => Key::Up,
+                        b"B" => Key::Down,
+                        b"C" => Key::Right,
+                        b"D" => Key::Left,
+                        b"1;2A" => Key::ShiftUp,
+                        b"1;2B" => Key::ShiftDown,
+                        b"1;2C" => Key::ShiftRight,
+                        b"1;2D" => Key::ShiftLeft,
+                        b"1;5A" => Key::CtrlUp,
+                        b"1;5B" => Key::CtrlDown,
+                        b"1;5C" => Key::CtrlRight,
+                        b"1;5D" => Key::CtrlLeft,
+                        b"1;6A" => Key::CtrlShiftUp,
+                        b"1;6B" => Key::CtrlShiftDown,
+                        b"1;6C" => Key::CtrlShiftRight,
+                        b"1;6D" => Key::CtrlShiftLeft,
+                        b"3~" => Key::Delete,
+                        b"3;5~" => Key::CtrlDelete,
+                        b"127;5u" => Key::CtrlBackspace,
+                        b"11~" => Key::F(1),
+                        b"12~" => Key::F(2),
+                        b"13~" => Key::F(3),
+                        b"14~" => Key::F(4),
+                        b"15~" => Key::F(5),
+                        b"17~" => Key::F(6),
+                        b"18~" => Key::F(7),
+                        b"19~" => Key::F(8),
+                        b"20~" => Key::F(9),
+                        b"21~" => Key::F(10),
+                        b"23~" => Key::F(11),
+                        b"24~" => Key::F(12),
+                        _ => Key::None,
+                    };
                 }
-                Key::Esc
-            }
+                Ok(b'O') => match self.key_rx.recv_timeout(Duration::from_millis(16)) {
+                    Ok(b'P') => return Key::F(1),
+                    Ok(b'Q') => return Key::F(2),
+                    Ok(b'R') => return Key::F(3),
+                    Ok(b'S') => return Key::F(4),
+                    _ => return Key::Esc,
+                },
+                Ok(b) => {
+                    let c = b as char;
+                    if c.is_ascii_uppercase() && !sys::is_caps_lock_on() {
+                        return Key::Alt(c.to_ascii_lowercase());
+                    }
+                    return Key::Alt(c);
+                }
+                Err(_) => return Key::Esc,
+            },
             b if b < 32 => {
                 if b >= 1 && b <= 26 {
                     Key::Ctrl((b + 96) as char)

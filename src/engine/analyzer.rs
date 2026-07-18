@@ -12,6 +12,7 @@ impl Analyzer {
     pub fn new() -> Self {
         let mut root_scope = HashSet::new();
         root_scope.insert("Key".to_string());
+        root_scope.insert("Color".to_string());
         Self {
             errors: Vec::new(),
             error_lines: HashSet::new(),
@@ -33,7 +34,13 @@ impl Analyzer {
         self.scopes.pop();
     }
 
-    fn define(&mut self, name: &str) {
+    fn define(&mut self, name: &str, line: usize) {
+        if self.scopes.last().unwrap().contains(name) {
+            self.error(
+                line,
+                format!("Variable '{}' is already defined in this scope", name),
+            );
+        }
         self.scopes.last_mut().unwrap().insert(name.to_string());
     }
 
@@ -48,8 +55,8 @@ impl Analyzer {
 
     pub fn analyze(&mut self, stmts: &[Stmt]) {
         for stmt in stmts {
-            if let Stmt::Fn(name, _, _, _) = stmt {
-                self.define(name);
+            if let Stmt::Fn(name, _, _, line) = stmt {
+                self.define(name, *line);
             }
         }
         for stmt in stmts {
@@ -62,9 +69,9 @@ impl Analyzer {
             Stmt::Expr(expr) => {
                 self.analyze_expr(expr);
             }
-            Stmt::Let(name, expr, _) | Stmt::Const(name, expr, _) => {
+            Stmt::Let(name, expr, line) | Stmt::Const(name, expr, line) => {
                 self.analyze_expr(expr);
-                self.define(name);
+                self.define(name, *line);
             }
             Stmt::Assign(target, expr, line) => {
                 self.analyze_expr(expr);
@@ -107,11 +114,11 @@ impl Analyzer {
                 self.pop_scope();
                 self.loop_depth -= 1;
             }
-            Stmt::For(name, expr, body, _) => {
+            Stmt::For(name, expr, body, line) => {
                 self.analyze_expr(expr);
                 self.loop_depth += 1;
                 self.push_scope();
-                self.define(name);
+                self.define(name, *line);
                 self.analyze(body);
                 self.pop_scope();
                 self.loop_depth -= 1;
@@ -126,7 +133,7 @@ impl Analyzer {
                     self.error(*line, "Break statement outside of a loop".into());
                 }
             }
-            Stmt::Fn(_, params, body, _) => {
+            Stmt::Fn(_, params, body, line) => {
                 for param in params {
                     if let Some(default) = &param.default {
                         self.analyze_expr(default);
@@ -134,7 +141,7 @@ impl Analyzer {
                 }
                 self.push_scope();
                 for param in params {
-                    self.define(&param.name);
+                    self.define(&param.name, *line);
                 }
                 self.analyze(body);
                 self.pop_scope();
@@ -230,6 +237,10 @@ impl Analyzer {
                         if !valid_variants.contains(&prop.as_str()) {
                             self.error(*line, format!("Invalid variant '{}' for enum 'Key'", prop));
                         }
+                    } else if name == "Color" {
+                        if crate::theme::themecore::parse_color(prop).is_err() {
+                            self.error(*line, format!("Invalid color variant '{}'", prop));
+                        }
                     }
                 }
             }
@@ -292,6 +303,13 @@ impl Analyzer {
                                 format!("Invalid variant '{}' for enum 'Key'", method),
                             );
                         }
+                    } else if name == "Color" {
+                        if crate::theme::themecore::parse_color(method).is_err() {
+                            self.error(*line, format!("Invalid color variant '{}'", method));
+                        }
+                        if !args.is_empty() {
+                            self.error(*line, "Color variant does not take arguments".to_string());
+                        }
                     }
                 }
             }
@@ -305,7 +323,12 @@ impl Analyzer {
             Expr::Call(name, args, line) => {
                 if !self.is_defined(name) && !super::core::BUILTIN_FUNCS.contains(&name.as_str()) {
                     self.error(*line, format!("Undefined function '{}'", name));
-                } else if name == "isdown" || name == "isup" || name == "keydown" || name == "keyup"
+                } else if name == "isdown"
+                    || name == "isup"
+                    || name == "isdownfocus"
+                    || name == "isupfocus"
+                    || name == "keydown"
+                    || name == "keyup"
                 {
                     if args.len() != 1 {
                         self.error(*line, format!("'{}' expects exactly 1 argument", name));

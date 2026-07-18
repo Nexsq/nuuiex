@@ -29,6 +29,7 @@ pub enum EditAction {
 
 pub struct Editor {
     pub is_editing: bool,
+    pub is_output: bool,
     pub is_waiting_for_input: bool,
     pub input_buffer: String,
     pub last_blink_state: bool,
@@ -74,6 +75,7 @@ impl Editor {
     pub fn new() -> Self {
         Self {
             is_editing: false,
+            is_output: false,
             is_waiting_for_input: false,
             input_buffer: String::new(),
             last_blink_state: false,
@@ -128,6 +130,7 @@ impl Editor {
                 self.file_path = Some(path);
                 self.rel_path = rel_path;
                 self.is_editing = edit;
+                self.is_output = false;
             }
             Err(e) => {
                 self.state = EditorState {
@@ -1634,7 +1637,7 @@ impl Editor {
             let mut is_output_err_header = false;
             let mut is_output_err_line = false;
 
-            if !self.is_editing {
+            if self.is_output {
                 let text = self.state.lines[i].as_str();
                 if text == "Syntax Errors:"
                     || text == "Analysis Errors:"
@@ -1671,6 +1674,7 @@ impl Editor {
 
             let is_error_line = self.is_editing && self.error_lines.contains(&(i + 1));
             line_chars.clear();
+            syntax_colors.clear();
 
             let mut line_str = self.state.lines[i].as_str();
             if self.folded_lines.contains(&i) {
@@ -1678,23 +1682,62 @@ impl Editor {
                     line_str = &line_str[..pos];
                 }
             }
-            line_chars.extend(line_str.chars());
 
-            syntax_colors.clear();
+            if self.is_output {
+                let mut chars = line_str.chars().peekable();
+                let mut current_color = Color::White;
 
-            if !self.is_editing
+                while let Some(c) = chars.next() {
+                    if c == '{' {
+                        let mut color_str = String::new();
+                        let mut is_valid = false;
+                        let mut lookahead = chars.clone();
+                        while let Some(nc) = lookahead.next() {
+                            if nc == '}' {
+                                is_valid = true;
+                                break;
+                            }
+                            color_str.push(nc);
+                        }
+
+                        if is_valid && color_str.starts_with("Color:") {
+                            let color_name = &color_str[6..];
+                            if let Ok(parsed_color) =
+                                crate::theme::themecore::parse_color(color_name)
+                            {
+                                current_color = parsed_color;
+                                for _ in 0..=color_str.len() {
+                                    chars.next();
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                    line_chars.push(c);
+                    syntax_colors.push(current_color);
+                }
+            } else {
+                line_chars.extend(line_str.chars());
+            }
+
+            if self.is_output
                 && self.is_waiting_for_input
                 && i == self.state.lines.len().saturating_sub(1)
             {
-                line_chars.extend(self.input_buffer.chars());
+                let last_color = syntax_colors.last().copied().unwrap_or(Color::White);
+                for c in self.input_buffer.chars() {
+                    line_chars.push(c);
+                    syntax_colors.push(last_color);
+                }
                 if self.last_blink_state {
                     line_chars.push('_');
                 } else {
                     line_chars.push(' ');
                 }
+                syntax_colors.push(last_color);
             }
 
-            if self.is_editing {
+            if !self.is_output {
                 let mut idx = 0;
                 while idx < line_chars.len() {
                     let c = line_chars[idx];
@@ -1711,9 +1754,102 @@ impl Editor {
                                 break;
                             }
                         }
-                        for k in start..idx {
-                            syntax_colors
-                                .push(theme.editor_strings.color_at(k - start, idx - start));
+
+                        let mut k = start;
+                        while k < idx {
+                            if line_chars[k] == '{' && (k == start || line_chars[k - 1] != '\\') {
+                                syntax_colors.push(theme.editor_brackets.color_at(0, 1));
+                                k += 1;
+
+                                let interp_start = k;
+                                let mut interp_end = k;
+                                let mut depth = 1;
+                                while interp_end < idx {
+                                    if line_chars[interp_end] == '{' {
+                                        depth += 1;
+                                    } else if line_chars[interp_end] == '}' {
+                                        depth -= 1;
+                                        if depth == 0 {
+                                            break;
+                                        }
+                                    }
+                                    interp_end += 1;
+                                }
+
+                                let mut p = interp_start;
+                                while p < interp_end {
+                                    if p + 6 <= interp_end {
+                                        let possible_color: String =
+                                            line_chars[p..p + 6].iter().collect();
+                                        if possible_color == "Color:" {
+                                            let color_word_start = p;
+                                            let var_start = p + 6;
+                                            let mut var_end = var_start;
+                                            while var_end < interp_end
+                                                && (line_chars[var_end].is_ascii_alphanumeric()
+                                                    || line_chars[var_end] == '_')
+                                            {
+                                                var_end += 1;
+                                            }
+                                            let variant_str: String =
+                                                line_chars[var_start..var_end].iter().collect();
+
+                                            let custom_c = if let Ok(num) =
+                                                variant_str.parse::<f64>()
+                                            {
+                                                if num.fract() == 0.0
+                                                    && num >= 0.0
+                                                    && num <= 999999.0
+                                                {
+                                                    crate::theme::themecore::parse_color(&format!(
+                                                        "{:06}",
+                                                        num as u64
+                                                    ))
+                                                    .ok()
+                                                } else {
+                                                    None
+                                                }
+                                            } else {
+                                                crate::theme::themecore::parse_color(&variant_str)
+                                                    .ok()
+                                            };
+
+                                            if let Some(cc) = custom_c {
+                                                for _ in color_word_start..var_end {
+                                                    syntax_colors.push(cc);
+                                                }
+                                            } else {
+                                                for _ in 0..5 {
+                                                    syntax_colors
+                                                        .push(theme.editor_keywords.color_at(0, 1));
+                                                }
+                                                syntax_colors
+                                                    .push(theme.editor_operators.color_at(0, 1));
+                                                for _ in var_start..var_end {
+                                                    syntax_colors.push(
+                                                        theme.editor_variables.color_at(0, 1),
+                                                    );
+                                                }
+                                            }
+                                            p = var_end;
+                                            continue;
+                                        }
+                                    }
+                                    syntax_colors.push(theme.editor_variables.color_at(0, 1));
+                                    p += 1;
+                                }
+
+                                if interp_end < idx && line_chars[interp_end] == '}' {
+                                    syntax_colors.push(theme.editor_brackets.color_at(0, 1));
+                                    k = interp_end + 1;
+                                } else {
+                                    k = interp_end;
+                                }
+                            } else {
+                                syntax_colors
+                                    .push(theme.editor_strings.color_at(k - start, idx - start));
+                                k += 1;
+                            }
                         }
                     } else if c == '#' {
                         let start = idx;
@@ -1723,77 +1859,178 @@ impl Editor {
                                 .push(theme.editor_comments.color_at(k - start, end - start));
                         }
                         break;
-                    } else if c.is_ascii_digit() {
+                    } else if c.is_ascii_digit() || c.is_ascii_alphabetic() || c == '_' {
                         let start = idx;
-                        idx += 1;
-                        while idx < line_chars.len()
-                            && (line_chars[idx].is_ascii_digit() || line_chars[idx] == '.')
-                        {
-                            idx += 1;
-                        }
-                        for k in start..idx {
-                            syntax_colors
-                                .push(theme.editor_numbers.color_at(k - start, idx - start));
-                        }
-                    } else if c.is_alphabetic() || c == '_' {
-                        let start = idx;
-                        while idx < line_chars.len()
-                            && (line_chars[idx].is_alphanumeric() || line_chars[idx] == '_')
-                        {
-                            idx += 1;
-                        }
-                        let word_chars = &line_chars[start..idx];
+                        let mut is_number = c.is_ascii_digit();
 
-                        let is_kw = matches!(
-                            word_chars,
-                            ['l', 'e', 't']
-                                | ['c', 'o', 'n', 's', 't']
-                                | ['f', 'n']
-                                | ['r', 'e', 't', 'u', 'r', 'n']
-                                | ['l', 'o', 'o', 'p']
-                                | ['w', 'h', 'i', 'l', 'e']
-                                | ['f', 'o', 'r']
-                                | ['i', 'n']
-                                | ['i', 'f']
-                                | ['e', 'l', 'i', 'f']
-                                | ['e', 'l', 's', 'e']
-                                | ['b', 'r', 'e', 'a', 'k']
-                                | ['a', 's', 'y', 'n', 'c']
-                        );
-                        let is_op_word =
-                            matches!(word_chars, ['a', 'n', 'd'] | ['o', 'r'] | ['n', 'o', 't']);
-                        let is_bool =
-                            matches!(word_chars, ['T', 'r', 'u', 'e'] | ['F', 'a', 'l', 's', 'e']);
-
-                        let mut j = idx;
-                        while j < line_chars.len() && line_chars[j].is_whitespace() {
-                            j += 1;
+                        if is_number {
+                            let mut temp_idx = idx;
+                            while temp_idx < line_chars.len()
+                                && line_chars[temp_idx].is_ascii_digit()
+                            {
+                                temp_idx += 1;
+                            }
+                            let mut has_dot = false;
+                            if temp_idx < line_chars.len() && line_chars[temp_idx] == '.' {
+                                has_dot = true;
+                                temp_idx += 1;
+                                while temp_idx < line_chars.len()
+                                    && line_chars[temp_idx].is_ascii_digit()
+                                {
+                                    temp_idx += 1;
+                                }
+                            }
+                            if !has_dot
+                                && temp_idx < line_chars.len()
+                                && (line_chars[temp_idx].is_ascii_alphabetic()
+                                    || line_chars[temp_idx] == '_')
+                            {
+                                is_number = false;
+                            } else {
+                                idx = temp_idx;
+                            }
                         }
 
-                        let word_str: String = word_chars.iter().collect();
-                        let is_func = j < line_chars.len()
-                            && line_chars[j] == '('
-                            && self.defined_functions.contains(&word_str);
-
-                        let color = if is_kw {
-                            &theme.editor_keywords
-                        } else if is_op_word {
-                            &theme.editor_operators
-                        } else if is_bool {
-                            &theme.editor_bool
-                        } else if is_func {
-                            &theme.editor_functions
+                        if is_number {
+                            for k in start..idx {
+                                syntax_colors
+                                    .push(theme.editor_numbers.color_at(k - start, idx - start));
+                            }
                         } else {
-                            &theme.editor_variables
-                        };
+                            while idx < line_chars.len()
+                                && (line_chars[idx].is_ascii_alphanumeric()
+                                    || line_chars[idx] == '_')
+                            {
+                                idx += 1;
+                            }
+                            let word_chars = &line_chars[start..idx];
+                            let word_str: String = word_chars.iter().collect();
 
-                        for k in start..idx {
-                            syntax_colors.push(color.color_at(k - start, idx - start));
+                            if word_str == "Color" {
+                                let mut temp_idx = idx;
+                                while temp_idx < line_chars.len()
+                                    && line_chars[temp_idx].is_whitespace()
+                                {
+                                    temp_idx += 1;
+                                }
+                                if temp_idx < line_chars.len() && line_chars[temp_idx] == ':' {
+                                    temp_idx += 1;
+                                    while temp_idx < line_chars.len()
+                                        && line_chars[temp_idx].is_whitespace()
+                                    {
+                                        temp_idx += 1;
+                                    }
+                                    let variant_start = temp_idx;
+                                    while temp_idx < line_chars.len()
+                                        && (line_chars[temp_idx].is_ascii_alphanumeric()
+                                            || line_chars[temp_idx] == '_')
+                                    {
+                                        temp_idx += 1;
+                                    }
+                                    if temp_idx > variant_start {
+                                        let variant_str: String =
+                                            line_chars[variant_start..temp_idx].iter().collect();
+                                        let custom_color = if let Ok(num) =
+                                            variant_str.parse::<f64>()
+                                        {
+                                            if num.fract() == 0.0 && num >= 0.0 && num <= 999999.0 {
+                                                crate::theme::themecore::parse_color(&format!(
+                                                    "{:06}",
+                                                    num as u64
+                                                ))
+                                                .ok()
+                                            } else {
+                                                None
+                                            }
+                                        } else {
+                                            crate::theme::themecore::parse_color(&variant_str).ok()
+                                        };
+
+                                        if let Some(cc) = custom_color {
+                                            for _ in start..temp_idx {
+                                                syntax_colors.push(cc);
+                                            }
+                                            idx = temp_idx;
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+
+                            let is_kw = matches!(
+                                word_str.as_str(),
+                                "let"
+                                    | "const"
+                                    | "fn"
+                                    | "return"
+                                    | "loop"
+                                    | "while"
+                                    | "for"
+                                    | "in"
+                                    | "if"
+                                    | "elif"
+                                    | "else"
+                                    | "break"
+                                    | "async"
+                            );
+                            let is_op_word = matches!(word_str.as_str(), "and" | "or" | "not");
+                            let is_bool = matches!(word_str.as_str(), "True" | "False");
+
+                            let is_enum_base = word_str == "Color" || word_str == "Key";
+
+                            let is_enum_variant = start >= 1 && {
+                                let mut k = start;
+                                while k > 0 && line_chars[k - 1].is_whitespace() {
+                                    k -= 1;
+                                }
+                                if k > 0 && line_chars[k - 1] == ':' {
+                                    k -= 1;
+                                    while k > 0 && line_chars[k - 1].is_whitespace() {
+                                        k -= 1;
+                                    }
+                                    let end_prev = k;
+                                    while k > 0
+                                        && (line_chars[k - 1].is_ascii_alphanumeric()
+                                            || line_chars[k - 1] == '_')
+                                    {
+                                        k -= 1;
+                                    }
+                                    let prev_word: String =
+                                        line_chars[k..end_prev].iter().collect();
+                                    prev_word == "Key"
+                                } else {
+                                    false
+                                }
+                            };
+
+                            let mut j = idx;
+                            while j < line_chars.len() && line_chars[j].is_whitespace() {
+                                j += 1;
+                            }
+                            let is_func = j < line_chars.len()
+                                && line_chars[j] == '('
+                                && self.defined_functions.contains(&word_str);
+
+                            let color = if is_kw || is_enum_base || is_enum_variant {
+                                &theme.editor_keywords
+                            } else if is_op_word {
+                                &theme.editor_operators
+                            } else if is_bool {
+                                &theme.editor_bool
+                            } else if is_func {
+                                &theme.editor_functions
+                            } else {
+                                &theme.editor_variables
+                            };
+
+                            for k in start..idx {
+                                syntax_colors.push(color.color_at(k - start, idx - start));
+                            }
                         }
-                    } else if "+-=*/<>!".contains(c) {
+                    } else if "+-=*/<>!:".contains(c) {
                         let start = idx;
                         idx += 1;
-                        while idx < line_chars.len() && "+-=*/<>!".contains(line_chars[idx]) {
+                        while idx < line_chars.len() && "+-=*/<>!:".contains(line_chars[idx]) {
                             idx += 1;
                         }
                         for k in start..idx {
@@ -1827,9 +2064,7 @@ impl Editor {
                 };
 
                 let mut style = Style {
-                    fg: if self.is_editing && j < syntax_colors.len() {
-                        syntax_colors[j]
-                    } else if is_output_err_header {
+                    fg: if is_output_err_header {
                         theme.editor_errors.color_at(j, line_chars.len())
                     } else if is_output_err_line {
                         let colon_idx = line_chars.iter().position(|&x| x == ':').unwrap_or(0);
@@ -1838,6 +2073,8 @@ impl Editor {
                         } else {
                             Color::White
                         }
+                    } else if j < syntax_colors.len() {
+                        syntax_colors[j]
                     } else {
                         Color::White
                     },
