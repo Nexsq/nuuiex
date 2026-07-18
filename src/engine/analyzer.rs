@@ -307,6 +307,14 @@ impl Analyzer {
                     } else if matches!(args[0].1, Expr::String(_)) {
                         self.error(*line, format!("'{}' expects a Key", name));
                     }
+                } else if name == "cursorx" || name == "cursory" {
+                    if args.len() != 0 {
+                        self.error(*line, format!("'{}' expects exactly 0 arguments", name));
+                    }
+                } else if name == "setcursor" {
+                    if args.len() < 2 || args.len() > 3 {
+                        self.error(*line, format!("'{}' expects 2 or 3 arguments", name));
+                    }
                 }
                 for (_, arg) in args {
                     self.analyze_expr(arg);

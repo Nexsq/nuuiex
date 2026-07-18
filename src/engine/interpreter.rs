@@ -1035,6 +1035,124 @@ fn variant_to_key_str(v: &Value) -> Result<String, String> {
     Err("Expected a Key".to_string())
 }
 
+#[cfg(windows)]
+fn get_cursor_pos() -> Result<(i32, i32), String> {
+    use windows_sys::Win32::Foundation::POINT;
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+    unsafe {
+        let mut pt: POINT = std::mem::zeroed();
+        if GetCursorPos(&mut pt) != 0 {
+            Ok((pt.x, pt.y))
+        } else {
+            Err("Failed to get cursor position".to_string())
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn get_cursor_pos() -> Result<(i32, i32), String> {
+    let output = std::process::Command::new("xdotool")
+        .arg("getmouselocation")
+        .output()
+        .map_err(|e| format!("Failed to run xdotool (is it installed?): {}", e))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut x = 0;
+    let mut y = 0;
+    for part in stdout.split_whitespace() {
+        if let Some(stripped) = part.strip_prefix("x:") {
+            x = stripped.parse().unwrap_or(0);
+        } else if let Some(stripped) = part.strip_prefix("y:") {
+            y = stripped.parse().unwrap_or(0);
+        }
+    }
+    Ok((x, y))
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn get_cursor_pos() -> Result<(i32, i32), String> {
+    Err("Cursor position is not supported on this OS".to_string())
+}
+
+#[cfg(windows)]
+fn set_cursor_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
+    if relative {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            INPUT, INPUT_MOUSE, MOUSEEVENTF_MOVE, SendInput,
+        };
+        unsafe {
+            let mut input: INPUT = std::mem::zeroed();
+            input.r#type = INPUT_MOUSE;
+            input.Anonymous.mi.dx = x;
+            input.Anonymous.mi.dy = y;
+            input.Anonymous.mi.dwFlags = MOUSEEVENTF_MOVE;
+            SendInput(1, &input, std::mem::size_of::<INPUT>() as i32);
+        }
+        Ok(())
+    } else {
+        use windows_sys::Win32::UI::WindowsAndMessaging::SetCursorPos;
+        unsafe {
+            if SetCursorPos(x, y) != 0 {
+                Ok(())
+            } else {
+                Err("Failed to set absolute cursor position".to_string())
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn set_cursor_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
+    if relative {
+        let fd = get_or_create_uinput()?;
+        #[repr(C)]
+        #[derive(Clone, Copy)]
+        struct input_event {
+            time: libc::timeval,
+            type_: u16,
+            code: u16,
+            value: i32,
+        }
+        let mut evs: Vec<input_event> = Vec::with_capacity(3);
+        macro_rules! add_ev {
+            ($type:expr, $code:expr, $val:expr) => {
+                let mut ev: input_event = unsafe { std::mem::zeroed() };
+                ev.type_ = $type;
+                ev.code = $code;
+                ev.value = $val;
+                evs.push(ev);
+            };
+        }
+        if x != 0 {
+            add_ev!(2, 0, x);
+        }
+        if y != 0 {
+            add_ev!(2, 1, y);
+        }
+        add_ev!(0, 0, 0);
+        unsafe {
+            libc::write(
+                fd,
+                evs.as_ptr() as *const libc::c_void,
+                evs.len() * std::mem::size_of::<input_event>(),
+            );
+        }
+        Ok(())
+    } else {
+        std::process::Command::new("xdotool")
+            .arg("mousemove")
+            .arg(x.to_string())
+            .arg(y.to_string())
+            .output()
+            .map_err(|e| format!("Failed to run xdotool (is it installed?): {}", e))?;
+        Ok(())
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn set_cursor_pos(_x: i32, _y: i32, _relative: bool) -> Result<(), String> {
+    Err("Setting cursor position is not supported on this OS".to_string())
+}
+
 pub struct Environment {
     pub scopes: Vec<HashMap<String, Value>>,
     pub constants: Vec<HashSet<String>>,
@@ -2555,6 +2673,61 @@ impl Interpreter {
                         } else {
                             return Err(format!("Line {}: 'write' expects a string", line));
                         }
+                    }
+                    "cursorx" => {
+                        if eval_args.len() != 0 {
+                            return Err(format!(
+                                "Line {}: 'cursorx' expects exactly 0 arguments",
+                                line
+                            ));
+                        }
+                        let (x, _) =
+                            get_cursor_pos().map_err(|e| format!("Line {}: {}", line, e))?;
+                        return Ok(Value::Number(x as f64));
+                    }
+                    "cursory" => {
+                        if eval_args.len() != 0 {
+                            return Err(format!(
+                                "Line {}: 'cursory' expects exactly 0 arguments",
+                                line
+                            ));
+                        }
+                        let (_, y) =
+                            get_cursor_pos().map_err(|e| format!("Line {}: {}", line, e))?;
+                        return Ok(Value::Number(y as f64));
+                    }
+                    "setcursor" => {
+                        if eval_args.len() < 2 || eval_args.len() > 3 {
+                            return Err(format!(
+                                "Line {}: 'setcursor' expects 2 or 3 arguments",
+                                line
+                            ));
+                        }
+                        let x = if let Value::Number(n) = eval_args[0].1 {
+                            n as i32
+                        } else {
+                            return Err(format!("Line {}: 'setcursor' x must be a number", line));
+                        };
+                        let y = if let Value::Number(n) = eval_args[1].1 {
+                            n as i32
+                        } else {
+                            return Err(format!("Line {}: 'setcursor' y must be a number", line));
+                        };
+                        let relative = if eval_args.len() == 3 {
+                            if let Value::Bool(b) = eval_args[2].1 {
+                                b
+                            } else {
+                                return Err(format!(
+                                    "Line {}: 'setcursor' relative flag must be a boolean",
+                                    line
+                                ));
+                            }
+                        } else {
+                            false
+                        };
+                        set_cursor_pos(x, y, relative)
+                            .map_err(|e| format!("Line {}: {}", line, e))?;
+                        return Ok(Value::Nil);
                     }
                     _ => {}
                 }

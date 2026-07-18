@@ -31,6 +31,9 @@ pub const BUILTIN_FUNCS: &[&str] = &[
     "keydown",
     "keyup",
     "write",
+    "cursorx",
+    "cursory",
+    "setcursor",
 ];
 
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {
