@@ -1758,6 +1758,7 @@ impl Editor {
                                 | ['e', 'l', 'i', 'f']
                                 | ['e', 'l', 's', 'e']
                                 | ['b', 'r', 'e', 'a', 'k']
+                                | ['a', 's', 'y', 'n', 'c']
                         );
                         let is_op_word =
                             matches!(word_chars, ['a', 'n', 'd'] | ['o', 'r'] | ['n', 'o', 't']);
