@@ -87,8 +87,8 @@ fn parse_win_key(key: &str) -> Result<WinKeyInfo, String> {
         "prtscr" | "printscreen" => info.vk = VK_SNAPSHOT,
         "ins" | "insert" => info.vk = VK_INSERT,
         "del" | "delete" => info.vk = VK_DELETE,
-        "lwin" | "cmd" | "super" | "win" => info.vk = VK_LWIN,
-        "rwin" => info.vk = VK_RWIN,
+        "lmeta" | "cmd" | "super" | "win" => info.vk = VK_LWIN,
+        "rmeta" => info.vk = VK_RWIN,
         "f1" => info.vk = VK_F1,
         "f2" => info.vk = VK_F2,
         "f3" => info.vk = VK_F3,
@@ -256,7 +256,7 @@ fn check_key_down_focus(key_str: &str) -> Result<bool, String> {
         "f23" => Key::F(23),
         "f24" => Key::F(24),
         "space" => Key::Char(' '),
-        "lwin" | "rwin" | "cmd" | "super" | "win" => Key::None,
+        "lmeta" | "rmeta" | "cmd" | "super" | "win" => Key::None,
         s if s.chars().count() == 1 => {
             let c = s.chars().next().unwrap();
             if key_str.chars().next().unwrap().is_ascii_uppercase() {
@@ -660,8 +660,8 @@ fn parse_linux_key(key: &str) -> Result<LinuxKeyInfo, String> {
         "ins" | "insert" => 110,
         "del" | "delete" => 111,
         "prtscr" | "printscreen" => 99,
-        "lwin" | "cmd" | "super" | "win" => 125,
-        "rwin" => 126,
+        "lmeta" | "cmd" | "super" | "win" => 125,
+        "rmeta" => 126,
         "shiftup" => {
             info.req_shift = true;
             103
@@ -1138,7 +1138,7 @@ fn variant_to_key_str(v: &Value) -> Result<String, String> {
                     return Ok("ctrl".to_string());
                 }
                 "Alt" | "Space" | "CapsLock" | "PgUp" | "PgDn" | "Home" | "End" | "PrtScr"
-                | "Insert" | "LWin" | "RWin" | "LMB" | "RMB" | "MMB" | "SB1" | "SB2" => {
+                | "Insert" | "LMeta" | "RMeta" | "LMB" | "RMB" | "MMB" | "SB1" | "SB2" => {
                     if inner.is_some() {
                         return Err(format!("Variant '{}' does not take arguments", variant));
                     }
@@ -2439,8 +2439,8 @@ impl Interpreter {
                             "End",
                             "PrtScr",
                             "Insert",
-                            "LWin",
-                            "RWin",
+                            "LMeta",
+                            "RMeta",
                             "LMB",
                             "RMB",
                             "MMB",
@@ -2546,8 +2546,8 @@ impl Interpreter {
                             "End",
                             "PrtScr",
                             "Insert",
-                            "LWin",
-                            "RWin",
+                            "LMeta",
+                            "RMeta",
                             "LMB",
                             "RMB",
                             "MMB",
