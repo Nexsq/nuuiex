@@ -5,165 +5,257 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender};
 
-#[cfg(windows)]
-fn check_key_down(key: &str) -> Result<bool, String> {
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
-    let mut req_shift = false;
-    let mut req_ctrl = false;
-    let mut req_alt = false;
+struct WinKeyInfo {
+    vk: u16,
+    req_shift: bool,
+    req_ctrl: bool,
+    req_alt: bool,
+    is_mouse: bool,
+    mouse_down: u32,
+    mouse_up: u32,
+    mouse_data: u32,
+}
 
-    let vk = match key.to_lowercase().as_str() {
-        "backspace" | "back" => VK_BACK,
-        "tab" => VK_TAB,
-        "enter" | "return" => VK_RETURN,
-        "shift" => VK_SHIFT,
-        "ctrl" | "control" => VK_CONTROL,
-        "alt" | "menu" => VK_MENU,
-        "pause" => VK_PAUSE,
-        "capslock" | "caps" => VK_CAPITAL,
-        "esc" | "escape" => VK_ESCAPE,
-        "space" => VK_SPACE,
-        "pgup" | "pageup" => VK_PRIOR,
-        "pgdn" | "pagedown" => VK_NEXT,
-        "end" => VK_END,
-        "home" => VK_HOME,
-        "left" => VK_LEFT,
-        "up" => VK_UP,
-        "right" => VK_RIGHT,
-        "down" => VK_DOWN,
-        "prtscr" | "printscreen" => VK_SNAPSHOT,
-        "ins" | "insert" => VK_INSERT,
-        "del" | "delete" => VK_DELETE,
-        "lwin" | "cmd" | "super" | "win" => VK_LWIN,
-        "rwin" => VK_RWIN,
-        "f1" => VK_F1,
-        "f2" => VK_F2,
-        "f3" => VK_F3,
-        "f4" => VK_F4,
-        "f5" => VK_F5,
-        "f6" => VK_F6,
-        "f7" => VK_F7,
-        "f8" => VK_F8,
-        "f9" => VK_F9,
-        "f10" => VK_F10,
-        "f11" => VK_F11,
-        "f12" => VK_F12,
+#[cfg(windows)]
+fn parse_win_key(key: &str) -> Result<WinKeyInfo, String> {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
+
+    let mut info = WinKeyInfo {
+        vk: 0,
+        req_shift: false,
+        req_ctrl: false,
+        req_alt: false,
+        is_mouse: false,
+        mouse_down: 0,
+        mouse_up: 0,
+        mouse_data: 0,
+    };
+
+    match key.to_lowercase().as_str() {
+        "lmb" => {
+            info.is_mouse = true;
+            info.vk = VK_LBUTTON;
+            info.mouse_down = MOUSEEVENTF_LEFTDOWN;
+            info.mouse_up = MOUSEEVENTF_LEFTUP;
+        }
+        "rmb" => {
+            info.is_mouse = true;
+            info.vk = VK_RBUTTON;
+            info.mouse_down = MOUSEEVENTF_RIGHTDOWN;
+            info.mouse_up = MOUSEEVENTF_RIGHTUP;
+        }
+        "mmb" => {
+            info.is_mouse = true;
+            info.vk = VK_MBUTTON;
+            info.mouse_down = MOUSEEVENTF_MIDDLEDOWN;
+            info.mouse_up = MOUSEEVENTF_MIDDLEUP;
+        }
+        "sb1" => {
+            info.is_mouse = true;
+            info.vk = VK_XBUTTON1;
+            info.mouse_down = MOUSEEVENTF_XDOWN;
+            info.mouse_up = MOUSEEVENTF_XUP;
+            info.mouse_data = 0x0001;
+        }
+        "sb2" => {
+            info.is_mouse = true;
+            info.vk = VK_XBUTTON2;
+            info.mouse_down = MOUSEEVENTF_XDOWN;
+            info.mouse_up = MOUSEEVENTF_XUP;
+            info.mouse_data = 0x0002;
+        }
+
+        "backspace" | "back" => info.vk = VK_BACK,
+        "tab" => info.vk = VK_TAB,
+        "enter" | "return" => info.vk = VK_RETURN,
+        "shift" => info.vk = VK_SHIFT,
+        "ctrl" | "control" => info.vk = VK_CONTROL,
+        "alt" | "menu" => info.vk = VK_MENU,
+        "pause" => info.vk = VK_PAUSE,
+        "capslock" | "caps" => info.vk = VK_CAPITAL,
+        "esc" | "escape" => info.vk = VK_ESCAPE,
+        "space" => info.vk = VK_SPACE,
+        "pgup" | "pageup" => info.vk = VK_PRIOR,
+        "pgdn" | "pagedown" => info.vk = VK_NEXT,
+        "end" => info.vk = VK_END,
+        "home" => info.vk = VK_HOME,
+        "left" => info.vk = VK_LEFT,
+        "up" => info.vk = VK_UP,
+        "right" => info.vk = VK_RIGHT,
+        "down" => info.vk = VK_DOWN,
+        "prtscr" | "printscreen" => info.vk = VK_SNAPSHOT,
+        "ins" | "insert" => info.vk = VK_INSERT,
+        "del" | "delete" => info.vk = VK_DELETE,
+        "lwin" | "cmd" | "super" | "win" => info.vk = VK_LWIN,
+        "rwin" => info.vk = VK_RWIN,
+        "f1" => info.vk = VK_F1,
+        "f2" => info.vk = VK_F2,
+        "f3" => info.vk = VK_F3,
+        "f4" => info.vk = VK_F4,
+        "f5" => info.vk = VK_F5,
+        "f6" => info.vk = VK_F6,
+        "f7" => info.vk = VK_F7,
+        "f8" => info.vk = VK_F8,
+        "f9" => info.vk = VK_F9,
+        "f10" => info.vk = VK_F10,
+        "f11" => info.vk = VK_F11,
+        "f12" => info.vk = VK_F12,
+
         "shiftup" => {
-            req_shift = true;
-            VK_UP
+            info.req_shift = true;
+            info.vk = VK_UP;
         }
         "shiftdown" => {
-            req_shift = true;
-            VK_DOWN
+            info.req_shift = true;
+            info.vk = VK_DOWN;
         }
         "shiftleft" => {
-            req_shift = true;
-            VK_LEFT
+            info.req_shift = true;
+            info.vk = VK_LEFT;
         }
         "shiftright" => {
-            req_shift = true;
-            VK_RIGHT
+            info.req_shift = true;
+            info.vk = VK_RIGHT;
         }
         "ctrlup" => {
-            req_ctrl = true;
-            VK_UP
+            info.req_ctrl = true;
+            info.vk = VK_UP;
         }
         "ctrldown" => {
-            req_ctrl = true;
-            VK_DOWN
+            info.req_ctrl = true;
+            info.vk = VK_DOWN;
         }
         "ctrlleft" => {
-            req_ctrl = true;
-            VK_LEFT
+            info.req_ctrl = true;
+            info.vk = VK_LEFT;
         }
         "ctrlright" => {
-            req_ctrl = true;
-            VK_RIGHT
+            info.req_ctrl = true;
+            info.vk = VK_RIGHT;
         }
         "ctrlshiftup" => {
-            req_ctrl = true;
-            req_shift = true;
-            VK_UP
+            info.req_ctrl = true;
+            info.req_shift = true;
+            info.vk = VK_UP;
         }
         "ctrlshiftdown" => {
-            req_ctrl = true;
-            req_shift = true;
-            VK_DOWN
+            info.req_ctrl = true;
+            info.req_shift = true;
+            info.vk = VK_DOWN;
         }
         "ctrlshiftleft" => {
-            req_ctrl = true;
-            req_shift = true;
-            VK_LEFT
+            info.req_ctrl = true;
+            info.req_shift = true;
+            info.vk = VK_LEFT;
         }
         "ctrlshiftright" => {
-            req_ctrl = true;
-            req_shift = true;
-            VK_RIGHT
+            info.req_ctrl = true;
+            info.req_shift = true;
+            info.vk = VK_RIGHT;
         }
         "ctrldelete" => {
-            req_ctrl = true;
-            VK_DELETE
+            info.req_ctrl = true;
+            info.vk = VK_DELETE;
         }
         "ctrlbackspace" => {
-            req_ctrl = true;
-            VK_BACK
+            info.req_ctrl = true;
+            info.vk = VK_BACK;
         }
-        s if s.len() == 1 => {
+
+        s if s.chars().count() == 1 => {
             let c = key.chars().next().unwrap();
             unsafe {
                 let res = VkKeyScanW(c as u16);
                 if res == -1 {
-                    return Ok(false);
+                    return Err(format!("Unrecognized key: '{}'", key));
                 }
                 let state = (res >> 8) & 0xFF;
                 let is_alpha = c.is_ascii_alphabetic();
 
                 if state & 1 != 0 && !is_alpha {
-                    req_shift = true;
+                    info.req_shift = true;
                 }
                 if state & 2 != 0 {
-                    req_ctrl = true;
+                    info.req_ctrl = true;
                 }
                 if state & 4 != 0 {
-                    req_alt = true;
+                    info.req_alt = true;
                 }
 
-                (res & 0xFF) as u16
+                info.vk = (res & 0xFF) as u16;
             }
         }
-        _ => return Ok(false),
-    };
+        _ => return Err(format!("Unrecognized key: '{}'", key)),
+    }
+    Ok(info)
+}
+
+#[cfg(windows)]
+fn check_key_down(key: &str) -> Result<bool, String> {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
+    let info = parse_win_key(key)?;
 
     unsafe {
-        let is_down = (GetAsyncKeyState(vk as i32) as u16 & 0x8000) != 0;
+        let is_down = (GetAsyncKeyState(info.vk as i32) as u16 & 0x8000) != 0;
         if !is_down {
             return Ok(false);
         }
-        if req_shift && (GetAsyncKeyState(VK_SHIFT as i32) as u16 & 0x8000) == 0 {
+        if info.req_shift && (GetAsyncKeyState(VK_SHIFT as i32) as u16 & 0x8000) == 0 {
             return Ok(false);
         }
-        if req_ctrl && (GetAsyncKeyState(VK_CONTROL as i32) as u16 & 0x8000) == 0 {
+        if info.req_ctrl && (GetAsyncKeyState(VK_CONTROL as i32) as u16 & 0x8000) == 0 {
             return Ok(false);
         }
-        if req_alt && (GetAsyncKeyState(VK_MENU as i32) as u16 & 0x8000) == 0 {
+        if info.req_alt && (GetAsyncKeyState(VK_MENU as i32) as u16 & 0x8000) == 0 {
             return Ok(false);
         }
         Ok(true)
     }
 }
 
-#[cfg(target_os = "linux")]
-fn check_key_down(key: &str) -> Result<bool, String> {
-    let mut req_shift = false;
-    let mut req_ctrl = false;
-    let mut req_alt = false;
+#[cfg(windows)]
+fn simulate_key(key: &str, down: bool) -> Result<(), String> {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
+    let info = parse_win_key(key)?;
+    unsafe {
+        let mut input: INPUT = std::mem::zeroed();
+        if info.is_mouse {
+            input.r#type = INPUT_MOUSE;
+            input.Anonymous.mi.dwFlags = if down { info.mouse_down } else { info.mouse_up };
+            input.Anonymous.mi.mouseData = info.mouse_data;
+        } else {
+            input.r#type = INPUT_KEYBOARD;
+            input.Anonymous.ki.wVk = info.vk;
+            input.Anonymous.ki.dwFlags = if down { 0 } else { KEYEVENTF_KEYUP };
+        }
+        SendInput(1, &input, std::mem::size_of::<INPUT>() as i32);
+    }
+    Ok(())
+}
 
-    let lower_key = key.to_lowercase();
-    let mut search_str = lower_key.as_str();
+#[cfg(target_os = "linux")]
+struct LinuxKeyInfo {
+    code: u16,
+    req_shift: bool,
+    req_ctrl: bool,
+    req_alt: bool,
+}
+
+#[cfg(target_os = "linux")]
+fn parse_linux_key(key: &str) -> Result<LinuxKeyInfo, String> {
+    let mut info = LinuxKeyInfo {
+        code: 0,
+        req_shift: false,
+        req_ctrl: false,
+        req_alt: false,
+    };
+    let mut search_str = key.to_string();
 
     if key.chars().count() == 1 {
         let c = key.chars().next().unwrap();
-        if !c.is_ascii_alphabetic() {
+        if c.is_ascii_alphabetic() {
+            search_str = c.to_ascii_lowercase().to_string();
+        } else {
             let shift_map = [
                 ('!', "1"),
                 ('@', "2"),
@@ -188,157 +280,169 @@ fn check_key_down(key: &str) -> Result<bool, String> {
             ];
             for &(shifted, unshifted) in &shift_map {
                 if c == shifted {
-                    req_shift = true;
-                    search_str = unshifted;
+                    info.req_shift = true;
+                    search_str = unshifted.to_string();
                     break;
                 }
             }
         }
     }
 
-    let codes: &[u16] = match search_str {
-        "esc" | "escape" => &[1],
-        "1" => &[2],
-        "2" => &[3],
-        "3" => &[4],
-        "4" => &[5],
-        "5" => &[6],
-        "6" => &[7],
-        "7" => &[8],
-        "8" => &[9],
-        "9" => &[10],
-        "0" => &[11],
-        "minus" | "-" => &[12],
-        "equal" | "=" => &[13],
-        "backspace" | "back" => &[14],
-        "tab" => &[15],
-        "q" => &[16],
-        "w" => &[17],
-        "e" => &[18],
-        "r" => &[19],
-        "t" => &[20],
-        "y" => &[21],
-        "u" => &[22],
-        "i" => &[23],
-        "o" => &[24],
-        "p" => &[25],
-        "[" => &[26],
-        "]" => &[27],
-        "enter" | "return" => &[28],
-        "ctrl" | "control" => &[29, 97],
-        "a" => &[30],
-        "s" => &[31],
-        "d" => &[32],
-        "f" => &[33],
-        "g" => &[34],
-        "h" => &[35],
-        "j" => &[36],
-        "k" => &[37],
-        "l" => &[38],
-        ";" => &[39],
-        "'" => &[40],
-        "`" => &[41],
-        "shift" => &[42, 54],
-        "\\" => &[43],
-        "z" => &[44],
-        "x" => &[45],
-        "c" => &[46],
-        "v" => &[47],
-        "b" => &[48],
-        "n" => &[49],
-        "m" => &[50],
-        "," => &[51],
-        "." => &[52],
-        "/" => &[53],
-        "alt" | "menu" => &[56, 100],
-        "space" | " " => &[57],
-        "capslock" | "caps" => &[58],
-        "f1" => &[59],
-        "f2" => &[60],
-        "f3" => &[61],
-        "f4" => &[62],
-        "f5" => &[63],
-        "f6" => &[64],
-        "f7" => &[65],
-        "f8" => &[66],
-        "f9" => &[67],
-        "f10" => &[68],
-        "f11" => &[87],
-        "f12" => &[88],
-        "up" => &[103],
-        "left" => &[105],
-        "right" => &[106],
-        "down" => &[108],
-        "home" => &[102],
-        "end" => &[107],
-        "pgup" | "pageup" => &[104],
-        "pgdn" | "pagedown" => &[109],
-        "ins" | "insert" => &[110],
-        "del" | "delete" => &[111],
-        "prtscr" | "printscreen" => &[99],
-        "lwin" | "cmd" | "super" | "win" => &[125, 126],
+    info.code = match search_str.to_lowercase().as_str() {
+        "lmb" => 272,
+        "rmb" => 273,
+        "mmb" => 274,
+        "sb1" => 275,
+        "sb2" => 276,
+        "esc" | "escape" => 1,
+        "1" => 2,
+        "2" => 3,
+        "3" => 4,
+        "4" => 5,
+        "5" => 6,
+        "6" => 7,
+        "7" => 8,
+        "8" => 9,
+        "9" => 10,
+        "0" => 11,
+        "minus" | "-" => 12,
+        "equal" | "=" => 13,
+        "backspace" | "back" => 14,
+        "tab" => 15,
+        "q" => 16,
+        "w" => 17,
+        "e" => 18,
+        "r" => 19,
+        "t" => 20,
+        "y" => 21,
+        "u" => 22,
+        "i" => 23,
+        "o" => 24,
+        "p" => 25,
+        "[" => 26,
+        "]" => 27,
+        "enter" | "return" => 28,
+        "ctrl" | "control" => 29,
+        "a" => 30,
+        "s" => 31,
+        "d" => 32,
+        "f" => 33,
+        "g" => 34,
+        "h" => 35,
+        "j" => 36,
+        "k" => 37,
+        "l" => 38,
+        ";" => 39,
+        "'" => 40,
+        "`" => 41,
+        "shift" => 42,
+        "\\" => 43,
+        "z" => 44,
+        "x" => 45,
+        "c" => 46,
+        "v" => 47,
+        "b" => 48,
+        "n" => 49,
+        "m" => 50,
+        "," => 51,
+        "." => 52,
+        "/" => 53,
+        "alt" | "menu" => 56,
+        "space" | " " => 57,
+        "capslock" | "caps" => 58,
+        "f1" => 59,
+        "f2" => 60,
+        "f3" => 61,
+        "f4" => 62,
+        "f5" => 63,
+        "f6" => 64,
+        "f7" => 65,
+        "f8" => 66,
+        "f9" => 67,
+        "f10" => 68,
+        "f11" => 87,
+        "f12" => 88,
+        "up" => 103,
+        "left" => 105,
+        "right" => 106,
+        "down" => 108,
+        "home" => 102,
+        "end" => 107,
+        "pgup" | "pageup" => 104,
+        "pgdn" | "pagedown" => 109,
+        "ins" | "insert" => 110,
+        "del" | "delete" => 111,
+        "prtscr" | "printscreen" => 99,
+        "lwin" | "cmd" | "super" | "win" => 125,
+        "rwin" => 126,
         "shiftup" => {
-            req_shift = true;
-            &[103]
+            info.req_shift = true;
+            103
         }
         "shiftdown" => {
-            req_shift = true;
-            &[108]
+            info.req_shift = true;
+            108
         }
         "shiftleft" => {
-            req_shift = true;
-            &[105]
+            info.req_shift = true;
+            105
         }
         "shiftright" => {
-            req_shift = true;
-            &[106]
+            info.req_shift = true;
+            106
         }
         "ctrlup" => {
-            req_ctrl = true;
-            &[103]
+            info.req_ctrl = true;
+            103
         }
         "ctrldown" => {
-            req_ctrl = true;
-            &[108]
+            info.req_ctrl = true;
+            108
         }
         "ctrlleft" => {
-            req_ctrl = true;
-            &[105]
+            info.req_ctrl = true;
+            105
         }
         "ctrlright" => {
-            req_ctrl = true;
-            &[106]
+            info.req_ctrl = true;
+            106
         }
         "ctrlshiftup" => {
-            req_ctrl = true;
-            req_shift = true;
-            &[103]
+            info.req_ctrl = true;
+            info.req_shift = true;
+            103
         }
         "ctrlshiftdown" => {
-            req_ctrl = true;
-            req_shift = true;
-            &[108]
+            info.req_ctrl = true;
+            info.req_shift = true;
+            108
         }
         "ctrlshiftleft" => {
-            req_ctrl = true;
-            req_shift = true;
-            &[105]
+            info.req_ctrl = true;
+            info.req_shift = true;
+            105
         }
         "ctrlshiftright" => {
-            req_ctrl = true;
-            req_shift = true;
-            &[106]
+            info.req_ctrl = true;
+            info.req_shift = true;
+            106
         }
         "ctrldelete" => {
-            req_ctrl = true;
-            &[111]
+            info.req_ctrl = true;
+            111
         }
         "ctrlbackspace" => {
-            req_ctrl = true;
-            &[14]
+            info.req_ctrl = true;
+            14
         }
-        _ => return Ok(false),
+        _ => return Err(format!("Unrecognized key: '{}'", key)),
     };
+    Ok(info)
+}
+
+#[cfg(target_os = "linux")]
+fn check_key_down(key: &str) -> Result<bool, String> {
+    let info = parse_linux_key(key)?;
 
     use libc::{O_NONBLOCK, O_RDONLY, close, ioctl, open};
 
@@ -392,6 +496,7 @@ fn check_key_down(key: &str) -> Result<bool, String> {
                                         if ioctl(fd, eviogbit_key, key_bits.as_mut_ptr()) >= 0 {
                                             if (key_bits[57 / 8] & (1 << (57 % 8))) != 0
                                                 || (key_bits[1 / 8] & (1 << (1 % 8))) != 0
+                                                || (key_bits[272 / 8] & (1 << (272 % 8))) != 0
                                             {
                                                 fds.push(fd);
                                             } else {
@@ -423,38 +528,29 @@ fn check_key_down(key: &str) -> Result<bool, String> {
                     let mut key_bits = [0u8; 96];
                     let evioca: libc::c_ulong = 0x80604518;
                     if ioctl(fd, evioca as _, key_bits.as_mut_ptr()) >= 0 {
-                        for &code in codes {
-                            if *code < (96 * 8) {
-                                let byte = (*code / 8) as usize;
-                                let bit = *code % 8;
-                                if (key_bits[byte] & (1 << bit)) != 0 {
-                                    is_down = true;
-                                }
-                            }
+                        let byte = (info.code / 8) as usize;
+                        let bit = info.code % 8;
+                        if (key_bits[byte] & (1 << bit)) != 0 {
+                            is_down = true;
                         }
-                        if req_shift {
-                            for &code in &[42, 54] {
-                                let byte = (code / 8) as usize;
-                                let bit = code % 8;
-                                if (key_bits[byte] & (1 << bit)) != 0 {
+
+                        if info.req_shift {
+                            for &c in &[42, 54] {
+                                if (key_bits[(c / 8) as usize] & (1 << (c % 8))) != 0 {
                                     shift_down = true;
                                 }
                             }
                         }
-                        if req_ctrl {
-                            for &code in &[29, 97] {
-                                let byte = (code / 8) as usize;
-                                let bit = code % 8;
-                                if (key_bits[byte] & (1 << bit)) != 0 {
+                        if info.req_ctrl {
+                            for &c in &[29, 97] {
+                                if (key_bits[(c / 8) as usize] & (1 << (c % 8))) != 0 {
                                     ctrl_down = true;
                                 }
                             }
                         }
-                        if req_alt {
-                            for &code in &[56, 100] {
-                                let byte = (code / 8) as usize;
-                                let bit = code % 8;
-                                if (key_bits[byte] & (1 << bit)) != 0 {
+                        if info.req_alt {
+                            for &c in &[56, 100] {
+                                if (key_bits[(c / 8) as usize] & (1 << (c % 8))) != 0 {
                                     alt_down = true;
                                 }
                             }
@@ -469,16 +565,124 @@ fn check_key_down(key: &str) -> Result<bool, String> {
         return Err("Permission denied.\nRun with sudo or add user to 'input' group.".to_string());
     }
 
-    if req_shift && !shift_down {
+    if info.req_shift && !shift_down {
         return Ok(false);
     }
-    if req_ctrl && !ctrl_down {
+    if info.req_ctrl && !ctrl_down {
         return Ok(false);
     }
-    if req_alt && !alt_down {
+    if info.req_alt && !alt_down {
         return Ok(false);
     }
+
     Ok(is_down)
+}
+
+#[cfg(target_os = "linux")]
+fn get_or_create_uinput() -> Result<i32, String> {
+    thread_local! {
+        static UINPUT_FD: std::cell::RefCell<Option<i32>> = std::cell::RefCell::new(None);
+    }
+
+    UINPUT_FD.with(|f| {
+        if let Some(fd) = *f.borrow() {
+            return Ok(fd);
+        }
+
+        unsafe {
+            let fd = libc::open(
+                b"/dev/uinput\0".as_ptr() as *const libc::c_char,
+                libc::O_WRONLY | libc::O_NONBLOCK,
+            );
+            if fd < 0 {
+                return Err("Failed to open /dev/uinput. Are you root?".to_string());
+            }
+
+            libc::ioctl(fd, 0x40045564, 1);
+
+            for i in 1..=276 {
+                libc::ioctl(fd, 0x40045565, i);
+            }
+
+            #[repr(C)]
+            struct input_id {
+                bustype: u16,
+                vendor: u16,
+                product: u16,
+                version: u16,
+            }
+            #[repr(C)]
+            struct uinput_user_dev {
+                name: [u8; 80],
+                id: input_id,
+                ff_effects_max: u32,
+                absmax: [i32; 64],
+                absmin: [i32; 64],
+                absfuzz: [i32; 64],
+                absflat: [i32; 64],
+            }
+
+            let mut dev: uinput_user_dev = std::mem::zeroed();
+            let name = b"nuui_virtual_keyboard\0";
+            dev.name[..name.len()].copy_from_slice(name);
+            dev.id.bustype = 3;
+            dev.id.vendor = 0x1234;
+            dev.id.product = 0x5678;
+            dev.id.version = 1;
+
+            libc::write(
+                fd,
+                &dev as *const _ as *const libc::c_void,
+                std::mem::size_of::<uinput_user_dev>(),
+            );
+
+            if libc::ioctl(fd, 0x5501) < 0 {
+                libc::close(fd);
+                return Err("Failed to create uinput device".to_string());
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            *f.borrow_mut() = Some(fd);
+            Ok(fd)
+        }
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn simulate_key(key: &str, down: bool) -> Result<(), String> {
+    let info = parse_linux_key(key)?;
+    let fd = get_or_create_uinput()?;
+
+    #[repr(C)]
+    struct input_event {
+        time: libc::timeval,
+        type_: u16,
+        code: u16,
+        value: i32,
+    }
+
+    unsafe {
+        let mut ev: input_event = std::mem::zeroed();
+        ev.type_ = 1;
+        ev.code = info.code;
+        ev.value = if down { 1 } else { 0 };
+        libc::write(
+            fd,
+            &ev as *const _ as *const libc::c_void,
+            std::mem::size_of::<input_event>(),
+        );
+
+        let mut syn: input_event = std::mem::zeroed();
+        syn.type_ = 0;
+        syn.code = 0;
+        syn.value = 0;
+        libc::write(
+            fd,
+            &syn as *const _ as *const libc::c_void,
+            std::mem::size_of::<input_event>(),
+        );
+    }
+    Ok(())
 }
 
 fn variant_to_key_str(v: &Value) -> Result<String, String> {
@@ -516,15 +720,16 @@ fn variant_to_key_str(v: &Value) -> Result<String, String> {
                 }
                 "Ctrl" => {
                     if inner.is_some() {
-                        return Err("Variant 'Ctrl' with argument is not supported in isdown()/isup(). Use Key::CtrlLeft or Key::CtrlRight instead.".to_string());
+                        return Err("Variant 'Ctrl' with argument is not supported. Use Key::CtrlLeft or Key::CtrlRight instead.".to_string());
                     }
                     return Ok("ctrl".to_string());
                 }
-                "Alt" => {
+                "Alt" | "Space" | "CapsLock" | "PgUp" | "PgDn" | "Home" | "End" | "PrtScr"
+                | "Insert" | "LWin" | "RWin" | "LMB" | "RMB" | "MMB" | "SB1" | "SB2" => {
                     if inner.is_some() {
-                        return Err("Variant 'Alt' does not take arguments".to_string());
+                        return Err(format!("Variant '{}' does not take arguments", variant));
                     }
-                    return Ok("alt".to_string());
+                    return Ok(variant.to_lowercase());
                 }
                 "F" => {
                     if let Some(inner_val) = inner {
@@ -1535,6 +1740,11 @@ impl Interpreter {
                             "Insert",
                             "LWin",
                             "RWin",
+                            "LMB",
+                            "RMB",
+                            "MMB",
+                            "SB1",
+                            "SB2",
                         ];
                         if !valid_variants.contains(&prop.as_str()) {
                             return Err(format!(
@@ -1633,6 +1843,11 @@ impl Interpreter {
                             "Insert",
                             "LWin",
                             "RWin",
+                            "LMB",
+                            "RMB",
+                            "MMB",
+                            "SB1",
+                            "SB2",
                         ];
                         if !valid_variants.contains(&method.as_str()) {
                             return Err(format!(
@@ -1975,7 +2190,10 @@ impl Interpreter {
                     }
                     "isdown" | "isup" => {
                         if eval_args.len() != 1 {
-                            return Err(format!("Line {}: '{}' expects 1 argument", line, name));
+                            return Err(format!(
+                                "Line {}: '{}' expects exactly 1 argument",
+                                line, name
+                            ));
                         }
 
                         let key_str = match variant_to_key_str(&eval_args[0].1) {
@@ -1993,6 +2211,25 @@ impl Interpreter {
                         } else {
                             return Ok(Value::Bool(!is_down));
                         }
+                    }
+                    "keydown" | "keyup" => {
+                        if eval_args.len() != 1 {
+                            return Err(format!(
+                                "Line {}: '{}' expects exactly 1 argument",
+                                line, name
+                            ));
+                        }
+
+                        let key_str = match variant_to_key_str(&eval_args[0].1) {
+                            Ok(s) => s,
+                            Err(e) => return Err(format!("Line {}: {}", line, e)),
+                        };
+
+                        let is_down = name == "keydown";
+                        if let Err(e) = simulate_key(&key_str, is_down) {
+                            return Err(format!("Line {}: {}", line, e));
+                        }
+                        return Ok(Value::Nil);
                     }
                     _ => {}
                 }

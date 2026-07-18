@@ -216,6 +216,11 @@ impl Analyzer {
                             "Insert",
                             "LWin",
                             "RWin",
+                            "LMB",
+                            "RMB",
+                            "MMB",
+                            "SB1",
+                            "SB2",
                         ];
                         if !valid_variants.contains(&prop.as_str()) {
                             self.error(*line, format!("Invalid variant '{}' for enum 'Key'", prop));
@@ -270,6 +275,11 @@ impl Analyzer {
                             "Insert",
                             "LWin",
                             "RWin",
+                            "LMB",
+                            "RMB",
+                            "MMB",
+                            "SB1",
+                            "SB2",
                         ];
                         if !valid_variants.contains(&method.as_str()) {
                             self.error(
@@ -287,7 +297,8 @@ impl Analyzer {
             Expr::Call(name, args, line) => {
                 if !self.is_defined(name) && !super::core::BUILTIN_FUNCS.contains(&name.as_str()) {
                     self.error(*line, format!("Undefined function '{}'", name));
-                } else if name == "isdown" || name == "isup" {
+                } else if name == "isdown" || name == "isup" || name == "keydown" || name == "keyup"
+                {
                     if args.len() != 1 {
                         self.error(*line, format!("'{}' expects exactly 1 argument", name));
                     } else if matches!(args[0].1, Expr::String(_)) {

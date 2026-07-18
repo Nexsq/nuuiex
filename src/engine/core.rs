@@ -28,6 +28,8 @@ pub const BUILTIN_FUNCS: &[&str] = &[
     "onwindows",
     "isdown",
     "isup",
+    "keydown",
+    "keyup",
 ];
 
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {
