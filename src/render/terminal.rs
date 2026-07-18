@@ -32,6 +32,7 @@ pub enum Key {
     Backspace,
     CtrlBackspace,
     None,
+    F(u8),
 }
 
 pub struct Terminal {
@@ -124,9 +125,28 @@ impl Terminal {
                             b"3~" => Key::Delete,
                             b"3;5~" => Key::CtrlDelete,
                             b"127;5u" => Key::CtrlBackspace,
-                            _ => Key::Esc,
+                            b"11~" => Key::F(1),
+                            b"12~" => Key::F(2),
+                            b"13~" => Key::F(3),
+                            b"14~" => Key::F(4),
+                            b"15~" => Key::F(5),
+                            b"17~" => Key::F(6),
+                            b"18~" => Key::F(7),
+                            b"19~" => Key::F(8),
+                            b"20~" => Key::F(9),
+                            b"21~" => Key::F(10),
+                            b"23~" => Key::F(11),
+                            b"24~" => Key::F(12),
+                            _ => Key::None,
                         };
                     }
+                    Ok(b'O') => match self.key_rx.recv_timeout(Duration::from_millis(16)) {
+                        Ok(b'P') => return Key::F(1),
+                        Ok(b'Q') => return Key::F(2),
+                        Ok(b'R') => return Key::F(3),
+                        Ok(b'S') => return Key::F(4),
+                        _ => return Key::Esc,
+                    },
                     _ => {}
                 }
                 Key::Esc

@@ -404,6 +404,7 @@ impl<'a> Lexer<'a> {
                     };
                 }
                 '"' => return self.string(),
+                '\'' => return self.single_quote_string(),
                 '`' => return self.multiline_string(),
                 _ if c.is_ascii_digit() => return self.number(),
                 _ if c.is_alphabetic() || c == '_' => return self.identifier(),
@@ -443,6 +444,51 @@ impl<'a> Lexer<'a> {
                     'r' => val.push('\r'),
                     '\\' => val.push('\\'),
                     '"' => val.push('"'),
+                    c => {
+                        val.push('\\');
+                        val.push(c);
+                    }
+                }
+            } else {
+                val.push(self.advance());
+            }
+        }
+
+        if self.is_at_end() {
+            return Token {
+                kind: TokenKind::Error("Unterminated string".into()),
+                line: start_line,
+            };
+        }
+        self.advance();
+
+        Token {
+            kind: TokenKind::String(val),
+            line: start_line,
+        }
+    }
+
+    fn single_quote_string(&mut self) -> Token {
+        let start_line = self.line;
+        self.advance();
+        let mut val = String::new();
+
+        while !self.is_at_end() && self.peek() != '\'' {
+            if self.peek() == '\n' {
+                return Token {
+                    kind: TokenKind::Error("Unterminated string (newlines not allowed)".into()),
+                    line: start_line,
+                };
+            } else if self.peek() == '\\' {
+                self.advance();
+                if self.is_at_end() {
+                    break;
+                }
+                match self.advance() {
+                    'n' => val.push('\n'),
+                    'r' => val.push('\r'),
+                    '\\' => val.push('\\'),
+                    '\'' => val.push('\''),
                     c => {
                         val.push('\\');
                         val.push(c);

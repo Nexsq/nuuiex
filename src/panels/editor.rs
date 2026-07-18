@@ -1676,15 +1676,7 @@ impl Editor {
                 let mut idx = 0;
                 while idx < line_chars.len() {
                     let c = line_chars[idx];
-                    if c == '#' {
-                        let start = idx;
-                        let end = line_chars.len();
-                        for k in start..end {
-                            syntax_colors
-                                .push(theme.editor_comments.color_at(k - start, end - start));
-                        }
-                        break;
-                    } else if c == '"' || c == '`' {
+                    if c == '"' || c == '\'' || c == '`' {
                         let quote_char = c;
                         let start = idx;
                         idx += 1;
@@ -1701,6 +1693,14 @@ impl Editor {
                             syntax_colors
                                 .push(theme.editor_strings.color_at(k - start, idx - start));
                         }
+                    } else if c == '#' {
+                        let start = idx;
+                        let end = line_chars.len();
+                        for k in start..end {
+                            syntax_colors
+                                .push(theme.editor_comments.color_at(k - start, end - start));
+                        }
+                        break;
                     } else if c.is_ascii_digit() {
                         let start = idx;
                         idx += 1;
@@ -1738,7 +1738,7 @@ impl Editor {
                                 | ['b', 'r', 'e', 'a', 'k']
                         );
                         let is_bool =
-                            matches!(word_chars, ['t', 'r', 'u', 'e'] | ['f', 'a', 'l', 's', 'e']);
+                            matches!(word_chars, ['T', 'r', 'u', 'e'] | ['F', 'a', 'l', 's', 'e']);
 
                         let mut j = idx;
                         while j < line_chars.len() && line_chars[j].is_whitespace() {

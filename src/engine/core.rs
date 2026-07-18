@@ -26,6 +26,8 @@ pub const BUILTIN_FUNCS: &[&str] = &[
     "exec",
     "onlinux",
     "onwindows",
+    "isdown",
+    "isup",
 ];
 
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {

@@ -11,6 +11,8 @@ pub enum Value {
     List(Vec<Value>),
     Dict(HashMap<Value, Value>),
     Function(Arc<FunctionDef>),
+    BuiltinEnum(String),
+    EnumVariant(String, String, Option<Box<Value>>),
     Nil,
 }
 
@@ -23,6 +25,10 @@ impl PartialEq for Value {
             (Value::List(a), Value::List(b)) => a == b,
             (Value::Dict(a), Value::Dict(b)) => a == b,
             (Value::Function(a), Value::Function(b)) => Arc::ptr_eq(a, b),
+            (Value::BuiltinEnum(a), Value::BuiltinEnum(b)) => a == b,
+            (Value::EnumVariant(e1, v1, i1), Value::EnumVariant(e2, v2, i2)) => {
+                e1 == e2 && v1 == v2 && i1 == i2
+            }
             (Value::Nil, Value::Nil) => true,
             _ => false,
         }
@@ -72,6 +78,16 @@ impl std::hash::Hash for Value {
                 state.write_u8(6);
                 state.write_usize(Arc::as_ptr(f) as usize);
             }
+            Value::BuiltinEnum(s) => {
+                state.write_u8(8);
+                s.hash(state);
+            }
+            Value::EnumVariant(e, v, inner) => {
+                state.write_u8(9);
+                e.hash(state);
+                v.hash(state);
+                inner.hash(state);
+            }
             Value::Nil => {
                 state.write_u8(7);
             }
@@ -88,6 +104,7 @@ impl Value {
             Value::List(l) => !l.is_empty(),
             Value::Dict(d) => !d.is_empty(),
             Value::Function(_) => true,
+            Value::BuiltinEnum(_) | Value::EnumVariant(..) => true,
             Value::Nil => false,
         }
     }
@@ -133,6 +150,14 @@ impl fmt::Display for Value {
                 write!(f, "}}")
             }
             Value::Function(func) => write!(f, "<function {}>", func.name),
+            Value::BuiltinEnum(s) => write!(f, "{}", s),
+            Value::EnumVariant(e, v, inner) => {
+                if let Some(i) = inner {
+                    write!(f, "{}::{}({})", e, v, i)
+                } else {
+                    write!(f, "{}::{}", e, v)
+                }
+            }
             Value::Nil => write!(f, "None"),
         }
     }

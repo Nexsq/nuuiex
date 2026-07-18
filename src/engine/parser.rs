@@ -7,6 +7,7 @@ pub struct Parser {
     current: usize,
     pub errors: Vec<String>,
     pub error_lines: HashSet<usize>,
+    in_dict_key: bool,
 }
 
 impl Parser {
@@ -16,7 +17,12 @@ impl Parser {
             current: 0,
             errors: Vec::new(),
             error_lines: HashSet::new(),
+            in_dict_key: false,
         }
+    }
+
+    fn peek_next_kind(&self) -> Option<&TokenKind> {
+        self.tokens.get(self.current + 1).map(|t| &t.kind)
     }
 
     pub fn parse(&mut self) -> Vec<Stmt> {
@@ -485,7 +491,10 @@ impl Parser {
                     self.error("Expected ']' after index.");
                     return None;
                 }
-            } else if self.check(&TokenKind::DoubleColon) {
+            } else if !self.in_dict_key
+                && self.check(&TokenKind::Colon)
+                && matches!(self.peek_next_kind(), Some(TokenKind::Ident(_)))
+            {
                 let line = self.advance().line;
                 if let TokenKind::Ident(method) = self.peek().kind.clone() {
                     self.advance();
@@ -526,11 +535,10 @@ impl Parser {
                             return None;
                         }
                     } else {
-                        self.error("Expected '(' after method name.");
-                        return None;
+                        expr = Expr::StaticAccess(Box::new(expr), method, line);
                     }
                 } else {
-                    self.error("Expected method name after '::'.");
+                    self.error("Expected identifier after ':'.");
                     return None;
                 }
             } else {
@@ -701,7 +709,12 @@ impl Parser {
                 let mut items = Vec::new();
                 if !self.check(&TokenKind::RBrace) {
                     loop {
-                        if let Some(key) = self.parse_expression() {
+                        let prev_in_dict = self.in_dict_key;
+                        self.in_dict_key = true;
+                        let key_opt = self.parse_expression();
+                        self.in_dict_key = prev_in_dict;
+
+                        if let Some(key) = key_opt {
                             if self.check(&TokenKind::Colon) {
                                 self.advance();
                                 if let Some(val) = self.parse_expression() {

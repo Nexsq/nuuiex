@@ -5,6 +5,244 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender};
 
+#[cfg(windows)]
+fn check_key_down(key: &str) -> Result<bool, String> {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
+    let vk = match key.to_lowercase().as_str() {
+        "backspace" | "back" => VK_BACK,
+        "tab" => VK_TAB,
+        "enter" | "return" => VK_RETURN,
+        "shift" => VK_SHIFT,
+        "ctrl" | "control" => VK_CONTROL,
+        "alt" | "menu" => VK_MENU,
+        "pause" => VK_PAUSE,
+        "capslock" | "caps" => VK_CAPITAL,
+        "esc" | "escape" => VK_ESCAPE,
+        "space" => VK_SPACE,
+        "pgup" | "pageup" => VK_PRIOR,
+        "pgdn" | "pagedown" => VK_NEXT,
+        "end" => VK_END,
+        "home" => VK_HOME,
+        "left" => VK_LEFT,
+        "up" => VK_UP,
+        "right" => VK_RIGHT,
+        "down" => VK_DOWN,
+        "prtscr" | "printscreen" => VK_SNAPSHOT,
+        "ins" | "insert" => VK_INSERT,
+        "del" | "delete" => VK_DELETE,
+        "lwin" | "cmd" | "super" | "win" => VK_LWIN,
+        "rwin" => VK_RWIN,
+        "f1" => VK_F1,
+        "f2" => VK_F2,
+        "f3" => VK_F3,
+        "f4" => VK_F4,
+        "f5" => VK_F5,
+        "f6" => VK_F6,
+        "f7" => VK_F7,
+        "f8" => VK_F8,
+        "f9" => VK_F9,
+        "f10" => VK_F10,
+        "f11" => VK_F11,
+        "f12" => VK_F12,
+        s if s.len() == 1 => {
+            let c = s.chars().next().unwrap();
+            unsafe {
+                let res = VkKeyScanW(c as u16);
+                if res == -1 {
+                    return Ok(false);
+                }
+                (res & 0xFF) as u16
+            }
+        }
+        _ => return Ok(false),
+    };
+
+    unsafe { Ok((GetAsyncKeyState(vk as i32) as u16 & 0x8000) != 0) }
+}
+
+#[cfg(target_os = "linux")]
+fn check_key_down(key: &str) -> Result<bool, String> {
+    let codes = match key.to_lowercase().as_str() {
+        "esc" | "escape" => vec![1],
+        "1" => vec![2],
+        "2" => vec![3],
+        "3" => vec![4],
+        "4" => vec![5],
+        "5" => vec![6],
+        "6" => vec![7],
+        "7" => vec![8],
+        "8" => vec![9],
+        "9" => vec![10],
+        "0" => vec![11],
+        "minus" | "-" => vec![12],
+        "equal" | "=" => vec![13],
+        "backspace" | "back" => vec![14],
+        "tab" => vec![15],
+        "q" => vec![16],
+        "w" => vec![17],
+        "e" => vec![18],
+        "r" => vec![19],
+        "t" => vec![20],
+        "y" => vec![21],
+        "u" => vec![22],
+        "i" => vec![23],
+        "o" => vec![24],
+        "p" => vec![25],
+        "enter" | "return" => vec![28],
+        "ctrl" | "control" => vec![29, 97],
+        "a" => vec![30],
+        "s" => vec![31],
+        "d" => vec![32],
+        "f" => vec![33],
+        "g" => vec![34],
+        "h" => vec![35],
+        "j" => vec![36],
+        "k" => vec![37],
+        "l" => vec![38],
+        "shift" => vec![42, 54],
+        "z" => vec![44],
+        "x" => vec![45],
+        "c" => vec![46],
+        "v" => vec![47],
+        "b" => vec![48],
+        "n" => vec![49],
+        "m" => vec![50],
+        "alt" | "menu" => vec![56, 100],
+        "space" | " " => vec![57],
+        "capslock" | "caps" => vec![58],
+        "f1" => vec![59],
+        "f2" => vec![60],
+        "f3" => vec![61],
+        "f4" => vec![62],
+        "f5" => vec![63],
+        "f6" => vec![64],
+        "f7" => vec![65],
+        "f8" => vec![66],
+        "f9" => vec![67],
+        "f10" => vec![68],
+        "f11" => vec![87],
+        "f12" => vec![88],
+        "up" => vec![103],
+        "left" => vec![105],
+        "right" => vec![106],
+        "down" => vec![108],
+        "home" => vec![102],
+        "end" => vec![107],
+        "pgup" | "pageup" => vec![104],
+        "pgdn" | "pagedown" => vec![109],
+        "ins" | "insert" => vec![110],
+        "del" | "delete" => vec![111],
+        "lwin" | "cmd" | "super" | "win" => vec![125, 126],
+        "[" => vec![26],
+        "]" => vec![27],
+        ";" => vec![39],
+        "'" => vec![40],
+        "`" => vec![41],
+        "\\" => vec![43],
+        "," => vec![51],
+        "." => vec![52],
+        "/" => vec![53],
+        "!" => vec![2],
+        "@" => vec![3],
+        "#" => vec![4],
+        "$" => vec![5],
+        "%" => vec![6],
+        "^" => vec![7],
+        "&" => vec![8],
+        "*" => vec![9],
+        "(" => vec![10],
+        ")" => vec![11],
+        "_" => vec![12],
+        "+" => vec![13],
+        "{" => vec![26],
+        "}" => vec![27],
+        ":" => vec![39],
+        "\"" => vec![40],
+        "~" => vec![41],
+        "|" => vec![43],
+        "<" => vec![51],
+        ">" => vec![52],
+        "?" => vec![53],
+        s if s.len() == 1 => {
+            let c = s.chars().next().unwrap();
+            let upper = c.to_ascii_uppercase().to_string();
+            if upper != s {
+                return check_key_down(&upper);
+            }
+            return Ok(false);
+        }
+        _ => return Ok(false),
+    };
+
+    let mut is_down = false;
+    let mut any_opened = false;
+    if let Ok(entries) = std::fs::read_dir("/dev/input") {
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .starts_with("event")
+            {
+                unsafe {
+                    use libc::{O_NONBLOCK, O_RDONLY, close, ioctl, open};
+                    let mut path_bytes = path.to_str().unwrap_or("").as_bytes().to_vec();
+                    path_bytes.push(0);
+                    let fd = open(
+                        path_bytes.as_ptr() as *const libc::c_char,
+                        O_RDONLY | O_NONBLOCK,
+                    );
+                    if fd >= 0 {
+                        any_opened = true;
+                        let mut key_bits = [0u8; 96];
+                        let evioca: libc::c_ulong = 0x80604518;
+                        if ioctl(fd, evioca as _, key_bits.as_mut_ptr()) >= 0 {
+                            for &code in &codes {
+                                if code < (96 * 8) {
+                                    let byte = (code / 8) as usize;
+                                    let bit = code % 8;
+                                    if (key_bits[byte] & (1 << bit)) != 0 {
+                                        is_down = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        close(fd);
+                    }
+                }
+                if is_down {
+                    break;
+                }
+            }
+        }
+    }
+
+    if !any_opened {
+        return Err("Permission denied: Cannot read /dev/input/event*. Run with sudo or add user to 'input' group.".to_string());
+    }
+
+    Ok(is_down)
+}
+
+fn variant_to_key_str(v: &Value) -> Option<String> {
+    if let Value::EnumVariant(e, variant, inner) = v {
+        if e == "Key" {
+            if variant == "Char" {
+                if let Some(inner_val) = inner {
+                    if let Value::String(s) = &**inner_val {
+                        return Some(s.clone());
+                    }
+                }
+            } else {
+                return Some(variant.to_lowercase());
+            }
+        }
+    }
+    None
+}
+
 pub struct Environment {
     pub scopes: Vec<HashMap<String, Value>>,
     pub constants: Vec<HashSet<String>>,
@@ -12,10 +250,17 @@ pub struct Environment {
 
 impl Environment {
     pub fn new() -> Self {
-        Self {
+        let mut env = Self {
             scopes: vec![HashMap::new()],
             constants: vec![HashSet::new()],
-        }
+        };
+        env.define(
+            "Key".to_string(),
+            Value::BuiltinEnum("Key".to_string()),
+            true,
+        )
+        .unwrap();
+        env
     }
 
     pub fn push(&mut self) {
@@ -31,7 +276,13 @@ impl Environment {
     pub fn define(&mut self, name: String, val: Value, is_const: bool) -> Result<(), String> {
         let last_scope = self.scopes.last_mut().unwrap();
         if last_scope.contains_key(&name) {
-            return Err(format!("Variable '{}' already defined in this scope", name));
+            if let Some(existing_is_const) = self.constants.last().unwrap().contains(&name).into() {
+                if existing_is_const {
+                    return Err(format!("Cannot modify constant '{}'", name));
+                }
+            }
+            last_scope.insert(name.clone(), val);
+            return Ok(());
         }
         last_scope.insert(name.clone(), val);
         if is_const {
@@ -937,6 +1188,17 @@ impl Interpreter {
                     Err(format!("Line {}: Undefined variable '{}'", line, name))
                 }
             }
+            Expr::StaticAccess(left, prop, line) => {
+                let left_val = self.eval_expr(left)?;
+                if let Value::BuiltinEnum(enum_name) = left_val {
+                    Ok(Value::EnumVariant(enum_name, prop.clone(), None))
+                } else {
+                    Err(format!(
+                        "Line {}: Static access '::' is only supported on enums",
+                        line
+                    ))
+                }
+            }
             Expr::Index(left, index_expr, line) => {
                 let left_val = self.eval_expr(left)?;
                 let index_val = self.eval_expr(index_expr)?;
@@ -976,6 +1238,21 @@ impl Interpreter {
                     eval_args.push(self.eval_expr(arg)?);
                 }
                 let mut left_val = self.eval_expr(left)?;
+
+                if let Value::BuiltinEnum(enum_name) = &left_val {
+                    if eval_args.len() != 1 {
+                        return Err(format!(
+                            "Line {}: Enum variant constructor expects exactly 1 argument",
+                            line
+                        ));
+                    }
+                    return Ok(Value::EnumVariant(
+                        enum_name.clone(),
+                        method.clone(),
+                        Some(Box::new(eval_args[0].clone())),
+                    ));
+                }
+
                 let res = self.apply_method(&mut left_val, method, eval_args, *line)?;
                 self.try_assign_expr(left, left_val)?;
                 Ok(res)
@@ -1290,11 +1567,26 @@ impl Interpreter {
                         }
                         return Ok(Value::Bool(cfg!(target_os = "linux")));
                     }
-                    "onwindows" => {
-                        if !eval_args.is_empty() {
-                            return Err(format!("Line {}: 'onwindows' expects 0 arguments", line));
+                    "isdown" | "isup" => {
+                        if eval_args.len() != 1 {
+                            return Err(format!("Line {}: '{}' expects 1 argument", line, name));
                         }
-                        return Ok(Value::Bool(cfg!(target_os = "windows")));
+
+                        let key_str = if let Some(s) = variant_to_key_str(&eval_args[0].1) {
+                            s
+                        } else {
+                            return Err(format!(
+                                "Line {}: '{}' expects a Key enum variant (e.g. Key::Alt or Key::Char('t'))",
+                                line, name
+                            ));
+                        };
+
+                        let is_down = check_key_down(&key_str)?;
+                        if name == "isdown" {
+                            return Ok(Value::Bool(is_down));
+                        } else {
+                            return Ok(Value::Bool(!is_down));
+                        }
                     }
                     _ => {}
                 }

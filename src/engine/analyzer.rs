@@ -10,10 +10,12 @@ pub struct Analyzer {
 
 impl Analyzer {
     pub fn new() -> Self {
+        let mut root_scope = HashSet::new();
+        root_scope.insert("Key".to_string());
         Self {
             errors: Vec::new(),
             error_lines: HashSet::new(),
-            scopes: vec![HashSet::new()],
+            scopes: vec![root_scope],
             loop_depth: 0,
         }
     }
@@ -170,6 +172,9 @@ impl Analyzer {
                 self.analyze_expr(left);
                 self.analyze_expr(index);
             }
+            Expr::StaticAccess(left, _, _) => {
+                self.analyze_expr(left);
+            }
             Expr::MethodCall(left, _, args, _) => {
                 self.analyze_expr(left);
                 for (_, arg) in args {
@@ -183,6 +188,18 @@ impl Analyzer {
             Expr::Call(name, args, line) => {
                 if !self.is_defined(name) && !super::core::BUILTIN_FUNCS.contains(&name.as_str()) {
                     self.error(*line, format!("Undefined function '{}'", name));
+                } else if name == "isdown" || name == "isup" {
+                    if args.len() != 1 {
+                        self.error(*line, format!("'{}' expects exactly 1 argument", name));
+                    } else if matches!(args[0].1, Expr::String(_)) {
+                        self.error(
+                            *line,
+                            format!(
+                                "'{}' expects a Key variant (e.g. Key:Alt), not a string",
+                                name
+                            ),
+                        );
+                    }
                 }
                 for (_, arg) in args {
                     self.analyze_expr(arg);

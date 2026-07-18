@@ -31,6 +31,7 @@ pub enum Expr {
     Ident(String, usize),
     Index(Box<Expr>, Box<Expr>, usize),
     MethodCall(Box<Expr>, String, Vec<(Option<String>, Expr)>, usize),
+    StaticAccess(Box<Expr>, String, usize),
     Binary(Box<Expr>, BinaryOp, Box<Expr>, usize),
     Call(String, Vec<(Option<String>, Expr)>, usize),
 }
