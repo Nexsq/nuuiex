@@ -92,7 +92,7 @@ pub fn run_in_thread(
     let ast = parser.parse();
 
     if !parser.errors.is_empty() {
-        let mut res = vec!["--- Syntax Errors ---".to_string()];
+        let mut res = vec!["Syntax Errors:".to_string()];
         res.extend(parser.errors);
         let _ = tx.send(EngineMessage::Output(res));
         return;
@@ -102,7 +102,7 @@ pub fn run_in_thread(
     analyzer.analyze(&ast);
 
     if !analyzer.errors.is_empty() {
-        let mut res = vec!["--- Analysis Errors ---".to_string()];
+        let mut res = vec!["Analysis Errors:".to_string()];
         res.extend(analyzer.errors);
         let _ = tx.send(EngineMessage::Output(res));
         return;

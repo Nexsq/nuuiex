@@ -156,185 +156,186 @@ fn check_key_down(key: &str) -> Result<bool, String> {
 fn check_key_down(key: &str) -> Result<bool, String> {
     let mut req_shift = false;
     let mut req_ctrl = false;
-    let mut search_key = key.to_string();
+    let mut req_alt = false;
 
-    if key.len() == 1 {
+    let lower_key = key.to_lowercase();
+    let mut search_str = lower_key.as_str();
+
+    if key.chars().count() == 1 {
         let c = key.chars().next().unwrap();
-        if c.is_ascii_alphabetic() {
-            search_key = c.to_ascii_lowercase().to_string();
-        } else {
+        if !c.is_ascii_alphabetic() {
             let shift_map = [
-                ('!', '1'),
-                ('@', '2'),
-                ('#', '3'),
-                ('$', '4'),
-                ('%', '5'),
-                ('^', '6'),
-                ('&', '7'),
-                ('*', '8'),
-                ('(', '9'),
-                (')', '0'),
-                ('_', '-'),
-                ('+', '='),
-                ('{', '['),
-                ('}', ']'),
-                ('|', '\\'),
-                (':', ';'),
-                ('"', '\''),
-                ('<', ','),
-                ('>', '.'),
-                ('?', '/'),
+                ('!', "1"),
+                ('@', "2"),
+                ('#', "3"),
+                ('$', "4"),
+                ('%', "5"),
+                ('^', "6"),
+                ('&', "7"),
+                ('*', "8"),
+                ('(', "9"),
+                (')', "0"),
+                ('_', "-"),
+                ('+', "="),
+                ('{', "["),
+                ('}', "]"),
+                ('|', "\\"),
+                (':', ";"),
+                ('"', "'"),
+                ('<', ","),
+                ('>', "."),
+                ('?', "/"),
             ];
             for &(shifted, unshifted) in &shift_map {
                 if c == shifted {
                     req_shift = true;
-                    search_key = unshifted.to_string();
+                    search_str = unshifted;
                     break;
                 }
             }
         }
     }
 
-    let codes = match search_key.to_lowercase().as_str() {
-        "esc" | "escape" => vec![1],
-        "1" => vec![2],
-        "2" => vec![3],
-        "3" => vec![4],
-        "4" => vec![5],
-        "5" => vec![6],
-        "6" => vec![7],
-        "7" => vec![8],
-        "8" => vec![9],
-        "9" => vec![10],
-        "0" => vec![11],
-        "minus" | "-" => vec![12],
-        "equal" | "=" => vec![13],
-        "backspace" | "back" => vec![14],
-        "tab" => vec![15],
-        "q" => vec![16],
-        "w" => vec![17],
-        "e" => vec![18],
-        "r" => vec![19],
-        "t" => vec![20],
-        "y" => vec![21],
-        "u" => vec![22],
-        "i" => vec![23],
-        "o" => vec![24],
-        "p" => vec![25],
-        "[" => vec![26],
-        "]" => vec![27],
-        "enter" | "return" => vec![28],
-        "ctrl" | "control" => vec![29, 97],
-        "a" => vec![30],
-        "s" => vec![31],
-        "d" => vec![32],
-        "f" => vec![33],
-        "g" => vec![34],
-        "h" => vec![35],
-        "j" => vec![36],
-        "k" => vec![37],
-        "l" => vec![38],
-        ";" => vec![39],
-        "'" => vec![40],
-        "`" => vec![41],
-        "shift" => vec![42, 54],
-        "\\" => vec![43],
-        "z" => vec![44],
-        "x" => vec![45],
-        "c" => vec![46],
-        "v" => vec![47],
-        "b" => vec![48],
-        "n" => vec![49],
-        "m" => vec![50],
-        "," => vec![51],
-        "." => vec![52],
-        "/" => vec![53],
-        "alt" | "menu" => vec![56, 100],
-        "space" | " " => vec![57],
-        "capslock" | "caps" => vec![58],
-        "f1" => vec![59],
-        "f2" => vec![60],
-        "f3" => vec![61],
-        "f4" => vec![62],
-        "f5" => vec![63],
-        "f6" => vec![64],
-        "f7" => vec![65],
-        "f8" => vec![66],
-        "f9" => vec![67],
-        "f10" => vec![68],
-        "f11" => vec![87],
-        "f12" => vec![88],
-        "up" => vec![103],
-        "left" => vec![105],
-        "right" => vec![106],
-        "down" => vec![108],
-        "home" => vec![102],
-        "end" => vec![107],
-        "pgup" | "pageup" => vec![104],
-        "pgdn" | "pagedown" => vec![109],
-        "ins" | "insert" => vec![110],
-        "del" | "delete" => vec![111],
-        "prtscr" | "printscreen" => vec![99],
-        "lwin" | "cmd" | "super" | "win" => vec![125, 126],
+    let codes: &[u16] = match search_str {
+        "esc" | "escape" => &[1],
+        "1" => &[2],
+        "2" => &[3],
+        "3" => &[4],
+        "4" => &[5],
+        "5" => &[6],
+        "6" => &[7],
+        "7" => &[8],
+        "8" => &[9],
+        "9" => &[10],
+        "0" => &[11],
+        "minus" | "-" => &[12],
+        "equal" | "=" => &[13],
+        "backspace" | "back" => &[14],
+        "tab" => &[15],
+        "q" => &[16],
+        "w" => &[17],
+        "e" => &[18],
+        "r" => &[19],
+        "t" => &[20],
+        "y" => &[21],
+        "u" => &[22],
+        "i" => &[23],
+        "o" => &[24],
+        "p" => &[25],
+        "[" => &[26],
+        "]" => &[27],
+        "enter" | "return" => &[28],
+        "ctrl" | "control" => &[29, 97],
+        "a" => &[30],
+        "s" => &[31],
+        "d" => &[32],
+        "f" => &[33],
+        "g" => &[34],
+        "h" => &[35],
+        "j" => &[36],
+        "k" => &[37],
+        "l" => &[38],
+        ";" => &[39],
+        "'" => &[40],
+        "`" => &[41],
+        "shift" => &[42, 54],
+        "\\" => &[43],
+        "z" => &[44],
+        "x" => &[45],
+        "c" => &[46],
+        "v" => &[47],
+        "b" => &[48],
+        "n" => &[49],
+        "m" => &[50],
+        "," => &[51],
+        "." => &[52],
+        "/" => &[53],
+        "alt" | "menu" => &[56, 100],
+        "space" | " " => &[57],
+        "capslock" | "caps" => &[58],
+        "f1" => &[59],
+        "f2" => &[60],
+        "f3" => &[61],
+        "f4" => &[62],
+        "f5" => &[63],
+        "f6" => &[64],
+        "f7" => &[65],
+        "f8" => &[66],
+        "f9" => &[67],
+        "f10" => &[68],
+        "f11" => &[87],
+        "f12" => &[88],
+        "up" => &[103],
+        "left" => &[105],
+        "right" => &[106],
+        "down" => &[108],
+        "home" => &[102],
+        "end" => &[107],
+        "pgup" | "pageup" => &[104],
+        "pgdn" | "pagedown" => &[109],
+        "ins" | "insert" => &[110],
+        "del" | "delete" => &[111],
+        "prtscr" | "printscreen" => &[99],
+        "lwin" | "cmd" | "super" | "win" => &[125, 126],
         "shiftup" => {
             req_shift = true;
-            vec![103]
+            &[103]
         }
         "shiftdown" => {
             req_shift = true;
-            vec![108]
+            &[108]
         }
         "shiftleft" => {
             req_shift = true;
-            vec![105]
+            &[105]
         }
         "shiftright" => {
             req_shift = true;
-            vec![106]
+            &[106]
         }
         "ctrlup" => {
             req_ctrl = true;
-            vec![103]
+            &[103]
         }
         "ctrldown" => {
             req_ctrl = true;
-            vec![108]
+            &[108]
         }
         "ctrlleft" => {
             req_ctrl = true;
-            vec![105]
+            &[105]
         }
         "ctrlright" => {
             req_ctrl = true;
-            vec![106]
+            &[106]
         }
         "ctrlshiftup" => {
             req_ctrl = true;
             req_shift = true;
-            vec![103]
+            &[103]
         }
         "ctrlshiftdown" => {
             req_ctrl = true;
             req_shift = true;
-            vec![108]
+            &[108]
         }
         "ctrlshiftleft" => {
             req_ctrl = true;
             req_shift = true;
-            vec![105]
+            &[105]
         }
         "ctrlshiftright" => {
             req_ctrl = true;
             req_shift = true;
-            vec![106]
+            &[106]
         }
         "ctrldelete" => {
             req_ctrl = true;
-            vec![111]
+            &[111]
         }
         "ctrlbackspace" => {
             req_ctrl = true;
-            vec![14]
+            &[14]
         }
         _ => return Ok(false),
     };
@@ -359,6 +360,7 @@ fn check_key_down(key: &str) -> Result<bool, String> {
     let mut is_down = false;
     let mut shift_down = false;
     let mut ctrl_down = false;
+    let mut alt_down = false;
     let mut any_opened = false;
 
     KBD_FDS.with(|f| {
@@ -421,10 +423,10 @@ fn check_key_down(key: &str) -> Result<bool, String> {
                     let mut key_bits = [0u8; 96];
                     let evioca: libc::c_ulong = 0x80604518;
                     if ioctl(fd, evioca as _, key_bits.as_mut_ptr()) >= 0 {
-                        for &code in &codes {
-                            if code < (96 * 8) {
-                                let byte = (code / 8) as usize;
-                                let bit = code % 8;
+                        for &code in codes {
+                            if *code < (96 * 8) {
+                                let byte = (*code / 8) as usize;
+                                let bit = *code % 8;
                                 if (key_bits[byte] & (1 << bit)) != 0 {
                                     is_down = true;
                                 }
@@ -448,6 +450,15 @@ fn check_key_down(key: &str) -> Result<bool, String> {
                                 }
                             }
                         }
+                        if req_alt {
+                            for &code in &[56, 100] {
+                                let byte = (code / 8) as usize;
+                                let bit = code % 8;
+                                if (key_bits[byte] & (1 << bit)) != 0 {
+                                    alt_down = true;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -462,6 +473,9 @@ fn check_key_down(key: &str) -> Result<bool, String> {
         return Ok(false);
     }
     if req_ctrl && !ctrl_down {
+        return Ok(false);
+    }
+    if req_alt && !alt_down {
         return Ok(false);
     }
     Ok(is_down)
@@ -505,6 +519,12 @@ fn variant_to_key_str(v: &Value) -> Result<String, String> {
                         return Err("Variant 'Ctrl' with argument is not supported in isdown()/isup(). Use Key::CtrlLeft or Key::CtrlRight instead.".to_string());
                     }
                     return Ok("ctrl".to_string());
+                }
+                "Alt" => {
+                    if inner.is_some() {
+                        return Err("Variant 'Alt' does not take arguments".to_string());
+                    }
+                    return Ok("alt".to_string());
                 }
                 "F" => {
                     if let Some(inner_val) = inner {
@@ -649,7 +669,7 @@ impl Interpreter {
             if !res.is_empty() && !res.last().unwrap().is_empty() {
                 res.push("".to_string());
             }
-            res.push("--- Runtime Errors ---".to_string());
+            res.push("Runtime Errors:".to_string());
             res.extend(self.errors.clone());
         }
 

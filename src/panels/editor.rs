@@ -1628,6 +1628,25 @@ impl Editor {
 
             let i = actual_y as usize;
 
+            let mut is_output_err_header = false;
+            let mut is_output_err_line = false;
+
+            if !self.is_editing {
+                let text = self.state.lines[i].as_str();
+                if text == "Syntax Errors:"
+                    || text == "Analysis Errors:"
+                    || text == "Runtime Errors:"
+                {
+                    is_output_err_header = true;
+                } else if text.starts_with("Line ") && text.contains(':') {
+                    if let Some(colon_idx) = text.find(':') {
+                        if text[5..colon_idx].chars().all(|c| c.is_ascii_digit()) {
+                            is_output_err_line = true;
+                        }
+                    }
+                }
+            }
+
             if show_line_numbers {
                 let prefix_str = format!("{:>w$}", i + 1, w = max_num_width);
                 let prefix_style = Style {
@@ -1802,6 +1821,15 @@ impl Editor {
                 let mut style = Style {
                     fg: if self.is_editing && j < syntax_colors.len() {
                         syntax_colors[j]
+                    } else if is_output_err_header {
+                        theme.editor_errors.color_at(j, line_chars.len())
+                    } else if is_output_err_line {
+                        let colon_idx = line_chars.iter().position(|&x| x == ':').unwrap_or(0);
+                        if j <= colon_idx {
+                            theme.editor_errors.color_at(j, colon_idx + 1)
+                        } else {
+                            Color::White
+                        }
                     } else {
                         Color::White
                     },
@@ -1812,10 +1840,12 @@ impl Editor {
                     } else {
                         Color::None
                     },
-                    md: if is_active {
-                        Modifier::None
-                    } else {
+                    md: if !is_active {
                         Modifier::Dim
+                    } else if is_output_err_header {
+                        Modifier::Bold
+                    } else {
+                        Modifier::None
                     },
                 };
 

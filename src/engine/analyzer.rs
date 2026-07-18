@@ -172,13 +172,112 @@ impl Analyzer {
                 self.analyze_expr(left);
                 self.analyze_expr(index);
             }
-            Expr::StaticAccess(left, _, _) => {
+            Expr::StaticAccess(left, prop, line) => {
                 self.analyze_expr(left);
+                if let Expr::Ident(name, _) = &**left {
+                    if name == "Key" {
+                        let valid_variants = [
+                            "Up",
+                            "Down",
+                            "Left",
+                            "Right",
+                            "ShiftUp",
+                            "ShiftDown",
+                            "ShiftLeft",
+                            "ShiftRight",
+                            "CtrlUp",
+                            "CtrlDown",
+                            "CtrlLeft",
+                            "CtrlRight",
+                            "CtrlShiftUp",
+                            "CtrlShiftDown",
+                            "CtrlShiftLeft",
+                            "CtrlShiftRight",
+                            "Delete",
+                            "CtrlDelete",
+                            "Char",
+                            "Shift",
+                            "Ctrl",
+                            "Alt",
+                            "Esc",
+                            "Enter",
+                            "Tab",
+                            "Backspace",
+                            "CtrlBackspace",
+                            "None",
+                            "F",
+                            "Space",
+                            "CapsLock",
+                            "PgUp",
+                            "PgDn",
+                            "Home",
+                            "End",
+                            "PrtScr",
+                            "Insert",
+                            "LWin",
+                            "RWin",
+                        ];
+                        if !valid_variants.contains(&prop.as_str()) {
+                            self.error(*line, format!("Invalid variant '{}' for enum 'Key'", prop));
+                        }
+                    }
+                }
             }
-            Expr::MethodCall(left, _, args, _) => {
+            Expr::MethodCall(left, method, args, line) => {
                 self.analyze_expr(left);
                 for (_, arg) in args {
                     self.analyze_expr(arg);
+                }
+                if let Expr::Ident(name, _) = &**left {
+                    if name == "Key" {
+                        let valid_variants = [
+                            "Up",
+                            "Down",
+                            "Left",
+                            "Right",
+                            "ShiftUp",
+                            "ShiftDown",
+                            "ShiftLeft",
+                            "ShiftRight",
+                            "CtrlUp",
+                            "CtrlDown",
+                            "CtrlLeft",
+                            "CtrlRight",
+                            "CtrlShiftUp",
+                            "CtrlShiftDown",
+                            "CtrlShiftLeft",
+                            "CtrlShiftRight",
+                            "Delete",
+                            "CtrlDelete",
+                            "Char",
+                            "Shift",
+                            "Ctrl",
+                            "Alt",
+                            "Esc",
+                            "Enter",
+                            "Tab",
+                            "Backspace",
+                            "CtrlBackspace",
+                            "None",
+                            "F",
+                            "Space",
+                            "CapsLock",
+                            "PgUp",
+                            "PgDn",
+                            "Home",
+                            "End",
+                            "PrtScr",
+                            "Insert",
+                            "LWin",
+                            "RWin",
+                        ];
+                        if !valid_variants.contains(&method.as_str()) {
+                            self.error(
+                                *line,
+                                format!("Invalid variant '{}' for enum 'Key'", method),
+                            );
+                        }
+                    }
                 }
             }
             Expr::Binary(left, _, right, _) => {
