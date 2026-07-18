@@ -404,7 +404,29 @@ impl Parser {
     }
 
     fn parse_expression(&mut self) -> Option<Expr> {
-        self.parse_equality()
+        self.parse_or()
+    }
+
+    fn parse_or(&mut self) -> Option<Expr> {
+        let mut expr = self.parse_and()?;
+        while self.check(&TokenKind::Or) {
+            let token = self.advance().clone();
+            let op = BinaryOp::from_token(&token.kind).unwrap();
+            let right = self.parse_and()?;
+            expr = Expr::Binary(Box::new(expr), op, Box::new(right), token.line);
+        }
+        Some(expr)
+    }
+
+    fn parse_and(&mut self) -> Option<Expr> {
+        let mut expr = self.parse_equality()?;
+        while self.check(&TokenKind::And) {
+            let token = self.advance().clone();
+            let op = BinaryOp::from_token(&token.kind).unwrap();
+            let right = self.parse_equality()?;
+            expr = Expr::Binary(Box::new(expr), op, Box::new(right), token.line);
+        }
+        Some(expr)
     }
 
     fn parse_equality(&mut self) -> Option<Expr> {
@@ -463,6 +485,11 @@ impl Parser {
     }
 
     fn parse_unary(&mut self) -> Option<Expr> {
+        if self.check(&TokenKind::Not) {
+            let token = self.advance().clone();
+            let right = self.parse_unary()?;
+            return Some(Expr::Not(Box::new(right), token.line));
+        }
         if self.check(&TokenKind::Minus) || self.check(&TokenKind::Plus) {
             let token = self.advance().clone();
             let op = BinaryOp::from_token(&token.kind).unwrap();

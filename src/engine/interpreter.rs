@@ -66,8 +66,8 @@ fn parse_win_key(key: &str) -> Result<WinKeyInfo, String> {
         }
 
         "backspace" | "back" => info.vk = VK_BACK,
-        "tab" => info.vk = VK_TAB,
-        "enter" | "return" => info.vk = VK_RETURN,
+        "tab" | "\t" => info.vk = VK_TAB,
+        "enter" | "return" | "\n" => info.vk = VK_RETURN,
         "shift" => info.vk = VK_SHIFT,
         "ctrl" | "control" => info.vk = VK_CONTROL,
         "alt" | "menu" => info.vk = VK_MENU,
@@ -100,6 +100,18 @@ fn parse_win_key(key: &str) -> Result<WinKeyInfo, String> {
         "f10" => info.vk = VK_F10,
         "f11" => info.vk = VK_F11,
         "f12" => info.vk = VK_F12,
+        "f13" => info.vk = VK_F13,
+        "f14" => info.vk = VK_F14,
+        "f15" => info.vk = VK_F15,
+        "f16" => info.vk = VK_F16,
+        "f17" => info.vk = VK_F17,
+        "f18" => info.vk = VK_F18,
+        "f19" => info.vk = VK_F19,
+        "f20" => info.vk = VK_F20,
+        "f21" => info.vk = VK_F21,
+        "f22" => info.vk = VK_F22,
+        "f23" => info.vk = VK_F23,
+        "f24" => info.vk = VK_F24,
 
         "shiftup" => {
             info.req_shift = true;
@@ -170,9 +182,8 @@ fn parse_win_key(key: &str) -> Result<WinKeyInfo, String> {
                     return Err(format!("Unrecognized key: '{}'", key));
                 }
                 let state = (res >> 8) & 0xFF;
-                let is_alpha = c.is_ascii_alphabetic();
 
-                if state & 1 != 0 && !is_alpha {
+                if state & 1 != 0 {
                     info.req_shift = true;
                 }
                 if state & 2 != 0 {
@@ -218,18 +229,149 @@ fn simulate_key(key: &str, down: bool) -> Result<(), String> {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
     let info = parse_win_key(key)?;
     unsafe {
-        let mut input: INPUT = std::mem::zeroed();
+        let mut inputs: [INPUT; 4] = std::mem::zeroed();
+        let mut count = 0;
+
         if info.is_mouse {
-            input.r#type = INPUT_MOUSE;
-            input.Anonymous.mi.dwFlags = if down { info.mouse_down } else { info.mouse_up };
-            input.Anonymous.mi.mouseData = info.mouse_data;
+            inputs[count].r#type = INPUT_MOUSE;
+            inputs[count].Anonymous.mi.dwFlags = if down { info.mouse_down } else { info.mouse_up };
+            inputs[count].Anonymous.mi.mouseData = info.mouse_data;
+            count += 1;
         } else {
-            input.r#type = INPUT_KEYBOARD;
-            input.Anonymous.ki.wVk = info.vk;
-            input.Anonymous.ki.dwFlags = if down { 0 } else { KEYEVENTF_KEYUP };
+            if down {
+                if info.req_shift {
+                    inputs[count].r#type = INPUT_KEYBOARD;
+                    inputs[count].Anonymous.ki.wVk = VK_SHIFT;
+                    count += 1;
+                }
+                if info.req_ctrl {
+                    inputs[count].r#type = INPUT_KEYBOARD;
+                    inputs[count].Anonymous.ki.wVk = VK_CONTROL;
+                    count += 1;
+                }
+                if info.req_alt {
+                    inputs[count].r#type = INPUT_KEYBOARD;
+                    inputs[count].Anonymous.ki.wVk = VK_MENU;
+                    count += 1;
+                }
+            }
+
+            inputs[count].r#type = INPUT_KEYBOARD;
+            inputs[count].Anonymous.ki.wVk = info.vk;
+            inputs[count].Anonymous.ki.dwFlags = if down { 0 } else { KEYEVENTF_KEYUP };
+            count += 1;
+
+            if !down {
+                if info.req_alt {
+                    inputs[count].r#type = INPUT_KEYBOARD;
+                    inputs[count].Anonymous.ki.wVk = VK_MENU;
+                    inputs[count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                    count += 1;
+                }
+                if info.req_ctrl {
+                    inputs[count].r#type = INPUT_KEYBOARD;
+                    inputs[count].Anonymous.ki.wVk = VK_CONTROL;
+                    inputs[count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                    count += 1;
+                }
+                if info.req_shift {
+                    inputs[count].r#type = INPUT_KEYBOARD;
+                    inputs[count].Anonymous.ki.wVk = VK_SHIFT;
+                    inputs[count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                    count += 1;
+                }
+            }
         }
-        SendInput(1, &input, std::mem::size_of::<INPUT>() as i32);
+        SendInput(
+            count as u32,
+            inputs.as_ptr(),
+            std::mem::size_of::<INPUT>() as i32,
+        );
     }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn simulate_write(text: &str) -> Result<(), String> {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
+
+    for c in text.chars() {
+        let key_str = match c {
+            '\n' => "enter".to_string(),
+            '\t' => "tab".to_string(),
+            _ => c.to_string(),
+        };
+
+        if let Ok(info) = parse_win_key(&key_str) {
+            unsafe {
+                let mut inputs_down: [INPUT; 4] = std::mem::zeroed();
+                let mut down_count = 0;
+
+                if info.req_shift {
+                    inputs_down[down_count].r#type = INPUT_KEYBOARD;
+                    inputs_down[down_count].Anonymous.ki.wVk = VK_SHIFT;
+                    down_count += 1;
+                }
+                if info.req_ctrl {
+                    inputs_down[down_count].r#type = INPUT_KEYBOARD;
+                    inputs_down[down_count].Anonymous.ki.wVk = VK_CONTROL;
+                    down_count += 1;
+                }
+                if info.req_alt {
+                    inputs_down[down_count].r#type = INPUT_KEYBOARD;
+                    inputs_down[down_count].Anonymous.ki.wVk = VK_MENU;
+                    down_count += 1;
+                }
+
+                inputs_down[down_count].r#type = INPUT_KEYBOARD;
+                inputs_down[down_count].Anonymous.ki.wVk = info.vk;
+                down_count += 1;
+
+                SendInput(
+                    down_count as u32,
+                    inputs_down.as_ptr(),
+                    std::mem::size_of::<INPUT>() as i32,
+                );
+
+                std::thread::sleep(std::time::Duration::from_millis(2));
+
+                let mut inputs_up: [INPUT; 4] = std::mem::zeroed();
+                let mut up_count = 0;
+
+                inputs_up[up_count].r#type = INPUT_KEYBOARD;
+                inputs_up[up_count].Anonymous.ki.wVk = info.vk;
+                inputs_up[up_count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                up_count += 1;
+
+                if info.req_alt {
+                    inputs_up[up_count].r#type = INPUT_KEYBOARD;
+                    inputs_up[up_count].Anonymous.ki.wVk = VK_MENU;
+                    inputs_up[up_count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                    up_count += 1;
+                }
+                if info.req_ctrl {
+                    inputs_up[up_count].r#type = INPUT_KEYBOARD;
+                    inputs_up[up_count].Anonymous.ki.wVk = VK_CONTROL;
+                    inputs_up[up_count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                    up_count += 1;
+                }
+                if info.req_shift {
+                    inputs_up[up_count].r#type = INPUT_KEYBOARD;
+                    inputs_up[up_count].Anonymous.ki.wVk = VK_SHIFT;
+                    inputs_up[up_count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                    up_count += 1;
+                }
+
+                SendInput(
+                    up_count as u32,
+                    inputs_up.as_ptr(),
+                    std::mem::size_of::<INPUT>() as i32,
+                );
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+
     Ok(())
 }
 
@@ -254,9 +396,13 @@ fn parse_linux_key(key: &str) -> Result<LinuxKeyInfo, String> {
     if key.chars().count() == 1 {
         let c = key.chars().next().unwrap();
         if c.is_ascii_alphabetic() {
+            if c.is_ascii_uppercase() {
+                info.req_shift = true;
+            }
             search_str = c.to_ascii_lowercase().to_string();
         } else {
             let shift_map = [
+                ('~', "`"),
                 ('!', "1"),
                 ('@', "2"),
                 ('#', "3"),
@@ -308,7 +454,7 @@ fn parse_linux_key(key: &str) -> Result<LinuxKeyInfo, String> {
         "minus" | "-" => 12,
         "equal" | "=" => 13,
         "backspace" | "back" => 14,
-        "tab" => 15,
+        "tab" | "\t" => 15,
         "q" => 16,
         "w" => 17,
         "e" => 18,
@@ -321,7 +467,7 @@ fn parse_linux_key(key: &str) -> Result<LinuxKeyInfo, String> {
         "p" => 25,
         "[" => 26,
         "]" => 27,
-        "enter" | "return" => 28,
+        "enter" | "return" | "\n" => 28,
         "ctrl" | "control" => 29,
         "a" => 30,
         "s" => 31,
@@ -362,6 +508,18 @@ fn parse_linux_key(key: &str) -> Result<LinuxKeyInfo, String> {
         "f10" => 68,
         "f11" => 87,
         "f12" => 88,
+        "f13" => 183,
+        "f14" => 184,
+        "f15" => 185,
+        "f16" => 186,
+        "f17" => 187,
+        "f18" => 188,
+        "f19" => 189,
+        "f20" => 190,
+        "f21" => 191,
+        "f22" => 192,
+        "f23" => 193,
+        "f24" => 194,
         "up" => 103,
         "left" => 105,
         "right" => 106,
@@ -599,10 +757,14 @@ fn get_or_create_uinput() -> Result<i32, String> {
             }
 
             libc::ioctl(fd, 0x40045564, 1);
+            libc::ioctl(fd, 0x40045564, 2);
 
             for i in 1..=276 {
                 libc::ioctl(fd, 0x40045565, i);
             }
+
+            libc::ioctl(fd, 0x40045566, 0);
+            libc::ioctl(fd, 0x40045566, 1);
 
             #[repr(C)]
             struct input_id {
@@ -661,27 +823,143 @@ fn simulate_key(key: &str, down: bool) -> Result<(), String> {
         value: i32,
     }
 
-    unsafe {
-        let mut ev: input_event = std::mem::zeroed();
-        ev.type_ = 1;
-        ev.code = info.code;
-        ev.value = if down { 1 } else { 0 };
-        libc::write(
-            fd,
-            &ev as *const _ as *const libc::c_void,
-            std::mem::size_of::<input_event>(),
-        );
+    let mut evs = Vec::with_capacity(8);
 
-        let mut syn: input_event = std::mem::zeroed();
-        syn.type_ = 0;
-        syn.code = 0;
-        syn.value = 0;
+    let mut add_ev = |code: u16, val: i32| {
+        let mut ev: input_event = unsafe { std::mem::zeroed() };
+        ev.type_ = 1;
+        ev.code = code;
+        ev.value = val;
+        evs.push(ev);
+    };
+
+    if down {
+        if info.req_shift {
+            add_ev(42, 1);
+        }
+        if info.req_ctrl {
+            add_ev(29, 1);
+        }
+        if info.req_alt {
+            add_ev(56, 1);
+        }
+    }
+
+    add_ev(info.code, if down { 1 } else { 0 });
+
+    if !down {
+        if info.req_alt {
+            add_ev(56, 0);
+        }
+        if info.req_ctrl {
+            add_ev(29, 0);
+        }
+        if info.req_shift {
+            add_ev(42, 0);
+        }
+    }
+
+    let mut syn: input_event = unsafe { std::mem::zeroed() };
+    syn.type_ = 0;
+    syn.code = 0;
+    syn.value = 0;
+    evs.push(syn);
+
+    unsafe {
         libc::write(
             fd,
-            &syn as *const _ as *const libc::c_void,
-            std::mem::size_of::<input_event>(),
+            evs.as_ptr() as *const libc::c_void,
+            evs.len() * std::mem::size_of::<input_event>(),
         );
     }
+
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn simulate_write(text: &str) -> Result<(), String> {
+    let fd = get_or_create_uinput()?;
+
+    #[repr(C)]
+    struct input_event {
+        time: libc::timeval,
+        type_: u16,
+        code: u16,
+        value: i32,
+    }
+
+    for c in text.chars() {
+        let key_str = match c {
+            '\n' => "enter".to_string(),
+            '\t' => "tab".to_string(),
+            _ => c.to_string(),
+        };
+
+        if let Ok(info) = parse_linux_key(&key_str) {
+            let mut evs = Vec::with_capacity(4);
+
+            let mut add_ev = |code: u16, val: i32| {
+                let mut ev: input_event = unsafe { std::mem::zeroed() };
+                ev.type_ = 1;
+                ev.code = code;
+                ev.value = val;
+                evs.push(ev);
+            };
+
+            if info.req_shift {
+                add_ev(42, 1);
+            }
+            if info.req_ctrl {
+                add_ev(29, 1);
+            }
+            if info.req_alt {
+                add_ev(56, 1);
+            }
+
+            add_ev(info.code, 1);
+
+            let mut syn: input_event = unsafe { std::mem::zeroed() };
+            syn.type_ = 0;
+            syn.code = 0;
+            syn.value = 0;
+            evs.push(syn);
+
+            unsafe {
+                libc::write(
+                    fd,
+                    evs.as_ptr() as *const libc::c_void,
+                    evs.len() * std::mem::size_of::<input_event>(),
+                );
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(2));
+
+            evs.clear();
+            add_ev(info.code, 0);
+
+            if info.req_alt {
+                add_ev(56, 0);
+            }
+            if info.req_ctrl {
+                add_ev(29, 0);
+            }
+            if info.req_shift {
+                add_ev(42, 0);
+            }
+
+            evs.push(syn);
+
+            unsafe {
+                libc::write(
+                    fd,
+                    evs.as_ptr() as *const libc::c_void,
+                    evs.len() * std::mem::size_of::<input_event>(),
+                );
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+
     Ok(())
 }
 
@@ -879,7 +1157,7 @@ impl Interpreter {
         }
 
         if res.is_empty() {
-            res.push("Execution finished with no output.".to_string());
+            res.push("Finished with no output.".to_string());
         }
 
         if self.tx.send(crate::EngineMessage::Output(res)).is_err() {
@@ -1587,6 +1865,7 @@ impl Interpreter {
                 BinaryOp::Greater => Ok(Value::Bool(ln > rn)),
                 BinaryOp::LessEq => Ok(Value::Bool(ln <= rn)),
                 BinaryOp::GreaterEq => Ok(Value::Bool(ln >= rn)),
+                _ => Err(format!("Line {}: Unsupported number operation", line)),
             },
             (Value::Bool(lb), Value::Bool(rb)) => match op {
                 BinaryOp::EqEq => Ok(Value::Bool(lb == rb)),
@@ -1873,7 +2152,25 @@ impl Interpreter {
                 self.try_assign_expr(left, left_val)?;
                 Ok(res)
             }
+            Expr::Not(expr, _) => {
+                let val = self.eval_expr(expr)?;
+                Ok(Value::Bool(!val.is_truthy()))
+            }
             Expr::Binary(left, op, right, line) => {
+                if *op == BinaryOp::And {
+                    let l = self.eval_expr(left)?;
+                    if !l.is_truthy() {
+                        return Ok(l);
+                    }
+                    return self.eval_expr(right);
+                } else if *op == BinaryOp::Or {
+                    let l = self.eval_expr(left)?;
+                    if l.is_truthy() {
+                        return Ok(l);
+                    }
+                    return self.eval_expr(right);
+                }
+
                 let l = self.eval_expr(left)?;
                 let r = self.eval_expr(right)?;
                 self.eval_binary_op(&l, op, &r, *line)
@@ -1913,7 +2210,10 @@ impl Interpreter {
                     }
                     "sleep" => {
                         if eval_args.len() != 1 {
-                            return Err(format!("Line {}: 'sleep' expects 1 argument", line));
+                            return Err(format!(
+                                "Line {}: 'sleep' expects exactly 1 argument",
+                                line
+                            ));
                         }
                         if let Value::Number(ms) = eval_args[0].1 {
                             if ms < 0.0 {
@@ -2033,7 +2333,7 @@ impl Interpreter {
                     }
                     "len" => {
                         if eval_args.len() != 1 {
-                            return Err(format!("Line {}: 'len' expects 1 argument", line));
+                            return Err(format!("Line {}: 'len' expects exactly 1 argument", line));
                         }
                         match &eval_args[0].1 {
                             Value::String(s) => return Ok(Value::Number(s.chars().count() as f64)),
@@ -2139,7 +2439,10 @@ impl Interpreter {
                     }
                     "exec" => {
                         if eval_args.len() != 1 {
-                            return Err(format!("Line {}: 'exec' expects 1 argument", line));
+                            return Err(format!(
+                                "Line {}: 'exec' expects exactly 1 argument",
+                                line
+                            ));
                         }
                         if let Value::String(cmd_str) = &eval_args[0].1 {
                             let mut cmd = if cfg!(target_os = "windows") {
@@ -2230,6 +2533,22 @@ impl Interpreter {
                             return Err(format!("Line {}: {}", line, e));
                         }
                         return Ok(Value::Nil);
+                    }
+                    "write" => {
+                        if eval_args.len() != 1 {
+                            return Err(format!(
+                                "Line {}: 'write' expects exactly 1 argument",
+                                line
+                            ));
+                        }
+                        if let Value::String(text) = &eval_args[0].1 {
+                            if let Err(e) = simulate_write(text) {
+                                return Err(format!("Line {}: {}", line, e));
+                            }
+                            return Ok(Value::Nil);
+                        } else {
+                            return Err(format!("Line {}: 'write' expects a string", line));
+                        }
                     }
                     _ => {}
                 }

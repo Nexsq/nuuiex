@@ -290,6 +290,9 @@ impl Analyzer {
                     }
                 }
             }
+            Expr::Not(expr, _) => {
+                self.analyze_expr(expr);
+            }
             Expr::Binary(left, _, right, _) => {
                 self.analyze_expr(left);
                 self.analyze_expr(right);

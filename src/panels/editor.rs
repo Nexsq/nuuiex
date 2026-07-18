@@ -1756,6 +1756,8 @@ impl Editor {
                                 | ['e', 'l', 's', 'e']
                                 | ['b', 'r', 'e', 'a', 'k']
                         );
+                        let is_op_word =
+                            matches!(word_chars, ['a', 'n', 'd'] | ['o', 'r'] | ['n', 'o', 't']);
                         let is_bool =
                             matches!(word_chars, ['T', 'r', 'u', 'e'] | ['F', 'a', 'l', 's', 'e']);
 
@@ -1771,6 +1773,8 @@ impl Editor {
 
                         let color = if is_kw {
                             &theme.editor_keywords
+                        } else if is_op_word {
+                            &theme.editor_operators
                         } else if is_bool {
                             &theme.editor_bool
                         } else if is_func {

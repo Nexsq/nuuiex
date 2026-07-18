@@ -33,6 +33,7 @@ pub enum Expr {
     MethodCall(Box<Expr>, String, Vec<(Option<String>, Expr)>, usize),
     StaticAccess(Box<Expr>, String, usize),
     Binary(Box<Expr>, BinaryOp, Box<Expr>, usize),
+    Not(Box<Expr>, usize),
     Call(String, Vec<(Option<String>, Expr)>, usize),
 }
 
@@ -49,6 +50,8 @@ pub enum BinaryOp {
     Greater,
     LessEq,
     GreaterEq,
+    And,
+    Or,
 }
 
 impl BinaryOp {
@@ -65,6 +68,8 @@ impl BinaryOp {
             TokenKind::Greater => Some(Self::Greater),
             TokenKind::LessEq => Some(Self::LessEq),
             TokenKind::GreaterEq => Some(Self::GreaterEq),
+            TokenKind::And => Some(Self::And),
+            TokenKind::Or => Some(Self::Or),
             _ => None,
         }
     }
