@@ -8,6 +8,10 @@ use std::sync::mpsc::{Receiver, SyncSender};
 #[cfg(windows)]
 fn check_key_down(key: &str) -> Result<bool, String> {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
+    let mut req_shift = false;
+    let mut req_ctrl = false;
+    let mut req_alt = false;
+
     let vk = match key.to_lowercase().as_str() {
         "backspace" | "back" => VK_BACK,
         "tab" => VK_TAB,
@@ -44,25 +48,154 @@ fn check_key_down(key: &str) -> Result<bool, String> {
         "f10" => VK_F10,
         "f11" => VK_F11,
         "f12" => VK_F12,
+        "shiftup" => {
+            req_shift = true;
+            VK_UP
+        }
+        "shiftdown" => {
+            req_shift = true;
+            VK_DOWN
+        }
+        "shiftleft" => {
+            req_shift = true;
+            VK_LEFT
+        }
+        "shiftright" => {
+            req_shift = true;
+            VK_RIGHT
+        }
+        "ctrlup" => {
+            req_ctrl = true;
+            VK_UP
+        }
+        "ctrldown" => {
+            req_ctrl = true;
+            VK_DOWN
+        }
+        "ctrlleft" => {
+            req_ctrl = true;
+            VK_LEFT
+        }
+        "ctrlright" => {
+            req_ctrl = true;
+            VK_RIGHT
+        }
+        "ctrlshiftup" => {
+            req_ctrl = true;
+            req_shift = true;
+            VK_UP
+        }
+        "ctrlshiftdown" => {
+            req_ctrl = true;
+            req_shift = true;
+            VK_DOWN
+        }
+        "ctrlshiftleft" => {
+            req_ctrl = true;
+            req_shift = true;
+            VK_LEFT
+        }
+        "ctrlshiftright" => {
+            req_ctrl = true;
+            req_shift = true;
+            VK_RIGHT
+        }
+        "ctrldelete" => {
+            req_ctrl = true;
+            VK_DELETE
+        }
+        "ctrlbackspace" => {
+            req_ctrl = true;
+            VK_BACK
+        }
         s if s.len() == 1 => {
-            let c = s.chars().next().unwrap();
+            let c = key.chars().next().unwrap();
             unsafe {
                 let res = VkKeyScanW(c as u16);
                 if res == -1 {
                     return Ok(false);
                 }
+                let state = (res >> 8) & 0xFF;
+                let is_alpha = c.is_ascii_alphabetic();
+
+                if state & 1 != 0 && !is_alpha {
+                    req_shift = true;
+                }
+                if state & 2 != 0 {
+                    req_ctrl = true;
+                }
+                if state & 4 != 0 {
+                    req_alt = true;
+                }
+
                 (res & 0xFF) as u16
             }
         }
         _ => return Ok(false),
     };
 
-    unsafe { Ok((GetAsyncKeyState(vk as i32) as u16 & 0x8000) != 0) }
+    unsafe {
+        let is_down = (GetAsyncKeyState(vk as i32) as u16 & 0x8000) != 0;
+        if !is_down {
+            return Ok(false);
+        }
+        if req_shift && (GetAsyncKeyState(VK_SHIFT as i32) as u16 & 0x8000) == 0 {
+            return Ok(false);
+        }
+        if req_ctrl && (GetAsyncKeyState(VK_CONTROL as i32) as u16 & 0x8000) == 0 {
+            return Ok(false);
+        }
+        if req_alt && (GetAsyncKeyState(VK_MENU as i32) as u16 & 0x8000) == 0 {
+            return Ok(false);
+        }
+        Ok(true)
+    }
 }
 
 #[cfg(target_os = "linux")]
 fn check_key_down(key: &str) -> Result<bool, String> {
-    let codes = match key.to_lowercase().as_str() {
+    let mut req_shift = false;
+    let mut req_ctrl = false;
+    let mut search_key = key.to_string();
+
+    if key.len() == 1 {
+        let c = key.chars().next().unwrap();
+        if c.is_ascii_alphabetic() {
+            search_key = c.to_ascii_lowercase().to_string();
+        } else {
+            let shift_map = [
+                ('!', '1'),
+                ('@', '2'),
+                ('#', '3'),
+                ('$', '4'),
+                ('%', '5'),
+                ('^', '6'),
+                ('&', '7'),
+                ('*', '8'),
+                ('(', '9'),
+                (')', '0'),
+                ('_', '-'),
+                ('+', '='),
+                ('{', '['),
+                ('}', ']'),
+                ('|', '\\'),
+                (':', ';'),
+                ('"', '\''),
+                ('<', ','),
+                ('>', '.'),
+                ('?', '/'),
+            ];
+            for &(shifted, unshifted) in &shift_map {
+                if c == shifted {
+                    req_shift = true;
+                    search_key = unshifted.to_string();
+                    break;
+                }
+            }
+        }
+    }
+
+    let codes = match search_key.to_lowercase().as_str() {
         "esc" | "escape" => vec![1],
         "1" => vec![2],
         "2" => vec![3],
@@ -88,6 +221,8 @@ fn check_key_down(key: &str) -> Result<bool, String> {
         "i" => vec![23],
         "o" => vec![24],
         "p" => vec![25],
+        "[" => vec![26],
+        "]" => vec![27],
         "enter" | "return" => vec![28],
         "ctrl" | "control" => vec![29, 97],
         "a" => vec![30],
@@ -99,7 +234,11 @@ fn check_key_down(key: &str) -> Result<bool, String> {
         "j" => vec![36],
         "k" => vec![37],
         "l" => vec![38],
+        ";" => vec![39],
+        "'" => vec![40],
+        "`" => vec![41],
         "shift" => vec![42, 54],
+        "\\" => vec![43],
         "z" => vec![44],
         "x" => vec![45],
         "c" => vec![46],
@@ -107,6 +246,9 @@ fn check_key_down(key: &str) -> Result<bool, String> {
         "b" => vec![48],
         "n" => vec![49],
         "m" => vec![50],
+        "," => vec![51],
+        "." => vec![52],
+        "/" => vec![53],
         "alt" | "menu" => vec![56, 100],
         "space" | " " => vec![57],
         "capslock" | "caps" => vec![58],
@@ -132,115 +274,256 @@ fn check_key_down(key: &str) -> Result<bool, String> {
         "pgdn" | "pagedown" => vec![109],
         "ins" | "insert" => vec![110],
         "del" | "delete" => vec![111],
+        "prtscr" | "printscreen" => vec![99],
         "lwin" | "cmd" | "super" | "win" => vec![125, 126],
-        "[" => vec![26],
-        "]" => vec![27],
-        ";" => vec![39],
-        "'" => vec![40],
-        "`" => vec![41],
-        "\\" => vec![43],
-        "," => vec![51],
-        "." => vec![52],
-        "/" => vec![53],
-        "!" => vec![2],
-        "@" => vec![3],
-        "#" => vec![4],
-        "$" => vec![5],
-        "%" => vec![6],
-        "^" => vec![7],
-        "&" => vec![8],
-        "*" => vec![9],
-        "(" => vec![10],
-        ")" => vec![11],
-        "_" => vec![12],
-        "+" => vec![13],
-        "{" => vec![26],
-        "}" => vec![27],
-        ":" => vec![39],
-        "\"" => vec![40],
-        "~" => vec![41],
-        "|" => vec![43],
-        "<" => vec![51],
-        ">" => vec![52],
-        "?" => vec![53],
-        s if s.len() == 1 => {
-            let c = s.chars().next().unwrap();
-            let upper = c.to_ascii_uppercase().to_string();
-            if upper != s {
-                return check_key_down(&upper);
-            }
-            return Ok(false);
+        "shiftup" => {
+            req_shift = true;
+            vec![103]
+        }
+        "shiftdown" => {
+            req_shift = true;
+            vec![108]
+        }
+        "shiftleft" => {
+            req_shift = true;
+            vec![105]
+        }
+        "shiftright" => {
+            req_shift = true;
+            vec![106]
+        }
+        "ctrlup" => {
+            req_ctrl = true;
+            vec![103]
+        }
+        "ctrldown" => {
+            req_ctrl = true;
+            vec![108]
+        }
+        "ctrlleft" => {
+            req_ctrl = true;
+            vec![105]
+        }
+        "ctrlright" => {
+            req_ctrl = true;
+            vec![106]
+        }
+        "ctrlshiftup" => {
+            req_ctrl = true;
+            req_shift = true;
+            vec![103]
+        }
+        "ctrlshiftdown" => {
+            req_ctrl = true;
+            req_shift = true;
+            vec![108]
+        }
+        "ctrlshiftleft" => {
+            req_ctrl = true;
+            req_shift = true;
+            vec![105]
+        }
+        "ctrlshiftright" => {
+            req_ctrl = true;
+            req_shift = true;
+            vec![106]
+        }
+        "ctrldelete" => {
+            req_ctrl = true;
+            vec![111]
+        }
+        "ctrlbackspace" => {
+            req_ctrl = true;
+            vec![14]
         }
         _ => return Ok(false),
     };
 
-    let mut is_down = false;
-    let mut any_opened = false;
-    if let Ok(entries) = std::fs::read_dir("/dev/input") {
-        for entry in entries.filter_map(Result::ok) {
-            let path = entry.path();
-            if path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .starts_with("event")
-            {
+    use libc::{O_NONBLOCK, O_RDONLY, close, ioctl, open};
+
+    struct FdList(Vec<i32>);
+    impl Drop for FdList {
+        fn drop(&mut self) {
+            for &fd in &self.0 {
                 unsafe {
-                    use libc::{O_NONBLOCK, O_RDONLY, close, ioctl, open};
-                    let mut path_bytes = path.to_str().unwrap_or("").as_bytes().to_vec();
-                    path_bytes.push(0);
-                    let fd = open(
-                        path_bytes.as_ptr() as *const libc::c_char,
-                        O_RDONLY | O_NONBLOCK,
-                    );
-                    if fd >= 0 {
-                        any_opened = true;
-                        let mut key_bits = [0u8; 96];
-                        let evioca: libc::c_ulong = 0x80604518;
-                        if ioctl(fd, evioca as _, key_bits.as_mut_ptr()) >= 0 {
-                            for &code in &codes {
-                                if code < (96 * 8) {
-                                    let byte = (code / 8) as usize;
-                                    let bit = code % 8;
-                                    if (key_bits[byte] & (1 << bit)) != 0 {
-                                        is_down = true;
-                                        break;
+                    close(fd);
+                }
+            }
+        }
+    }
+
+    thread_local! {
+        static KBD_FDS: std::cell::RefCell<Option<FdList>> = std::cell::RefCell::new(None);
+    }
+
+    let mut is_down = false;
+    let mut shift_down = false;
+    let mut ctrl_down = false;
+    let mut any_opened = false;
+
+    KBD_FDS.with(|f| {
+        if f.borrow().is_none() {
+            let mut fds = Vec::new();
+            if let Ok(entries) = std::fs::read_dir("/dev/input") {
+                for entry in entries.filter_map(Result::ok) {
+                    let path = entry.path();
+                    if path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .starts_with("event")
+                    {
+                        unsafe {
+                            let mut path_bytes = path.to_str().unwrap_or("").as_bytes().to_vec();
+                            path_bytes.push(0);
+                            let fd = open(
+                                path_bytes.as_ptr() as *const libc::c_char,
+                                O_RDONLY | O_NONBLOCK,
+                            );
+                            if fd >= 0 {
+                                let mut ev_bits = [0u8; 4];
+                                let eviogbit = 0x80204520;
+                                if ioctl(fd, eviogbit, ev_bits.as_mut_ptr()) >= 0 {
+                                    if (ev_bits[0] & (1 << 1)) != 0 {
+                                        let mut key_bits = [0u8; 96];
+                                        let eviogbit_key = 0x80604521;
+                                        if ioctl(fd, eviogbit_key, key_bits.as_mut_ptr()) >= 0 {
+                                            if (key_bits[57 / 8] & (1 << (57 % 8))) != 0
+                                                || (key_bits[1 / 8] & (1 << (1 % 8))) != 0
+                                            {
+                                                fds.push(fd);
+                                            } else {
+                                                close(fd);
+                                            }
+                                        } else {
+                                            close(fd);
+                                        }
+                                    } else {
+                                        close(fd);
                                     }
+                                } else {
+                                    close(fd);
                                 }
                             }
                         }
-                        close(fd);
                     }
                 }
-                if is_down {
-                    break;
+            }
+            *f.borrow_mut() = Some(FdList(fds));
+        }
+
+        if let Some(fd_list) = f.borrow().as_ref() {
+            if !fd_list.0.is_empty() {
+                any_opened = true;
+            }
+            for &fd in &fd_list.0 {
+                unsafe {
+                    let mut key_bits = [0u8; 96];
+                    let evioca: libc::c_ulong = 0x80604518;
+                    if ioctl(fd, evioca as _, key_bits.as_mut_ptr()) >= 0 {
+                        for &code in &codes {
+                            if code < (96 * 8) {
+                                let byte = (code / 8) as usize;
+                                let bit = code % 8;
+                                if (key_bits[byte] & (1 << bit)) != 0 {
+                                    is_down = true;
+                                }
+                            }
+                        }
+                        if req_shift {
+                            for &code in &[42, 54] {
+                                let byte = (code / 8) as usize;
+                                let bit = code % 8;
+                                if (key_bits[byte] & (1 << bit)) != 0 {
+                                    shift_down = true;
+                                }
+                            }
+                        }
+                        if req_ctrl {
+                            for &code in &[29, 97] {
+                                let byte = (code / 8) as usize;
+                                let bit = code % 8;
+                                if (key_bits[byte] & (1 << bit)) != 0 {
+                                    ctrl_down = true;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-    }
+    });
 
     if !any_opened {
-        return Err("Permission denied: Cannot read /dev/input/event*. Run with sudo or add user to 'input' group.".to_string());
+        return Err("Permission denied.\nRun with sudo or add user to 'input' group.".to_string());
     }
 
+    if req_shift && !shift_down {
+        return Ok(false);
+    }
+    if req_ctrl && !ctrl_down {
+        return Ok(false);
+    }
     Ok(is_down)
 }
 
-fn variant_to_key_str(v: &Value) -> Option<String> {
+fn variant_to_key_str(v: &Value) -> Result<String, String> {
     if let Value::EnumVariant(e, variant, inner) = v {
         if e == "Key" {
-            if variant == "Char" {
-                if let Some(inner_val) = inner {
-                    if let Value::String(s) = &**inner_val {
-                        return Some(s.clone());
+            match variant.as_str() {
+                "Char" => {
+                    if let Some(inner_val) = inner {
+                        if let Value::String(s) = &**inner_val {
+                            if s.chars().count() == 1 {
+                                return Ok(s.clone());
+                            }
+                            return Err(format!(
+                                "Variant '{}' expects a single character string argument",
+                                variant
+                            ));
+                        }
                     }
+                    return Err(format!("Variant '{}' expects a string argument", variant));
                 }
-            } else {
-                return Some(variant.to_lowercase());
+                "Shift" => {
+                    if let Some(inner_val) = inner {
+                        if let Value::String(s) = &**inner_val {
+                            if s.chars().count() == 1 {
+                                return Ok(s.to_uppercase());
+                            }
+                            return Err(format!(
+                                "Variant '{}' expects a single character string argument",
+                                variant
+                            ));
+                        }
+                        return Err(format!("Variant '{}' expects a string argument", variant));
+                    }
+                    return Ok("shift".to_string());
+                }
+                "Ctrl" => {
+                    if inner.is_some() {
+                        return Err("Variant 'Ctrl' with argument is not supported in isdown()/isup(). Use Key::CtrlLeft or Key::CtrlRight instead.".to_string());
+                    }
+                    return Ok("ctrl".to_string());
+                }
+                "F" => {
+                    if let Some(inner_val) = inner {
+                        if let Value::Number(n) = &**inner_val {
+                            return Ok(format!("f{}", n));
+                        }
+                    }
+                    return Err(format!("Variant '{}' expects a number argument", variant));
+                }
+                _ => {
+                    if inner.is_some() {
+                        return Err(format!("Variant '{}' does not take arguments", variant));
+                    }
+                    return Ok(variant.to_lowercase());
+                }
             }
         }
     }
-    None
+    Err("Expected a Key".to_string())
 }
 
 pub struct Environment {
@@ -1191,6 +1474,55 @@ impl Interpreter {
             Expr::StaticAccess(left, prop, line) => {
                 let left_val = self.eval_expr(left)?;
                 if let Value::BuiltinEnum(enum_name) = left_val {
+                    if enum_name == "Key" {
+                        let valid_variants = [
+                            "Up",
+                            "Down",
+                            "Left",
+                            "Right",
+                            "ShiftUp",
+                            "ShiftDown",
+                            "ShiftLeft",
+                            "ShiftRight",
+                            "CtrlUp",
+                            "CtrlDown",
+                            "CtrlLeft",
+                            "CtrlRight",
+                            "CtrlShiftUp",
+                            "CtrlShiftDown",
+                            "CtrlShiftLeft",
+                            "CtrlShiftRight",
+                            "Delete",
+                            "CtrlDelete",
+                            "Char",
+                            "Shift",
+                            "Ctrl",
+                            "Alt",
+                            "Esc",
+                            "Enter",
+                            "Tab",
+                            "Backspace",
+                            "CtrlBackspace",
+                            "None",
+                            "F",
+                            "Space",
+                            "CapsLock",
+                            "PgUp",
+                            "PgDn",
+                            "Home",
+                            "End",
+                            "PrtScr",
+                            "Insert",
+                            "LWin",
+                            "RWin",
+                        ];
+                        if !valid_variants.contains(&prop.as_str()) {
+                            return Err(format!(
+                                "Line {}: Invalid variant '{}' for enum 'Key'",
+                                line, prop
+                            ));
+                        }
+                    }
                     Ok(Value::EnumVariant(enum_name, prop.clone(), None))
                 } else {
                     Err(format!(
@@ -1240,6 +1572,55 @@ impl Interpreter {
                 let mut left_val = self.eval_expr(left)?;
 
                 if let Value::BuiltinEnum(enum_name) = &left_val {
+                    if enum_name == "Key" {
+                        let valid_variants = [
+                            "Up",
+                            "Down",
+                            "Left",
+                            "Right",
+                            "ShiftUp",
+                            "ShiftDown",
+                            "ShiftLeft",
+                            "ShiftRight",
+                            "CtrlUp",
+                            "CtrlDown",
+                            "CtrlLeft",
+                            "CtrlRight",
+                            "CtrlShiftUp",
+                            "CtrlShiftDown",
+                            "CtrlShiftLeft",
+                            "CtrlShiftRight",
+                            "Delete",
+                            "CtrlDelete",
+                            "Char",
+                            "Shift",
+                            "Ctrl",
+                            "Alt",
+                            "Esc",
+                            "Enter",
+                            "Tab",
+                            "Backspace",
+                            "CtrlBackspace",
+                            "None",
+                            "F",
+                            "Space",
+                            "CapsLock",
+                            "PgUp",
+                            "PgDn",
+                            "Home",
+                            "End",
+                            "PrtScr",
+                            "Insert",
+                            "LWin",
+                            "RWin",
+                        ];
+                        if !valid_variants.contains(&method.as_str()) {
+                            return Err(format!(
+                                "Line {}: Invalid variant '{}' for enum 'Key'",
+                                line, method
+                            ));
+                        }
+                    }
                     if eval_args.len() != 1 {
                         return Err(format!(
                             "Line {}: Enum variant constructor expects exactly 1 argument",
@@ -1334,7 +1715,7 @@ impl Interpreter {
                                 if let Value::Number(stop) = eval_args[0].1 {
                                     (0.0, stop, 1.0)
                                 } else {
-                                    return Err(format!("Line {}: range() expects numbers", line));
+                                    return Err(format!("Line {}: 'range' expects numbers", line));
                                 }
                             }
                             2 => {
@@ -1343,7 +1724,7 @@ impl Interpreter {
                                 {
                                     (*start, *stop, 1.0)
                                 } else {
-                                    return Err(format!("Line {}: range() expects numbers", line));
+                                    return Err(format!("Line {}: 'range' expects numbers", line));
                                 }
                             }
                             3 => {
@@ -1355,18 +1736,18 @@ impl Interpreter {
                                 {
                                     if *step == 0.0 {
                                         return Err(format!(
-                                            "Line {}: range() step cannot be zero",
+                                            "Line {}: 'range' step cannot be zero",
                                             line
                                         ));
                                     }
                                     (*start, *stop, *step)
                                 } else {
-                                    return Err(format!("Line {}: range() expects numbers", line));
+                                    return Err(format!("Line {}: 'range' expects numbers", line));
                                 }
                             }
                             _ => {
                                 return Err(format!(
-                                    "Line {}: range() expects 1 to 3 arguments",
+                                    "Line {}: 'range' expects 1 to 3 arguments",
                                     line
                                 ));
                             }
@@ -1417,19 +1798,24 @@ impl Interpreter {
                     }
                     "len" => {
                         if eval_args.len() != 1 {
-                            return Err(format!("Line {}: len() expects 1 argument", line));
+                            return Err(format!("Line {}: 'len' expects 1 argument", line));
                         }
                         match &eval_args[0].1 {
                             Value::String(s) => return Ok(Value::Number(s.chars().count() as f64)),
                             Value::List(l) => return Ok(Value::Number(l.len() as f64)),
                             Value::Dict(d) => return Ok(Value::Number(d.len() as f64)),
-                            _ => return Err(format!("Line {}: object has no len()", line)),
+                            _ => {
+                                return Err(format!(
+                                    "Line {}: 'len' is not supported for this type",
+                                    line
+                                ));
+                            }
                         }
                     }
                     "max" | "min" => {
                         if eval_args.is_empty() {
                             return Err(format!(
-                                "Line {}: {}() expects at least 1 argument",
+                                "Line {}: '{}' expects at least 1 argument",
                                 line, name
                             ));
                         }
@@ -1442,7 +1828,7 @@ impl Interpreter {
                                 }
                                 _ => {
                                     return Err(format!(
-                                        "Line {}: {}() arg is an empty sequence or not iterable",
+                                        "Line {}: '{}' argument is an empty sequence or not iterable",
                                         line, name
                                     ));
                                 }
@@ -1453,7 +1839,7 @@ impl Interpreter {
 
                         if items.is_empty() {
                             return Err(format!(
-                                "Line {}: {}() arg is an empty sequence",
+                                "Line {}: '{}' argument is an empty sequence",
                                 line, name
                             ));
                         }
@@ -1478,7 +1864,7 @@ impl Interpreter {
                                     }
                                 } else {
                                     return Err(format!(
-                                        "Line {}: {}() with mixed types",
+                                        "Line {}: '{}' called with mixed types",
                                         line, name
                                     ));
                                 }
@@ -1503,7 +1889,7 @@ impl Interpreter {
                                     }
                                 } else {
                                     return Err(format!(
-                                        "Line {}: {}() with mixed types",
+                                        "Line {}: '{}' called with mixed types",
                                         line, name
                                     ));
                                 }
@@ -1511,7 +1897,7 @@ impl Interpreter {
                             return Ok(Value::String(best));
                         } else {
                             return Err(format!(
-                                "Line {}: {}() only supports numbers and strings",
+                                "Line {}: '{}' only supports numbers and strings",
                                 line, name
                             ));
                         }
@@ -1572,16 +1958,16 @@ impl Interpreter {
                             return Err(format!("Line {}: '{}' expects 1 argument", line, name));
                         }
 
-                        let key_str = if let Some(s) = variant_to_key_str(&eval_args[0].1) {
-                            s
-                        } else {
-                            return Err(format!(
-                                "Line {}: '{}' expects a Key enum variant (e.g. Key::Alt or Key::Char('t'))",
-                                line, name
-                            ));
+                        let key_str = match variant_to_key_str(&eval_args[0].1) {
+                            Ok(s) => s,
+                            Err(e) => return Err(format!("Line {}: {}", line, e)),
                         };
 
-                        let is_down = check_key_down(&key_str)?;
+                        let is_down = match check_key_down(&key_str) {
+                            Ok(b) => b,
+                            Err(e) => return Err(format!("Line {}: {}", line, e)),
+                        };
+
                         if name == "isdown" {
                             return Ok(Value::Bool(is_down));
                         } else {

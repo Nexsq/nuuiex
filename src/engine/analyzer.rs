@@ -192,13 +192,7 @@ impl Analyzer {
                     if args.len() != 1 {
                         self.error(*line, format!("'{}' expects exactly 1 argument", name));
                     } else if matches!(args[0].1, Expr::String(_)) {
-                        self.error(
-                            *line,
-                            format!(
-                                "'{}' expects a Key variant (e.g. Key:Alt), not a string",
-                                name
-                            ),
-                        );
+                        self.error(*line, format!("'{}' expects a Key", name));
                     }
                 }
                 for (_, arg) in args {
