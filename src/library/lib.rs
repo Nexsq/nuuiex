@@ -1,4 +1,3 @@
-use directories::ProjectDirs;
 use std::cmp::Ordering;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -39,9 +38,8 @@ pub struct MacroLibrary {
 }
 
 pub fn get_order_path() -> Result<PathBuf, String> {
-    let proj_dirs = ProjectDirs::from("com", "Nexsq", "nuui")
-        .ok_or("Failed to locate the system configuration directory.")?;
-    Ok(proj_dirs.config_dir().join("conf").join("order.conf"))
+    let config_dir = crate::get_config_dir()?;
+    Ok(config_dir.join("conf").join("order.conf"))
 }
 
 pub fn load_custom_order() -> Vec<String> {
@@ -69,8 +67,8 @@ pub fn reset_custom_order() {
 }
 
 pub fn reset_library() {
-    if let Some(proj_dirs) = ProjectDirs::from("com", "Nexsq", "nuui") {
-        let lib_dir = proj_dirs.config_dir().join("lib");
+    if let Ok(config_dir) = crate::get_config_dir() {
+        let lib_dir = config_dir.join("lib");
         if lib_dir.exists() {
             let _ = fs::remove_dir_all(&lib_dir);
             let _ = fs::create_dir_all(&lib_dir);
@@ -79,10 +77,8 @@ pub fn reset_library() {
 }
 
 pub fn init(sorting: &str) -> Result<MacroLibrary, String> {
-    let proj_dirs = ProjectDirs::from("com", "Nexsq", "nuui")
-        .ok_or("Failed to locate the system configuration directory.")?;
-
-    let lib_dir: PathBuf = proj_dirs.config_dir().join("lib");
+    let config_dir = crate::get_config_dir()?;
+    let lib_dir: PathBuf = config_dir.join("lib");
 
     if !lib_dir.exists() {
         if let Err(e) = fs::create_dir_all(&lib_dir) {

@@ -1,4 +1,3 @@
-use directories::ProjectDirs;
 use std::fmt::Write as _;
 use std::fs;
 
@@ -487,10 +486,10 @@ impl Config {
     }
 
     pub fn save(&self) {
-        let proj_dirs = ProjectDirs::from("com", "Nexsq", "nuui")
-            .expect("Failed to locate the system configuration directory.");
+        let config_dir_base =
+            crate::get_config_dir().expect("Failed to locate the system configuration directory.");
 
-        let config_dir = proj_dirs.config_dir().join("conf");
+        let config_dir = config_dir_base.join("conf");
         let config_file = config_dir.join("config.conf");
 
         let mut output = String::with_capacity(DEFAULT_CONFIG.len() + 256);
@@ -849,10 +848,8 @@ impl Config {
 }
 
 pub fn init() -> Result<Config, String> {
-    let proj_dirs = ProjectDirs::from("com", "Nexsq", "nuui")
-        .ok_or("Failed to locate the system configuration directory.")?;
-
-    let config_dir = proj_dirs.config_dir().join("conf");
+    let config_dir_base = crate::get_config_dir()?;
+    let config_dir = config_dir_base.join("conf");
     let config_file = config_dir.join("config.conf");
 
     if !config_dir.exists() {
@@ -877,10 +874,8 @@ pub fn init() -> Result<Config, String> {
 }
 
 pub fn reset_to_default() -> Result<(), String> {
-    let proj_dirs = ProjectDirs::from("com", "Nexsq", "nuui")
-        .ok_or("Failed to locate the system configuration directory.")?;
-
-    let config_dir = proj_dirs.config_dir().join("conf");
+    let config_dir_base = crate::get_config_dir()?;
+    let config_dir = config_dir_base.join("conf");
     let config_file = config_dir.join("config.conf");
 
     if !config_dir.exists() {

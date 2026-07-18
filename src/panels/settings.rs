@@ -48,8 +48,8 @@ pub fn available_themes() -> Vec<String> {
         themes.push(name.to_string());
     }
 
-    if let Some(proj_dirs) = directories::ProjectDirs::from("com", "Nexsq", "nuui") {
-        let themes_dir = proj_dirs.config_dir().join("themes");
+    if let Ok(config_dir) = crate::get_config_dir() {
+        let themes_dir = config_dir.join("themes");
         if let Ok(entries) = std::fs::read_dir(themes_dir) {
             for entry in entries.filter_map(Result::ok) {
                 let path = entry.path();

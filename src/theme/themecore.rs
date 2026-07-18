@@ -1,5 +1,4 @@
 use crate::render::style::{Color, Gradient};
-use directories::ProjectDirs;
 use std::fs;
 
 const DEFAULT_THEME: &str = include_str!("themes/default.conf");
@@ -140,20 +139,19 @@ impl Default for Theme {
 }
 
 pub fn init(name: &str) -> Result<Theme, String> {
+    let config_dir = crate::get_config_dir()?;
+    let themes_dir = config_dir.join("themes");
+
+    if !themes_dir.exists() {
+        let _ = fs::create_dir_all(&themes_dir);
+    }
+
     for (b_name, content) in BUILTIN_THEMES {
         if *b_name == name {
             let mut theme = parse_theme_base(content, Theme::default())?;
             theme.name = name.to_string();
             return Ok(theme);
         }
-    }
-
-    let proj_dirs =
-        ProjectDirs::from("com", "Nexsq", "nuui").ok_or("Failed to locate config directory.")?;
-    let themes_dir = proj_dirs.config_dir().join("themes");
-
-    if !themes_dir.exists() {
-        let _ = fs::create_dir_all(&themes_dir);
     }
 
     let theme_path = themes_dir.join(format!("{}.conf", name));
