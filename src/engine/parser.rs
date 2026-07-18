@@ -76,6 +76,9 @@ impl Parser {
         if self.check(&TokenKind::If) {
             return self.parse_if();
         }
+        if self.check(&TokenKind::Async) {
+            return self.parse_async();
+        }
         if self.check(&TokenKind::Break) {
             let token = self.advance().clone();
             if self.check_statement_end() {
@@ -219,6 +222,10 @@ impl Parser {
     }
 
     fn parse_block(&mut self) -> Option<Vec<Stmt>> {
+        while self.check(&TokenKind::Newline) {
+            self.advance();
+        }
+
         if !self.check(&TokenKind::Indent) {
             self.error("Expected indentation block.");
             return None;
@@ -313,6 +320,22 @@ impl Parser {
 
         let body = self.parse_block()?;
         Some(Stmt::For(name, iterable, body, token.line))
+    }
+
+    fn parse_async(&mut self) -> Option<Stmt> {
+        let token = self.advance().clone();
+        if !self.check(&TokenKind::Colon) {
+            self.error("Expected ':' after 'async'.");
+            return None;
+        }
+        self.advance();
+        if !self.check_statement_end() {
+            self.error("Expected newline after ':'.");
+            return None;
+        }
+        self.consume_statement_end();
+        let body = self.parse_block()?;
+        Some(Stmt::Async(body, token.line))
     }
 
     fn parse_if(&mut self) -> Option<Stmt> {

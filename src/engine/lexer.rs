@@ -38,6 +38,7 @@ pub enum TokenKind {
     And,
     Or,
     Not,
+    Async,
     Colon,
     DoubleColon,
     Indent,
@@ -623,6 +624,7 @@ impl<'a> Lexer<'a> {
             "True" => TokenKind::True,
             "False" => TokenKind::False,
             "None" => TokenKind::NoneValue,
+            "async" => TokenKind::Async,
             _ => TokenKind::Ident(text.to_string()),
         };
 

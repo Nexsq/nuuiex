@@ -116,6 +116,11 @@ impl Analyzer {
                 self.pop_scope();
                 self.loop_depth -= 1;
             }
+            Stmt::Async(body, _) => {
+                self.push_scope();
+                self.analyze(body);
+                self.pop_scope();
+            }
             Stmt::Break(line) => {
                 if self.loop_depth == 0 {
                     self.error(*line, "Break statement outside of a loop".into());
@@ -306,6 +311,14 @@ impl Analyzer {
                         self.error(*line, format!("'{}' expects exactly 1 argument", name));
                     } else if matches!(args[0].1, Expr::String(_)) {
                         self.error(*line, format!("'{}' expects a Key", name));
+                    }
+                } else if name == "cursorx" || name == "cursory" {
+                    if args.len() != 0 {
+                        self.error(*line, format!("'{}' expects exactly 0 arguments", name));
+                    }
+                } else if name == "setcursor" {
+                    if args.len() < 2 || args.len() > 3 {
+                        self.error(*line, format!("'{}' expects 2 or 3 arguments", name));
                     }
                 } else if name == "cursorx" || name == "cursory" {
                     if args.len() != 0 {

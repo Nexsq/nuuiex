@@ -73,7 +73,10 @@ pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {
                         extract_funcs(e, funcs);
                     }
                 }
-                ast::Stmt::Loop(b) | ast::Stmt::While(_, b) | ast::Stmt::For(_, _, b, _) => {
+                ast::Stmt::Loop(b)
+                | ast::Stmt::While(_, b)
+                | ast::Stmt::For(_, _, b, _)
+                | ast::Stmt::Async(b, _) => {
                     extract_funcs(b, funcs);
                 }
                 _ => {}

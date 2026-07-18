@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender};
 
+#[cfg(windows)]
 struct WinKeyInfo {
     vk: u16,
     req_shift: bool,
@@ -1051,6 +1052,69 @@ fn get_cursor_pos() -> Result<(i32, i32), String> {
 
 #[cfg(target_os = "linux")]
 fn get_cursor_pos() -> Result<(i32, i32), String> {
+    use libc::{RTLD_LAZY, c_void, dlclose, dlopen, dlsym};
+    unsafe {
+        let libx11 = dlopen(b"libX11.so.6\0".as_ptr() as *const i8, RTLD_LAZY);
+        if !libx11.is_null() {
+            let xopen_sym = dlsym(libx11, b"XOpenDisplay\0".as_ptr() as *const i8);
+            let xquery_sym = dlsym(libx11, b"XQueryPointer\0".as_ptr() as *const i8);
+            let xclose_sym = dlsym(libx11, b"XCloseDisplay\0".as_ptr() as *const i8);
+            let xroot_sym = dlsym(libx11, b"XDefaultRootWindow\0".as_ptr() as *const i8);
+
+            if !xopen_sym.is_null()
+                && !xquery_sym.is_null()
+                && !xclose_sym.is_null()
+                && !xroot_sym.is_null()
+            {
+                let xopendisplay: extern "C" fn(*const i8) -> *mut c_void =
+                    std::mem::transmute(xopen_sym);
+                let xquerypointer: extern "C" fn(
+                    *mut c_void,
+                    libc::c_ulong,
+                    *mut libc::c_ulong,
+                    *mut libc::c_ulong,
+                    *mut i32,
+                    *mut i32,
+                    *mut i32,
+                    *mut i32,
+                    *mut u32,
+                ) -> i32 = std::mem::transmute(xquery_sym);
+                let xclosedisplay: extern "C" fn(*mut c_void) -> i32 =
+                    std::mem::transmute(xclose_sym);
+                let xdefaultrootwindow: extern "C" fn(*mut c_void) -> libc::c_ulong =
+                    std::mem::transmute(xroot_sym);
+
+                let display = xopendisplay(std::ptr::null());
+                if !display.is_null() {
+                    let root = xdefaultrootwindow(display);
+                    let mut root_return = 0;
+                    let mut child_return = 0;
+                    let mut root_x = 0;
+                    let mut root_y = 0;
+                    let mut win_x = 0;
+                    let mut win_y = 0;
+                    let mut mask = 0;
+
+                    xquerypointer(
+                        display,
+                        root,
+                        &mut root_return,
+                        &mut child_return,
+                        &mut root_x,
+                        &mut root_y,
+                        &mut win_x,
+                        &mut win_y,
+                        &mut mask,
+                    );
+                    xclosedisplay(display);
+                    dlclose(libx11);
+                    return Ok((root_x, root_y));
+                }
+            }
+            dlclose(libx11);
+        }
+    }
+
     let output = std::process::Command::new("xdotool")
         .arg("getmouselocation")
         .output()
@@ -1138,6 +1202,55 @@ fn set_cursor_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
         }
         Ok(())
     } else {
+        use libc::{RTLD_LAZY, c_void, dlclose, dlopen, dlsym};
+        unsafe {
+            let libx11 = dlopen(b"libX11.so.6\0".as_ptr() as *const i8, RTLD_LAZY);
+            if !libx11.is_null() {
+                let xopen_sym = dlsym(libx11, b"XOpenDisplay\0".as_ptr() as *const i8);
+                let xwarp_sym = dlsym(libx11, b"XWarpPointer\0".as_ptr() as *const i8);
+                let xflush_sym = dlsym(libx11, b"XFlush\0".as_ptr() as *const i8);
+                let xclose_sym = dlsym(libx11, b"XCloseDisplay\0".as_ptr() as *const i8);
+                let xroot_sym = dlsym(libx11, b"XDefaultRootWindow\0".as_ptr() as *const i8);
+
+                if !xopen_sym.is_null()
+                    && !xwarp_sym.is_null()
+                    && !xflush_sym.is_null()
+                    && !xclose_sym.is_null()
+                    && !xroot_sym.is_null()
+                {
+                    let xopendisplay: extern "C" fn(*const i8) -> *mut c_void =
+                        std::mem::transmute(xopen_sym);
+                    let xwarppointer: extern "C" fn(
+                        *mut c_void,
+                        libc::c_ulong,
+                        libc::c_ulong,
+                        i32,
+                        i32,
+                        u32,
+                        u32,
+                        i32,
+                        i32,
+                    ) -> i32 = std::mem::transmute(xwarp_sym);
+                    let xflush: extern "C" fn(*mut c_void) -> i32 = std::mem::transmute(xflush_sym);
+                    let xclosedisplay: extern "C" fn(*mut c_void) -> i32 =
+                        std::mem::transmute(xclose_sym);
+                    let xdefaultrootwindow: extern "C" fn(*mut c_void) -> libc::c_ulong =
+                        std::mem::transmute(xroot_sym);
+
+                    let display = xopendisplay(std::ptr::null());
+                    if !display.is_null() {
+                        let root = xdefaultrootwindow(display);
+                        xwarppointer(display, 0, root, 0, 0, 0, 0, x, y);
+                        xflush(display);
+                        xclosedisplay(display);
+                        dlclose(libx11);
+                        return Ok(());
+                    }
+                }
+                dlclose(libx11);
+            }
+        }
+
         std::process::Command::new("xdotool")
             .arg("mousemove")
             .arg(x.to_string())
@@ -1225,9 +1338,9 @@ impl Environment {
 }
 
 pub struct Interpreter {
-    pub output: Vec<String>,
-    pub errors: Vec<String>,
-    current_line: String,
+    pub output: Arc<std::sync::Mutex<Vec<String>>>,
+    pub errors: Arc<std::sync::Mutex<Vec<String>>>,
+    pub current_line: Arc<std::sync::Mutex<String>>,
     tx: SyncSender<crate::EngineMessage>,
     input_rx: Receiver<String>,
     pub should_exit: bool,
@@ -1249,9 +1362,9 @@ impl Interpreter {
         cancel_token: Arc<AtomicBool>,
     ) -> Self {
         Self {
-            output: Vec::new(),
-            errors: Vec::new(),
-            current_line: String::new(),
+            output: Arc::new(std::sync::Mutex::new(Vec::new())),
+            errors: Arc::new(std::sync::Mutex::new(Vec::new())),
+            current_line: Arc::new(std::sync::Mutex::new(String::new())),
             tx,
             input_rx,
             should_exit: false,
@@ -1261,28 +1374,36 @@ impl Interpreter {
     }
 
     fn send_output(&mut self) {
-        if self.output.len() > 1000 {
-            let excess = self.output.len() - 1000;
-            self.output.drain(0..excess);
+        let mut out_lock = self.output.lock().unwrap();
+        let cur_lock = self.current_line.lock().unwrap();
+        let err_lock = self.errors.lock().unwrap();
+
+        if out_lock.len() > 1000 {
+            let excess = out_lock.len() - 1000;
+            out_lock.drain(0..excess);
         }
 
-        let mut res = self.output.clone();
+        let mut res = out_lock.clone();
 
-        if !self.current_line.is_empty() {
-            res.push(self.current_line.clone());
+        if !cur_lock.is_empty() {
+            res.push(cur_lock.clone());
         }
 
-        if !self.errors.is_empty() {
+        if !err_lock.is_empty() {
             if !res.is_empty() && !res.last().unwrap().is_empty() {
                 res.push("".to_string());
             }
             res.push("Runtime Errors:".to_string());
-            res.extend(self.errors.clone());
+            res.extend(err_lock.clone());
         }
 
         if res.is_empty() {
             res.push("Finished with no output.".to_string());
         }
+
+        drop(out_lock);
+        drop(cur_lock);
+        drop(err_lock);
 
         if self.tx.send(crate::EngineMessage::Output(res)).is_err() {
             self.should_exit = true;
@@ -1314,7 +1435,7 @@ impl Interpreter {
                 }
                 Ok(Signal::Empty) => continue,
                 Err(err) => {
-                    self.errors.push(err);
+                    self.errors.lock().unwrap().push(err);
                     self.should_exit = true;
                     res = Ok(Signal::Empty);
                     break;
@@ -1931,6 +2052,39 @@ impl Interpreter {
                 self.env.pop();
                 Ok(Signal::Empty)
             }
+            Stmt::Async(body, _) => {
+                let async_env = Environment {
+                    scopes: self.env.scopes.clone(),
+                    constants: self.env.constants.clone(),
+                };
+
+                let tx_clone = self.tx.clone();
+                let cancel_token_clone = Arc::clone(&self.cancel_token);
+                let body_clone = body.clone();
+
+                let output_clone = Arc::clone(&self.output);
+                let errors_clone = Arc::clone(&self.errors);
+                let current_line_clone = Arc::clone(&self.current_line);
+
+                std::thread::spawn(move || {
+                    let (_, dummy_rx) = std::sync::mpsc::channel();
+                    let mut async_interp = Interpreter {
+                        output: output_clone,
+                        errors: errors_clone,
+                        current_line: current_line_clone,
+                        tx: tx_clone,
+                        input_rx: dummy_rx,
+                        should_exit: false,
+                        env: async_env,
+                        cancel_token: cancel_token_clone,
+                    };
+
+                    let _ = async_interp.exec_block(&body_clone);
+                    async_interp.send_output();
+                });
+
+                Ok(Signal::Empty)
+            }
             Stmt::Break(_) => Ok(Signal::Break),
             Stmt::Fn(name, params, body, line) => {
                 let func_def = Arc::new(FunctionDef {
@@ -2318,15 +2472,19 @@ impl Interpreter {
                         let segments: Vec<&str> = combined.split('\n').collect();
                         for (i, segment) in segments.iter().enumerate() {
                             if i == 0 {
-                                self.current_line.push_str(segment);
+                                self.current_line.lock().unwrap().push_str(segment);
                             } else {
-                                self.output.push(std::mem::take(&mut self.current_line));
-                                self.current_line = segment.to_string();
+                                let mut cur = self.current_line.lock().unwrap();
+                                let prev_line = std::mem::take(&mut *cur);
+                                self.output.lock().unwrap().push(prev_line);
+                                *cur = segment.to_string();
                             }
                         }
 
                         if name == "println" {
-                            self.output.push(std::mem::take(&mut self.current_line));
+                            let mut cur = self.current_line.lock().unwrap();
+                            let prev_line = std::mem::take(&mut *cur);
+                            self.output.lock().unwrap().push(prev_line);
                         }
 
                         self.send_output();
@@ -2430,7 +2588,7 @@ impl Interpreter {
                     "input" => {
                         if !eval_args.is_empty() {
                             let prompt = eval_args[0].1.to_string();
-                            self.current_line.push_str(&prompt);
+                            self.current_line.lock().unwrap().push_str(&prompt);
                         }
                         self.send_output();
 
@@ -2452,7 +2610,7 @@ impl Interpreter {
                             }
                         };
 
-                        self.current_line.push_str(&result);
+                        self.current_line.lock().unwrap().push_str(&result);
                         return Ok(Value::String(result));
                     }
                     "len" => {
