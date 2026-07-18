@@ -794,6 +794,11 @@ pub fn handle_list_input(
                         for i in 0..6 {
                             if view.editors[i].file_path.as_ref() == Some(&old_path) {
                                 view.editors[i].file_path = Some(new_path.clone());
+                                view.editors[i].rel_path = new_path
+                                    .strip_prefix(&view.library_root)
+                                    .unwrap_or(new_path.as_path())
+                                    .to_string_lossy()
+                                    .into_owned();
                             }
                             if view.running_macros[i].as_ref() == Some(&old_path) {
                                 view.running_macros[i] = Some(new_path.clone());

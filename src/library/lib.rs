@@ -95,7 +95,12 @@ pub fn init(sorting: &str) -> Result<MacroLibrary, String> {
         Vec::new()
     };
 
-    let tree = scan_lib(&lib_dir, &lib_dir, sorting, &custom_order, 0);
+    let mut order_map = std::collections::HashMap::with_capacity(custom_order.len());
+    for (i, p) in custom_order.iter().enumerate() {
+        order_map.insert(p.clone(), i);
+    }
+
+    let tree = scan_lib(&lib_dir, &lib_dir, sorting, &order_map, 0);
 
     Ok(MacroLibrary {
         root_path: lib_dir.clone(),
@@ -107,7 +112,7 @@ fn scan_lib(
     path: &Path,
     root_path: &Path,
     sorting: &str,
-    custom_order: &[String],
+    order_map: &std::collections::HashMap<String, usize>,
     depth: usize,
 ) -> Vec<MacroNode> {
     let mut nodes = Vec::new();
@@ -131,13 +136,7 @@ fn scan_lib(
                 if file_type.is_dir() {
                     nodes.push(MacroNode::Folder {
                         name: raw_name,
-                        children: scan_lib(
-                            &entry_path,
-                            root_path,
-                            sorting,
-                            custom_order,
-                            depth + 1,
-                        ),
+                        children: scan_lib(&entry_path, root_path, sorting, order_map, depth + 1),
                         path: entry_path.clone(),
                     });
                 } else if file_type.is_file() {
@@ -172,14 +171,8 @@ fn scan_lib(
                 .to_str()
                 .unwrap_or("");
 
-            let idx_a = custom_order
-                .iter()
-                .position(|p| p == path_a_str)
-                .unwrap_or(usize::MAX);
-            let idx_b = custom_order
-                .iter()
-                .position(|p| p == path_b_str)
-                .unwrap_or(usize::MAX);
+            let idx_a = order_map.get(path_a_str).copied().unwrap_or(usize::MAX);
+            let idx_b = order_map.get(path_b_str).copied().unwrap_or(usize::MAX);
 
             if idx_a != idx_b {
                 return idx_a.cmp(&idx_b);

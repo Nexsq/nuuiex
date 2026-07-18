@@ -274,6 +274,10 @@ impl Editor {
         if should_push {
             self.undo_stack
                 .push((self.state.clone(), self.folded_lines.clone(), action));
+
+            if self.undo_stack.len() > 1024 {
+                self.undo_stack.remove(0);
+            }
         }
 
         self.last_edit_pos = Some(current_pos);
@@ -949,7 +953,6 @@ impl Editor {
                 .map(|(i, _)| i)
                 .unwrap();
             line.remove(byte_idx);
-            self.state.cursor_x -= 0;
             self.state.cursor_x -= 1;
         } else if self.state.cursor_y > 0 {
             self.shift_folds(self.state.cursor_y, -1);

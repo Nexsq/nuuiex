@@ -62,15 +62,18 @@ impl Terminal {
 
         let _raw_guard = sys::RawModeGuard::enable();
 
-        let (tx, key_rx) = mpsc::channel();
+        let (tx, key_rx) = mpsc::sync_channel(1024);
         thread::spawn(move || {
             let mut buf = [0u8; 32];
             let mut stdin = io::stdin();
 
             while let Ok(n) = stdin.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
                 for &byte in &buf[..n] {
                     if tx.send(byte).is_err() {
-                        break;
+                        return;
                     }
                 }
             }

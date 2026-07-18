@@ -1267,15 +1267,15 @@ fn set_cursor_pos(_x: i32, _y: i32, _relative: bool) -> Result<(), String> {
 }
 
 pub struct Environment {
-    pub scopes: Vec<HashMap<String, Value>>,
-    pub constants: Vec<HashSet<String>>,
+    pub scopes: Vec<std::sync::Arc<std::sync::Mutex<HashMap<String, Value>>>>,
+    pub constants: Vec<std::sync::Arc<std::sync::Mutex<HashSet<String>>>>,
 }
 
 impl Environment {
     pub fn new() -> Self {
         let mut env = Self {
-            scopes: vec![HashMap::new()],
-            constants: vec![HashSet::new()],
+            scopes: vec![std::sync::Arc::new(std::sync::Mutex::new(HashMap::new()))],
+            constants: vec![std::sync::Arc::new(std::sync::Mutex::new(HashSet::new()))],
         };
         env.define(
             "Key".to_string(),
@@ -1287,8 +1287,10 @@ impl Environment {
     }
 
     pub fn push(&mut self) {
-        self.scopes.push(HashMap::new());
-        self.constants.push(HashSet::new());
+        self.scopes
+            .push(std::sync::Arc::new(std::sync::Mutex::new(HashMap::new())));
+        self.constants
+            .push(std::sync::Arc::new(std::sync::Mutex::new(HashSet::new())));
     }
 
     pub fn pop(&mut self) {
@@ -1297,26 +1299,29 @@ impl Environment {
     }
 
     pub fn define(&mut self, name: String, val: Value, is_const: bool) -> Result<(), String> {
-        let last_scope = self.scopes.last_mut().unwrap();
+        let mut last_scope = self.scopes.last().unwrap().lock().unwrap();
+        let mut last_consts = self.constants.last().unwrap().lock().unwrap();
+
         if last_scope.contains_key(&name) {
-            if let Some(existing_is_const) = self.constants.last().unwrap().contains(&name).into() {
-                if existing_is_const {
-                    return Err(format!("Cannot modify constant '{}'", name));
-                }
+            if last_consts.contains(&name) {
+                return Err(format!("Cannot modify constant '{}'", name));
             }
             last_scope.insert(name.clone(), val);
             return Ok(());
         }
+
         last_scope.insert(name.clone(), val);
         if is_const {
-            self.constants.last_mut().unwrap().insert(name);
+            last_consts.insert(name);
         }
         Ok(())
     }
 
     pub fn assign(&mut self, name: &str, val: Value) -> Result<(), String> {
-        for (scope, consts) in self.scopes.iter_mut().zip(self.constants.iter()).rev() {
+        for (scope_arc, consts_arc) in self.scopes.iter().zip(self.constants.iter()).rev() {
+            let mut scope = scope_arc.lock().unwrap();
             if scope.contains_key(name) {
+                let consts = consts_arc.lock().unwrap();
                 if consts.contains(name) {
                     return Err(format!("Cannot modify constant '{}'", name));
                 }
@@ -1328,7 +1333,8 @@ impl Environment {
     }
 
     pub fn get(&self, name: &str) -> Option<Value> {
-        for scope in self.scopes.iter().rev() {
+        for scope_arc in self.scopes.iter().rev() {
+            let scope = scope_arc.lock().unwrap();
             if let Some(val) = scope.get(name) {
                 return Some(val.clone());
             }
