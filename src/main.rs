@@ -198,12 +198,6 @@ fn main() {
 
         let key = terminal.read_key(Duration::from_millis(16));
 
-        if key != Key::None {
-            if let Ok(mut fk) = nuui::FOCUSED_KEY.lock() {
-                *fk = Some((key.clone(), std::time::Instant::now()));
-            }
-        }
-
         let mut anim_dirty = false;
         if config.deck_mode == "widget" {
             if config.deck_widget == "keyvis" {

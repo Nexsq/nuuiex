@@ -203,131 +203,10 @@ fn parse_win_key(key: &str) -> Result<WinKeyInfo, String> {
 }
 
 fn check_key_down_focus(key_str: &str) -> Result<bool, String> {
-    use crate::render::terminal::{FOCUSED_KEY, Key};
-    let target_key = match key_str.to_lowercase().as_str() {
-        "alt" | "menu" => Key::None,
-        "shift" => Key::None,
-        "ctrl" | "control" => Key::None,
-        "up" => Key::Up,
-        "down" => Key::Down,
-        "left" => Key::Left,
-        "right" => Key::Right,
-        "shiftup" => Key::ShiftUp,
-        "shiftdown" => Key::ShiftDown,
-        "shiftleft" => Key::ShiftLeft,
-        "shiftright" => Key::ShiftRight,
-        "ctrlup" => Key::CtrlUp,
-        "ctrldown" => Key::CtrlDown,
-        "ctrlleft" => Key::CtrlLeft,
-        "ctrlright" => Key::CtrlRight,
-        "ctrlshiftup" => Key::CtrlShiftUp,
-        "ctrlshiftdown" => Key::CtrlShiftDown,
-        "ctrlshiftleft" => Key::CtrlShiftLeft,
-        "ctrlshiftright" => Key::CtrlShiftRight,
-        "del" | "delete" => Key::Delete,
-        "ctrldelete" => Key::CtrlDelete,
-        "esc" | "escape" => Key::Esc,
-        "enter" | "return" | "\n" => Key::Enter,
-        "tab" | "\t" => Key::Tab,
-        "backspace" | "back" => Key::Backspace,
-        "ctrlbackspace" => Key::CtrlBackspace,
-        "f1" => Key::F(1),
-        "f2" => Key::F(2),
-        "f3" => Key::F(3),
-        "f4" => Key::F(4),
-        "f5" => Key::F(5),
-        "f6" => Key::F(6),
-        "f7" => Key::F(7),
-        "f8" => Key::F(8),
-        "f9" => Key::F(9),
-        "f10" => Key::F(10),
-        "f11" => Key::F(11),
-        "f12" => Key::F(12),
-        "f13" => Key::F(13),
-        "f14" => Key::F(14),
-        "f15" => Key::F(15),
-        "f16" => Key::F(16),
-        "f17" => Key::F(17),
-        "f18" => Key::F(18),
-        "f19" => Key::F(19),
-        "f20" => Key::F(20),
-        "f21" => Key::F(21),
-        "f22" => Key::F(22),
-        "f23" => Key::F(23),
-        "f24" => Key::F(24),
-        "space" => Key::Char(' '),
-        "lmeta" | "rmeta" | "cmd" | "super" | "win" => Key::None,
-        s if s.chars().count() == 1 => {
-            let c = s.chars().next().unwrap();
-            if key_str.chars().next().unwrap().is_ascii_uppercase() {
-                Key::Shift(c.to_ascii_lowercase())
-            } else {
-                Key::Char(c)
-            }
-        }
-        _ => return Err(format!("Unrecognized focus key: '{}'", key_str)),
-    };
-
-    if let Ok(fk) = FOCUSED_KEY.lock() {
-        if let Some((ref k, time)) = *fk {
-            if time.elapsed() < std::time::Duration::from_millis(40) {
-                if key_str == "alt" || key_str == "menu" {
-                    if matches!(k, Key::Alt(_)) {
-                        return Ok(true);
-                    }
-                }
-                if key_str == "shift" {
-                    if matches!(
-                        k,
-                        Key::Shift(_)
-                            | Key::ShiftUp
-                            | Key::ShiftDown
-                            | Key::ShiftLeft
-                            | Key::ShiftRight
-                            | Key::CtrlShiftUp
-                            | Key::CtrlShiftDown
-                            | Key::CtrlShiftLeft
-                            | Key::CtrlShiftRight
-                    ) {
-                        return Ok(true);
-                    }
-                }
-                if key_str == "ctrl" || key_str == "control" {
-                    if matches!(
-                        k,
-                        Key::Ctrl(_)
-                            | Key::CtrlUp
-                            | Key::CtrlDown
-                            | Key::CtrlLeft
-                            | Key::CtrlRight
-                            | Key::CtrlShiftUp
-                            | Key::CtrlShiftDown
-                            | Key::CtrlShiftLeft
-                            | Key::CtrlShiftRight
-                            | Key::CtrlBackspace
-                            | Key::CtrlDelete
-                    ) {
-                        return Ok(true);
-                    }
-                }
-                if k == &target_key && target_key != Key::None {
-                    return Ok(true);
-                }
-                match (&target_key, k) {
-                    (Key::Char(t), Key::Shift(p))
-                    | (Key::Shift(t), Key::Char(p))
-                    | (Key::Char(t), Key::Alt(p))
-                    | (Key::Char(t), Key::Ctrl(p)) => {
-                        if t.to_ascii_lowercase() == p.to_ascii_lowercase() {
-                            return Ok(true);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
+    if !crate::render::terminal::HAS_FOCUS.load(std::sync::atomic::Ordering::Relaxed) {
+        return Ok(false);
     }
-    Ok(false)
+    check_key_down(key_str)
 }
 
 #[cfg(windows)]
@@ -728,7 +607,86 @@ fn parse_linux_key(key: &str) -> Result<LinuxKeyInfo, String> {
 }
 
 #[cfg(target_os = "linux")]
+fn check_x11_key_down(key_str: &str) -> Option<bool> {
+    let info = parse_linux_key(key_str).ok()?;
+    
+    use libc::{RTLD_LAZY, c_void, dlclose, dlopen, dlsym};
+
+    unsafe {
+        let libx11 = dlopen(b"libX11.so.6\0".as_ptr() as *const i8, RTLD_LAZY);
+        if libx11.is_null() {
+            return None;
+        }
+
+        let xopen_sym = dlsym(libx11, b"XOpenDisplay\0".as_ptr() as *const i8);
+        let xquery_sym = dlsym(libx11, b"XQueryKeymap\0".as_ptr() as *const i8);
+        let xclose_sym = dlsym(libx11, b"XCloseDisplay\0".as_ptr() as *const i8);
+
+        if xopen_sym.is_null() || xquery_sym.is_null() || xclose_sym.is_null() {
+            dlclose(libx11);
+            return None;
+        }
+
+        let xopendisplay: extern "C" fn(*const i8) -> *mut c_void = std::mem::transmute(xopen_sym);
+        let xquerykeymap: extern "C" fn(*mut c_void, *mut u8) -> i32 = std::mem::transmute(xquery_sym);
+        let xclosedisplay: extern "C" fn(*mut c_void) -> i32 = std::mem::transmute(xclose_sym);
+
+        let display = xopendisplay(std::ptr::null());
+        if display.is_null() {
+            dlclose(libx11);
+            return None;
+        }
+
+        let mut keys = [0u8; 32];
+        xquerykeymap(display, keys.as_mut_ptr());
+        xclosedisplay(display);
+        dlclose(libx11);
+
+        if info.code >= 272 {
+            return None;
+        }
+
+        let is_key_pressed = |linux_code: u16| -> bool {
+            let x11_code = linux_code + 8;
+            if x11_code > 255 {
+                return false;
+            }
+            let byte = (x11_code / 8) as usize;
+            let bit = x11_code % 8;
+            (keys[byte] & (1 << bit)) != 0
+        };
+
+        let mut is_down = is_key_pressed(info.code);
+
+        let lower = key_str.to_lowercase();
+        if lower == "shift" {
+            is_down = is_key_pressed(42) || is_key_pressed(54);
+        } else if lower == "ctrl" || lower == "control" {
+            is_down = is_key_pressed(29) || is_key_pressed(97);
+        } else if lower == "alt" || lower == "menu" {
+            is_down = is_key_pressed(56) || is_key_pressed(100);
+        } else {
+            if info.req_shift && !(is_key_pressed(42) || is_key_pressed(54)) {
+                return Some(false);
+            }
+            if info.req_ctrl && !(is_key_pressed(29) || is_key_pressed(97)) {
+                return Some(false);
+            }
+            if info.req_alt && !(is_key_pressed(56) || is_key_pressed(100)) {
+                return Some(false);
+            }
+        }
+
+        Some(is_down)
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn check_key_down(key: &str) -> Result<bool, String> {
+    if let Some(pressed) = check_x11_key_down(key) {
+        return Ok(pressed);
+    }
+
     let info = parse_linux_key(key)?;
 
     use libc::{O_NONBLOCK, O_RDONLY, close, ioctl, open};

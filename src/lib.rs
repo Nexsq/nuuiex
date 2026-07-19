@@ -7,7 +7,7 @@ mod theme;
 
 pub use render::canvas::{Box, Canvas, Cell};
 pub use render::style::{Border, Color, Gradient, Modifier, Style};
-pub use render::terminal::{FOCUSED_KEY, Key, Terminal};
+pub use render::terminal::{HAS_FOCUS, Key, Terminal};
 
 pub use config::conf;
 pub use engine::core::EngineMessage;

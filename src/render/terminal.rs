@@ -36,8 +36,7 @@ pub enum Key {
     F(u8),
 }
 
-pub static FOCUSED_KEY: std::sync::Mutex<Option<(Key, std::time::Instant)>> =
-    std::sync::Mutex::new(None);
+pub static HAS_FOCUS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 pub struct Terminal {
     _raw_guard: sys::RawModeGuard,
@@ -48,7 +47,7 @@ impl Drop for Terminal {
     fn drop(&mut self) {
         let mut stdout = io::stdout().lock();
 
-        write!(stdout, "\x1b[?25h\x1b[?1049l").unwrap();
+        write!(stdout, "\x1b[?1004l\x1b[?25h\x1b[?1049l").unwrap();
         let _ = stdout.flush();
     }
 }
@@ -61,7 +60,7 @@ impl Terminal {
     pub fn init() -> Self {
         let mut stdout = io::stdout().lock();
 
-        write!(stdout, "\x1b[?1049h\x1b[?25l").unwrap();
+        write!(stdout, "\x1b[?1049h\x1b[?25l\x1b[?1004h").unwrap();
         stdout.flush().unwrap();
 
         let _raw_guard = sys::RawModeGuard::enable();
@@ -112,6 +111,14 @@ impl Terminal {
                         }
                     }
                     return match seq.as_slice() {
+                        b"I" => {
+                            crate::render::terminal::HAS_FOCUS.store(true, std::sync::atomic::Ordering::Relaxed);
+                            Key::None
+                        }
+                        b"O" => {
+                            crate::render::terminal::HAS_FOCUS.store(false, std::sync::atomic::Ordering::Relaxed);
+                            Key::None
+                        }
                         b"A" => Key::Up,
                         b"B" => Key::Down,
                         b"C" => Key::Right,
