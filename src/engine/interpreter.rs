@@ -1740,6 +1740,7 @@ pub struct Interpreter {
     cancel_token: Arc<AtomicBool>,
     focus_token: Arc<AtomicBool>,
     rng_state: u64,
+    macro_rel_path: String,
 }
 
 #[derive(PartialEq)]
@@ -1756,6 +1757,7 @@ impl Interpreter {
         input_rx: Receiver<String>,
         cancel_token: Arc<AtomicBool>,
         focus_token: Arc<AtomicBool>,
+        macro_rel_path: String,
     ) -> Self {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1774,6 +1776,7 @@ impl Interpreter {
             cancel_token,
             focus_token,
             rng_state,
+            macro_rel_path,
         }
     }
 
@@ -2596,6 +2599,7 @@ impl Interpreter {
                 let caret_x_clone = self.caret_x;
                 let caret_y_clone = self.caret_y;
                 let next_rng_state = self.rng_state.wrapping_add(1);
+                let macro_rel_path_clone = self.macro_rel_path.clone();
 
                 std::thread::spawn(move || {
                     let (_, dummy_rx) = std::sync::mpsc::channel();
@@ -2611,6 +2615,7 @@ impl Interpreter {
                         cancel_token: cancel_token_clone,
                         focus_token: focus_token_clone,
                         rng_state: next_rng_state,
+                        macro_rel_path: macro_rel_path_clone,
                     };
 
                     let _ = async_interp.exec_block(&body_clone);
@@ -3560,6 +3565,77 @@ impl Interpreter {
                             }
                             Err(e) => return Err(format!("Line {}: {}", line, e)),
                         }
+                    }
+                    "macrodata" => {
+                        if eval_args.len() > 1 {
+                            return Err(format!(
+                                "Line {}: 'macrodata' expects 0 or 1 argument",
+                                line
+                            ));
+                        }
+
+                        if let Ok(config_dir) = crate::get_config_dir() {
+                            let md_dir = config_dir.join("macrodata");
+                            let mut md_file = md_dir.join(&self.macro_rel_path);
+                            md_file.set_extension("nuuidata");
+
+                            if eval_args.len() == 0 {
+                                let mut map = std::collections::HashMap::new();
+                                if let Ok(contents) = std::fs::read_to_string(&md_file) {
+                                    for md_line in contents.lines() {
+                                        if let Some((k, v)) = md_line.split_once('=') {
+                                            let key = k.trim().to_string();
+                                            let val_str = v.trim();
+
+                                            let val = if let Ok(n) = val_str.parse::<f64>() {
+                                                Value::Number(n)
+                                            } else if val_str == "True" {
+                                                Value::Bool(true)
+                                            } else if val_str == "False" {
+                                                Value::Bool(false)
+                                            } else {
+                                                Value::String(val_str.to_string())
+                                            };
+
+                                            map.insert(Value::String(key), val);
+                                        }
+                                    }
+                                }
+                                return Ok(Value::Dict(map));
+                            } else {
+                                if let Value::Dict(map) = &eval_args[0].1 {
+                                    if let Some(parent) = md_file.parent() {
+                                        let _ = std::fs::create_dir_all(parent);
+                                    }
+                                    if map.is_empty() {
+                                        if md_file.exists() {
+                                            let _ = std::fs::remove_file(md_file);
+                                        }
+                                    } else {
+                                        let mut content = String::new();
+                                        for (k, v) in map {
+                                            let k_str = match k {
+                                                Value::String(s) => s.clone(),
+                                                _ => k.to_string(),
+                                            };
+                                            let v_str = match v {
+                                                Value::String(s) => s.clone(),
+                                                _ => v.to_string(),
+                                            };
+                                            content.push_str(&format!("{} = {}\n", k_str, v_str));
+                                        }
+                                        let _ = std::fs::write(md_file, content);
+                                    }
+                                    return Ok(Value::Nil);
+                                } else {
+                                    return Err(format!(
+                                        "Line {}: 'macrodata' expects a dictionary to save",
+                                        line
+                                    ));
+                                }
+                            }
+                        }
+                        return Ok(Value::Nil);
                     }
                     "compixel" => {
                         if eval_args.len() < 3 || eval_args.len() > 4 {

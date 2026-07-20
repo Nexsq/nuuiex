@@ -73,12 +73,77 @@ pub fn reset_library() {
             let _ = fs::remove_dir_all(&lib_dir);
             let _ = fs::create_dir_all(&lib_dir);
         }
+        let md_dir = config_dir.join("macrodata");
+        if md_dir.exists() {
+            let _ = fs::remove_dir_all(&md_dir);
+            let _ = fs::create_dir_all(&md_dir);
+        }
+    }
+}
+
+pub fn reset_macrodata() {
+    if let Ok(config_dir) = crate::get_config_dir() {
+        let md_dir = config_dir.join("macrodata");
+        if md_dir.exists() {
+            let _ = std::fs::remove_dir_all(&md_dir);
+            let _ = std::fs::create_dir_all(&md_dir);
+        }
+    }
+}
+
+pub fn rename_macrodata(old_path: &Path, new_path: &Path) {
+    if let Ok(config_dir) = crate::get_config_dir() {
+        let lib_dir = config_dir.join("lib");
+        let md_dir = config_dir.join("macrodata");
+
+        if let (Ok(old_rel), Ok(new_rel)) = (
+            old_path.strip_prefix(&lib_dir),
+            new_path.strip_prefix(&lib_dir),
+        ) {
+            let mut old_md = md_dir.join(old_rel);
+            let mut new_md = md_dir.join(new_rel);
+
+            let is_file = old_path.extension().map_or(false, |ext| ext == "nuui");
+            if is_file {
+                old_md.set_extension("nuuidata");
+                new_md.set_extension("nuuidata");
+            }
+
+            if old_md.exists() {
+                if let Some(parent) = new_md.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let _ = std::fs::rename(old_md, new_md);
+            }
+        }
+    }
+}
+
+pub fn delete_macrodata(path: &Path, is_folder: bool) {
+    if let Ok(config_dir) = crate::get_config_dir() {
+        let lib_dir = config_dir.join("lib");
+        let md_dir = config_dir.join("macrodata");
+
+        if let Ok(rel) = path.strip_prefix(&lib_dir) {
+            let mut md_path = md_dir.join(rel);
+            if is_folder {
+                if md_path.exists() {
+                    let _ = std::fs::remove_dir_all(&md_path);
+                }
+            } else {
+                md_path.set_extension("nuuidata");
+                if md_path.exists() {
+                    let _ = std::fs::remove_file(&md_path);
+                }
+            }
+        }
     }
 }
 
 pub fn init(sorting: &str) -> Result<MacroLibrary, String> {
     let config_dir = crate::get_config_dir()?;
     let lib_dir: PathBuf = config_dir.join("lib");
+    let md_dir: PathBuf = config_dir.join("macrodata");
 
     if !lib_dir.exists() {
         if let Err(e) = fs::create_dir_all(&lib_dir) {
@@ -87,6 +152,10 @@ pub fn init(sorting: &str) -> Result<MacroLibrary, String> {
                 lib_dir, e
             ));
         }
+    }
+
+    if !md_dir.exists() {
+        let _ = fs::create_dir_all(&md_dir);
     }
 
     let custom_order = if sorting == "custom" {

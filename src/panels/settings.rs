@@ -770,13 +770,18 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
             name: "Advanced",
             settings: vec![
                 Setting {
+                    name: "Reset Config",
+                    key: "reset_config",
+                    kind: SettingType::Action,
+                },
+                Setting {
                     name: "Reset Lib",
                     key: "reset_lib",
                     kind: SettingType::Action,
                 },
                 Setting {
-                    name: "Reset Config",
-                    key: "reset_config",
+                    name: "Reset Macrodata",
+                    key: "reset_macrodata",
                     kind: SettingType::Action,
                 },
             ],
@@ -1498,12 +1503,14 @@ pub fn settings_modal(
                                         "reset_order" => {
                                             ("Reset custom sorting order\n\nAre you sure?", 4)
                                         }
-                                        "reset_lib" => (
-                                            "Delete all files in the library\nThis cannot be undone!\n\nAre you sure?",
-                                            5,
-                                        ),
+                                        "reset_lib" => {
+                                            ("Delete all files in the library\n\nAre you sure?", 5)
+                                        }
                                         "reset_deck" => {
                                             ("Reset deck settings to default\n\nAre you sure?", 6)
+                                        }
+                                        "reset_macrodata" => {
+                                            ("Delete all saved macro data\n\nAre you sure?", 7)
                                         }
                                         _ => ("", 99),
                                     };
@@ -1539,6 +1546,8 @@ pub fn settings_modal(
                                             crate::lib::reset_library();
                                         } else if action_type == 6 {
                                             config.reset_deck();
+                                        } else if action_type == 7 {
+                                            crate::lib::reset_macrodata();
                                         }
                                         config.save();
 

@@ -42,6 +42,7 @@ pub const BUILTIN_FUNCS: &[&str] = &[
     "scroll",
     "getpixel",
     "compixel",
+    "macrodata",
 ];
 
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {
@@ -102,6 +103,7 @@ pub fn run_in_thread(
     input_rx: Receiver<String>,
     cancel_token: Arc<AtomicBool>,
     focus_token: Arc<AtomicBool>,
+    macro_rel_path: String,
 ) {
     let mut lexer = lexer::Lexer::new(source);
     let tokens = lexer.tokenize();
@@ -126,6 +128,7 @@ pub fn run_in_thread(
         return;
     }
 
-    let mut interpreter = interpreter::Interpreter::new(tx, input_rx, cancel_token, focus_token);
+    let mut interpreter =
+        interpreter::Interpreter::new(tx, input_rx, cancel_token, focus_token, macro_rel_path);
     interpreter.exec(&ast);
 }

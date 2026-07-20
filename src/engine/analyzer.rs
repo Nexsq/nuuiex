@@ -407,6 +407,10 @@ impl Analyzer {
                     if args.len() > 1 {
                         self.error(*line, format!("'{}' expects 0 or 1 argument", name));
                     }
+                } else if name == "macrodata" {
+                    if args.len() > 1 {
+                        self.error(*line, format!("'{}' expects 0 or 1 argument", name));
+                    }
                 }
                 for (_, arg) in args {
                     self.analyze_expr(arg);

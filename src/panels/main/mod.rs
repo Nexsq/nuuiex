@@ -668,6 +668,13 @@ impl MainView {
                 let focus_token = Arc::new(AtomicBool::new(true));
                 let thread_cancel_token = Arc::clone(&cancel_token);
                 let thread_focus_token = Arc::clone(&focus_token);
+                let rp = path
+                    .strip_prefix(&self.library_root)
+                    .unwrap_or(path.as_path())
+                    .to_string_lossy()
+                    .into_owned();
+                let macro_rel_path = rp;
+
                 std::thread::spawn(move || {
                     crate::engine::core::run_in_thread(
                         &source,
@@ -675,6 +682,7 @@ impl MainView {
                         input_rx,
                         thread_cancel_token,
                         thread_focus_token,
+                        macro_rel_path,
                     );
                 });
 
@@ -773,7 +781,7 @@ pub fn handle_list_input(
             }
 
             if let ListInputMode::Renaming(_) = view.list_input {
-                if let Some(node) = view.get_selected_node() {
+                if let Some(node) = view.get_selected_node().cloned() {
                     let old_path = node.path().to_path_buf();
                     let is_file = matches!(node, crate::lib::MacroNode::Script { .. });
                     let parent = old_path.parent().unwrap();
@@ -803,6 +811,7 @@ pub fn handle_list_input(
                     }
 
                     if std::fs::rename(&old_path, &new_path).is_ok() {
+                        crate::lib::rename_macrodata(&old_path, &new_path);
                         if config.lib_sorting == "custom" {
                             let mut order = crate::lib::load_custom_order();
                             let old_rel = old_path
@@ -1030,7 +1039,7 @@ pub fn handle_list_action(
                 handled = true;
             }
         } else if *c == config.bind_lib_delete {
-            if let Some(node) = view.get_selected_node() {
+            if let Some(node) = view.get_selected_node().cloned() {
                 let path = node.path().to_path_buf();
                 let is_folder = matches!(node, crate::lib::MacroNode::Folder { .. });
 
@@ -1064,6 +1073,7 @@ pub fn handle_list_action(
                 view.update_macro_focus(true);
 
                 if res == crate::PanelResult::Ok(1) {
+                    crate::lib::delete_macrodata(&path, is_folder);
                     if is_folder {
                         let _ = std::fs::remove_dir_all(&path);
                     } else {
@@ -1084,7 +1094,7 @@ pub fn handle_list_action(
     }
 
     if !handled && is_force_delete {
-        if let Some(node) = view.get_selected_node() {
+        if let Some(node) = view.get_selected_node().cloned() {
             let path = node.path().to_path_buf();
             let is_folder = matches!(node, crate::lib::MacroNode::Folder { .. });
 
@@ -1137,6 +1147,7 @@ pub fn handle_list_action(
             }
 
             if confirm {
+                crate::lib::delete_macrodata(&path, is_folder);
                 if is_folder {
                     let _ = std::fs::remove_dir_all(&path);
                 } else {
