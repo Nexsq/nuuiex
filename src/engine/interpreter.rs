@@ -2042,10 +2042,12 @@ impl Interpreter {
                     Ok(Value::List(vec.clone()))
                 }
                 "count" => {
-                    if args.len() != 0 {
-                        return Err(format!("Line {}: 'count' expects 0 arguments", line));
+                    if args.len() != 1 {
+                        return Err(format!("Line {}: 'count' expects 1 argument", line));
                     }
-                    Ok(Value::Number(vec.len() as f64))
+                    let target = &args[0];
+                    let count = vec.iter().filter(|&x| x == target).count();
+                    Ok(Value::Number(count as f64))
                 }
                 "extend" => {
                     if args.len() != 1 {

@@ -307,37 +307,45 @@ fn main() {
                         if editor.mode == nuui::editor::Mode::Command && key == Key::Char('q') {
                             break;
                         }
-                        if editor.mode == nuui::editor::Mode::Command
-                            && key == Key::Tab
+
+                        let is_ignorable_esc = editor.mode == nuui::editor::Mode::Command
+                            && key == Key::Esc
                             && !editor.visual_mode
-                        {
-                            main_view.toggle_focus(&config);
-                            dirty = true;
-                            continue;
-                        }
-                        if editor.mode == nuui::editor::Mode::Insert && key == Key::Tab {
-                            editor.handle_key(key, &config);
+                            && editor.state.selection_start.is_none();
+                        if !is_ignorable_esc {
+                            if editor.mode == nuui::editor::Mode::Command
+                                && key == Key::Tab
+                                && !editor.visual_mode
+                            {
+                                main_view.toggle_focus(&config);
+                                dirty = true;
+                                continue;
+                            }
+
+                            if editor.mode == nuui::editor::Mode::Insert && key == Key::Tab {
+                                editor.handle_key(key, &config);
+                                main_view.refresh_main(&config);
+                                dirty = true;
+                                continue;
+                            }
+
+                            let saved = editor.handle_key(key, &config);
+                            if saved {
+                                if let Some(path) = editor.file_path.clone() {
+                                    for i in 0..6 {
+                                        if i != main_view.current_tab
+                                            && main_view.editors[i].file_path == Some(path.clone())
+                                        {
+                                            main_view.editors[i].reload_file();
+                                        }
+                                    }
+                                }
+                            }
+
                             main_view.refresh_main(&config);
                             dirty = true;
                             continue;
                         }
-
-                        let saved = editor.handle_key(key, &config);
-                        if saved {
-                            if let Some(path) = editor.file_path.clone() {
-                                for i in 0..6 {
-                                    if i != main_view.current_tab
-                                        && main_view.editors[i].file_path == Some(path.clone())
-                                    {
-                                        main_view.editors[i].reload_file();
-                                    }
-                                }
-                            }
-                        }
-
-                        main_view.refresh_main(&config);
-                        dirty = true;
-                        continue;
                     }
                 }
 

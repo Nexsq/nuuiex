@@ -40,6 +40,11 @@ pub struct Editor {
     pub scroll_x: usize,
     pub scroll_y: usize,
     pub file_path: Option<PathBuf>,
+    pub last_file_path: Option<PathBuf>,
+    pub saved_state: Option<EditorState>,
+    pub saved_scroll_x: usize,
+    pub saved_scroll_y: usize,
+    pub saved_folded_lines: HashSet<usize>,
     pub rel_path: String,
     pub clipboard: Option<Clipboard>,
 
@@ -48,6 +53,7 @@ pub struct Editor {
     pub undo_stack: Vec<(EditorState, HashSet<usize>, EditAction)>,
     pub redo_stack: Vec<(EditorState, HashSet<usize>, EditAction)>,
     pub last_edit_pos: Option<(usize, usize)>,
+    pub last_edited_path: Option<PathBuf>,
 
     pub last_key_select_all: bool,
     pub last_key_file_bounds: bool,
@@ -90,12 +96,18 @@ impl Editor {
             scroll_x: 0,
             scroll_y: 0,
             file_path: None,
+            last_file_path: None,
+            saved_state: None,
+            saved_scroll_x: 0,
+            saved_scroll_y: 0,
+            saved_folded_lines: HashSet::new(),
             rel_path: String::new(),
             clipboard: Clipboard::new().ok(),
             folded_lines: HashSet::new(),
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             last_edit_pos: None,
+            last_edited_path: None,
             last_key_select_all: false,
             last_key_file_bounds: false,
             last_key_delete: false,
@@ -111,6 +123,8 @@ impl Editor {
     }
 
     pub fn load_file(&mut self, path: PathBuf, edit: bool, rel_path: String) {
+        let is_last_edited = self.last_edited_path.as_deref() == Some(path.as_path());
+
         match fs::read_to_string(&path) {
             Ok(content) => {
                 let lines: Vec<String> = if content.is_empty() {
@@ -121,16 +135,47 @@ impl Editor {
                         .map(|s| s.strip_suffix('\r').unwrap_or(s).to_string())
                         .collect()
                 };
-                self.state = EditorState {
-                    lines,
-                    cursor_x: 0,
-                    cursor_y: 0,
-                    selection_start: None,
-                };
-                self.file_path = Some(path);
+
+                if is_last_edited {
+                    if let Some(mut restored) = self.saved_state.take() {
+                        restored.lines = lines;
+                        self.state = restored;
+                        self.scroll_x = self.saved_scroll_x;
+                        self.scroll_y = self.saved_scroll_y;
+                        self.folded_lines = self.saved_folded_lines.clone();
+                    } else {
+                        self.state.lines = lines;
+                    }
+                } else {
+                    self.state = EditorState {
+                        lines,
+                        cursor_x: 0,
+                        cursor_y: 0,
+                        selection_start: None,
+                    };
+                    self.scroll_x = 0;
+                    self.scroll_y = 0;
+                    self.folded_lines.clear();
+                }
+
+                self.file_path = Some(path.clone());
+                self.last_file_path = Some(path.clone());
                 self.rel_path = rel_path;
                 self.is_editing = edit;
                 self.is_output = false;
+
+                if edit {
+                    if self.last_edited_path.as_deref() != Some(path.as_path()) {
+                        self.undo_stack.clear();
+                        self.redo_stack.clear();
+                        self.last_edit_pos = None;
+                        self.search_query.clear();
+                        self.last_search.clear();
+                        self.saved_state = None;
+                        self.saved_folded_lines.clear();
+                        self.last_edited_path = Some(path.clone());
+                    }
+                }
             }
             Err(e) => {
                 self.state = EditorState {
@@ -140,24 +185,29 @@ impl Editor {
                     selection_start: None,
                 };
                 self.file_path = None;
+                self.last_file_path = None;
                 self.rel_path.clear();
                 self.is_editing = false;
+                self.is_output = false;
+                self.folded_lines.clear();
+
+                if edit {
+                    self.undo_stack.clear();
+                    self.redo_stack.clear();
+                    self.last_edit_pos = None;
+                    self.search_query.clear();
+                    self.last_search.clear();
+                    self.saved_state = None;
+                    self.saved_folded_lines.clear();
+                    self.last_edited_path = None;
+                }
             }
         }
-        self.scroll_x = 0;
-        self.scroll_y = 0;
         self.mode = Mode::Command;
         self.visual_mode = false;
-        self.folded_lines.clear();
-        self.undo_stack.clear();
-        self.redo_stack.clear();
-        self.last_edit_pos = None;
-        self.search_query.clear();
-        self.last_search.clear();
+        self.clamp_cursor();
         self.reset_keys();
-        if self.is_editing {
-            self.refresh_analysis(true);
-        }
+        self.refresh_analysis(self.is_editing);
     }
 
     pub fn reload_file(&mut self) {
@@ -174,9 +224,7 @@ impl Editor {
                 self.state.lines = lines;
                 self.folded_lines.clear();
                 self.clamp_cursor();
-                if self.is_editing {
-                    self.refresh_analysis(true);
-                }
+                self.refresh_analysis(self.is_editing);
             }
         }
     }

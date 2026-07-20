@@ -223,12 +223,17 @@ impl MainView {
         for i in 0..6 {
             if self.editors[i].file_path.as_deref() == Some(path)
                 || self.running_macros[i].as_deref() == Some(path)
+                || self.editors[i].last_edited_path.as_deref() == Some(path)
             {
                 if let Some(token) = self.cancellation_tokens[i].take() {
                     token.store(true, Ordering::SeqCst);
                 }
                 self.macro_focus_tokens[i] = None;
                 self.editors[i].file_path = None;
+                self.editors[i].last_file_path = None;
+                self.editors[i].saved_state = None;
+                self.editors[i].saved_folded_lines.clear();
+                self.editors[i].last_edited_path = None;
                 self.running_macros[i] = None;
                 self.editors[i].process_rx = None;
                 self.editors[i].is_output = false;
@@ -237,14 +242,22 @@ impl MainView {
                 self.editors[i].error_count = 0;
                 self.editors[i].error_lines.clear();
                 self.editors[i].defined_functions.clear();
+
                 self.editors[i].search_query.clear();
                 self.editors[i].last_search.clear();
+                self.editors[i].undo_stack.clear();
+                self.editors[i].redo_stack.clear();
+                self.editors[i].last_edit_pos = None;
             }
         }
     }
 
     pub fn auto_load(&mut self) {
         if self.running_macros[self.current_tab].is_some() {
+            return;
+        }
+
+        if self.editors[self.current_tab].is_output && self.active == ActivePanel::Main {
             return;
         }
 
@@ -272,33 +285,57 @@ impl MainView {
         let should_edit = self.active == ActivePanel::Main;
         let editor = &mut self.editors[self.current_tab];
 
+        let changing_view = match &to_load {
+            Some((path, _)) => editor.file_path.as_deref() != Some(path.as_path()),
+            _ => editor.file_path.is_some(),
+        };
+
+        if changing_view {
+            if let (Some(fp), Some(lep)) = (&editor.file_path, &editor.last_edited_path) {
+                if fp == lep {
+                    editor.saved_state = Some(editor.state.clone());
+                    editor.saved_scroll_x = editor.scroll_x;
+                    editor.saved_scroll_y = editor.scroll_y;
+                    editor.saved_folded_lines = editor.folded_lines.clone();
+                }
+            }
+        }
+
         if let Some((path, rp)) = to_load {
-            if editor.file_path.as_deref() != Some(path.as_path()) {
+            if changing_view {
                 editor.load_file(path, should_edit, rp);
             } else if should_edit && !editor.is_editing {
                 editor.is_editing = true;
+                if editor.last_edited_path.as_deref() != Some(path.as_path()) {
+                    editor.undo_stack.clear();
+                    editor.redo_stack.clear();
+                    editor.last_edit_pos = None;
+                    editor.search_query.clear();
+                    editor.last_search.clear();
+                    editor.saved_state = None;
+                    editor.saved_folded_lines.clear();
+                    editor.last_edited_path = Some(path.clone());
+                }
+
                 editor.refresh_analysis(true);
             }
         } else if is_folder {
-            editor.file_path = None;
-            editor.rel_path.clear();
-            editor.state.lines = vec![String::new()];
-            editor.folded_lines.clear();
-            editor.is_editing = false;
-            editor.error_count = 0;
-            editor.error_lines.clear();
-            editor.defined_functions.clear();
+            if changing_view {
+                editor.file_path = None;
+                editor.rel_path.clear();
+                editor.state.lines = vec![String::new()];
+                editor.folded_lines.clear();
+                editor.is_editing = false;
+                editor.error_count = 0;
+                editor.error_lines.clear();
+                editor.defined_functions.clear();
 
-            editor.scroll_x = 0;
-            editor.scroll_y = 0;
-            editor.state.cursor_x = 0;
-            editor.state.cursor_y = 0;
-            editor.state.selection_start = None;
-
-            editor.search_query.clear();
-            editor.last_search.clear();
-            editor.undo_stack.clear();
-            editor.redo_stack.clear();
+                editor.scroll_x = 0;
+                editor.scroll_y = 0;
+                editor.state.cursor_x = 0;
+                editor.state.cursor_y = 0;
+                editor.state.selection_start = None;
+            }
         }
     }
 
@@ -686,18 +723,43 @@ impl MainView {
                     );
                 });
 
-                self.editors[self.current_tab].process_rx = Some(rx);
-                self.editors[self.current_tab].process_input_tx = Some(input_tx);
-                self.editors[self.current_tab].state.lines = vec![String::new()];
+                let editor = &mut self.editors[self.current_tab];
+                if !editor.is_output {
+                    if editor.file_path.is_some() && editor.file_path == editor.last_edited_path {
+                        editor.saved_state = Some(editor.state.clone());
+                        editor.saved_scroll_x = editor.scroll_x;
+                        editor.saved_scroll_y = editor.scroll_y;
+                        editor.saved_folded_lines = editor.folded_lines.clone();
+                    }
+                    if editor.file_path.is_some() {
+                        editor.last_file_path = editor.file_path.clone();
+                    }
+                }
+
+                editor.process_rx = Some(rx);
+                editor.process_input_tx = Some(input_tx);
+                editor.state.lines = vec![String::new()];
                 self.cancellation_tokens[self.current_tab] = Some(cancel_token);
                 self.macro_focus_tokens[self.current_tab] = Some(focus_token);
             } else {
-                self.editors[self.current_tab].state.lines =
-                    vec![format!("Failed to read script '{}'", name)];
+                let editor = &mut self.editors[self.current_tab];
+                if !editor.is_output {
+                    if editor.file_path.is_some() && editor.file_path == editor.last_edited_path {
+                        editor.saved_state = Some(editor.state.clone());
+                        editor.saved_scroll_x = editor.scroll_x;
+                        editor.saved_scroll_y = editor.scroll_y;
+                        editor.saved_folded_lines = editor.folded_lines.clone();
+                    }
+                    if editor.file_path.is_some() {
+                        editor.last_file_path = editor.file_path.clone();
+                    }
+                }
+                editor.state.lines = vec![format!("Failed to read script '{}'", name)];
             }
 
-            self.editors[self.current_tab].scroll_x = 0;
-            self.editors[self.current_tab].scroll_y = 0;
+            let editor = &mut self.editors[self.current_tab];
+            editor.scroll_x = 0;
+            editor.scroll_y = 0;
             self.editors[self.current_tab].state.cursor_x = 0;
             self.editors[self.current_tab].state.cursor_y = 0;
             self.editors[self.current_tab].state.selection_start = None;
