@@ -1,6 +1,6 @@
 [package]
 name = "nuui"
-version = "0.16.2"
+version = "1.0.0"
 edition = "2024"
 
 [features]
