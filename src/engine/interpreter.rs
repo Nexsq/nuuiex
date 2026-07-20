@@ -1764,7 +1764,7 @@ impl Interpreter {
         }
     }
 
-    fn send_output(&mut self, is_finished: bool) {
+    fn send_output(&mut self) {
         let mut out_lock = self.output.lock().unwrap();
         let err_lock = self.errors.lock().unwrap();
 
@@ -1781,19 +1781,12 @@ impl Interpreter {
         let mut res = out_lock.clone();
 
         if !err_lock.is_empty() {
-            if !res.is_empty() && !res.last().unwrap().is_empty() {
-                res.push("".to_string());
+            if res.last().map(|s| s.is_empty()).unwrap_or(false) {
+                res.pop();
             }
+
             res.push("Runtime Errors:".to_string());
             res.extend(err_lock.clone());
-        }
-
-        if res.is_empty() {
-            if is_finished {
-                res.push("Finished with no output.".to_string());
-            } else {
-                res.push(String::new());
-            }
         }
 
         let send_res = res.clone();
@@ -1815,7 +1808,7 @@ impl Interpreter {
 
     pub fn exec(&mut self, stmts: &[Stmt]) {
         let _ = self.exec_block(stmts);
-        self.send_output(true);
+        self.send_output();
     }
 
     fn exec_block(&mut self, stmts: &[Stmt]) -> Result<Signal, String> {
@@ -2510,7 +2503,7 @@ impl Interpreter {
                     };
 
                     let _ = async_interp.exec_block(&body_clone);
-                    async_interp.send_output(false);
+                    async_interp.send_output();
                 });
 
                 Ok(Signal::Empty)
@@ -2953,7 +2946,7 @@ impl Interpreter {
                         }
                         drop(out);
 
-                        self.send_output(false);
+                        self.send_output();
                         return Ok(Value::Nil);
                     }
                     "sleep" => {
@@ -2971,14 +2964,24 @@ impl Interpreter {
                                 ));
                             }
 
-                            let target = std::time::Instant::now()
-                                + std::time::Duration::from_millis(ms as u64);
-                            while std::time::Instant::now() < target {
+                            let dur = std::time::Duration::from_secs_f64(ms / 1000.0);
+                            let target = std::time::Instant::now() + dur;
+
+                            loop {
                                 if self.cancel_token.load(Ordering::Relaxed) {
                                     self.should_exit = true;
                                     return Ok(Value::Nil);
                                 }
-                                std::thread::sleep(std::time::Duration::from_millis(10));
+
+                                let now = std::time::Instant::now();
+                                if now >= target {
+                                    break;
+                                }
+
+                                let remaining = target - now;
+                                let sleep_step =
+                                    std::cmp::min(remaining, std::time::Duration::from_millis(10));
+                                std::thread::sleep(sleep_step);
                             }
                             return Ok(Value::Nil);
                         } else {
@@ -3086,7 +3089,7 @@ impl Interpreter {
                             }
                             drop(out);
                         }
-                        self.send_output(false);
+                        self.send_output();
 
                         if self.tx.send(crate::EngineMessage::InputRequest).is_err() {
                             self.should_exit = true;
@@ -3446,7 +3449,7 @@ impl Interpreter {
                         self.caret_x = 0;
                         self.caret_y = 0;
                         if do_send {
-                            self.send_output(false);
+                            self.send_output();
                         }
                         return Ok(Value::Nil);
                     }
@@ -3469,7 +3472,7 @@ impl Interpreter {
                         };
                         self.caret_x = x;
                         self.caret_y = y;
-                        self.send_output(false);
+                        self.send_output();
                         return Ok(Value::Nil);
                     }
                     "scroll" => {
