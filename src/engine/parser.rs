@@ -552,10 +552,11 @@ impl Parser {
                     return None;
                 }
             } else if !self.in_dict_key
-                && self.check(&TokenKind::Colon)
+                && (self.check(&TokenKind::DoubleColon) || self.check(&TokenKind::Colon))
                 && (matches!(self.peek_next_kind(), Some(TokenKind::Ident(_)))
                     || matches!(self.peek_next_kind(), Some(TokenKind::Number(_))))
             {
+                let is_double = self.check(&TokenKind::DoubleColon);
                 let line = self.advance().line;
                 let method = match self.peek().kind.clone() {
                     TokenKind::Ident(m) => m,
@@ -571,6 +572,17 @@ impl Parser {
                 self.advance();
 
                 if self.check(&TokenKind::LParen) {
+                    if !is_double {
+                        let is_enum = if let Expr::Ident(ref name, _) = expr {
+                            name == "Key" || name == "Color"
+                        } else {
+                            false
+                        };
+                        if !is_enum {
+                            self.error("Use '::' for method calls, not ':'.");
+                            return None;
+                        }
+                    }
                     self.advance();
                     let mut args = Vec::new();
 
@@ -607,6 +619,10 @@ impl Parser {
                         return None;
                     }
                 } else {
+                    if is_double {
+                        self.error("Expected '(' after method name.");
+                        return None;
+                    }
                     expr = Expr::StaticAccess(Box::new(expr), method, line);
                 }
             } else {

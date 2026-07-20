@@ -2340,9 +2340,25 @@ impl Interpreter {
                     line, method
                 )),
             }
+        } else if let Value::EnumVariant(enum_name, variant, _) = val {
+            if enum_name == "Color" && method == "tostring" {
+                if args.len() != 0 {
+                    return Err(format!("Line {}: 'tostring' expects 0 arguments", line));
+                }
+                let mut s = variant.clone();
+                if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) {
+                    s = s.to_lowercase();
+                }
+                return Ok(Value::String(s));
+            } else {
+                return Err(format!(
+                    "Line {}: Undefined method '{}' for enum variant",
+                    line, method
+                ));
+            }
         } else {
             Err(format!(
-                "Line {}: Methods can only be called on lists, dicts, strings, and numbers",
+                "Line {}: Methods can only be called on lists, dicts, strings, numbers, and enums",
                 line
             ))
         }
