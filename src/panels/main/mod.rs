@@ -38,6 +38,7 @@ pub struct MainView {
     pub editors: [Editor; 6],
     pub running_macros: [Option<PathBuf>; 6],
     pub cancellation_tokens: [Option<Arc<AtomicBool>>; 6],
+    pub macro_focus_tokens: [Option<Arc<AtomicBool>>; 6],
     pub main_box: Box,
     pub main_x: i16,
     pub main_y: i16,
@@ -94,6 +95,7 @@ impl MainView {
         let editors = std::array::from_fn(|_| Editor::new());
         let running_macros = std::array::from_fn(|_| None);
         let cancellation_tokens = std::array::from_fn(|_| None);
+        let macro_focus_tokens = std::array::from_fn(|_| None);
 
         let mut view = Self {
             term_w,
@@ -110,6 +112,7 @@ impl MainView {
             editors,
             running_macros,
             cancellation_tokens,
+            macro_focus_tokens,
             main_box: dummy(),
             main_x: 0,
             main_y: 0,
@@ -224,6 +227,7 @@ impl MainView {
                 if let Some(token) = self.cancellation_tokens[i].take() {
                     token.store(true, Ordering::SeqCst);
                 }
+                self.macro_focus_tokens[i] = None;
                 self.editors[i].file_path = None;
                 self.running_macros[i] = None;
                 self.editors[i].process_rx = None;
@@ -654,15 +658,24 @@ impl MainView {
                 let (input_tx, input_rx) = std::sync::mpsc::channel();
 
                 let cancel_token = Arc::new(AtomicBool::new(false));
+                let focus_token = Arc::new(AtomicBool::new(true));
                 let thread_cancel_token = Arc::clone(&cancel_token);
+                let thread_focus_token = Arc::clone(&focus_token);
                 std::thread::spawn(move || {
-                    crate::engine::core::run_in_thread(&source, tx, input_rx, thread_cancel_token);
+                    crate::engine::core::run_in_thread(
+                        &source,
+                        tx,
+                        input_rx,
+                        thread_cancel_token,
+                        thread_focus_token,
+                    );
                 });
 
                 self.editors[self.current_tab].process_rx = Some(rx);
                 self.editors[self.current_tab].process_input_tx = Some(input_tx);
                 self.editors[self.current_tab].state.lines = vec![String::new()];
                 self.cancellation_tokens[self.current_tab] = Some(cancel_token);
+                self.macro_focus_tokens[self.current_tab] = Some(focus_token);
             } else {
                 self.editors[self.current_tab].state.lines =
                     vec![format!("Failed to read script '{}'", name)];
@@ -686,6 +699,18 @@ impl MainView {
             self.refresh_main(config);
             self.refresh_list(config);
             self.refresh_static_boxes(config);
+        }
+    }
+
+    pub fn update_macro_focus(&self, global_focus: bool) {
+        for i in 0..6 {
+            if let Some(token) = &self.macro_focus_tokens[i] {
+                let is_focused = global_focus
+                    && self.active == ActivePanel::Main
+                    && self.current_tab == i
+                    && self.list_input == ListInputMode::None;
+                token.store(is_focused, Ordering::Relaxed);
+            }
         }
     }
 
@@ -752,6 +777,7 @@ pub fn handle_list_input(
                     };
 
                     if new_path.exists() && new_path != old_path {
+                        view.update_macro_focus(false);
                         crate::error::warning_box(
                             terminal,
                             canvas,
@@ -765,6 +791,7 @@ pub fn handle_list_input(
                             view.theme.warning_color.clone(),
                             |cvs, w, h, k| view.draw_background(cvs, w, h, k, config),
                         );
+                        view.update_macro_focus(true);
                         return Ok(true);
                     }
 
@@ -851,6 +878,7 @@ pub fn handle_list_input(
                 };
 
                 if target_path.exists() {
+                    view.update_macro_focus(false);
                     crate::error::warning_box(
                         terminal,
                         canvas,
@@ -864,6 +892,7 @@ pub fn handle_list_input(
                         view.theme.warning_color.clone(),
                         |cvs, w, h, k| view.draw_background(cvs, w, h, k, config),
                     );
+                    view.update_macro_focus(true);
                     return Ok(true);
                 }
 
@@ -1011,6 +1040,7 @@ pub fn handle_list_action(
                     format!("Delete file '{}'?", node.name())
                 };
 
+                view.update_macro_focus(false);
                 let res = crate::error::warning_box(
                     terminal,
                     canvas,
@@ -1024,6 +1054,7 @@ pub fn handle_list_action(
                     view.theme.warning_color.clone(),
                     |cvs, w, h, k| view.draw_background(cvs, w, h, k, config),
                 );
+                view.update_macro_focus(true);
 
                 if res == crate::PanelResult::Ok(1) {
                     if is_folder {
@@ -1058,6 +1089,7 @@ pub fn handle_list_action(
                     .unwrap_or(true);
                 if !is_empty {
                     let msg = format!("Delete folder '{}' and all contents?", node.name());
+                    view.update_macro_focus(false);
                     let res = crate::error::warning_box(
                         terminal,
                         canvas,
@@ -1071,12 +1103,14 @@ pub fn handle_list_action(
                         view.theme.warning_color.clone(),
                         |cvs, w, h, k| view.draw_background(cvs, w, h, k, config),
                     );
+                    view.update_macro_focus(true);
                     confirm = res == crate::PanelResult::Ok(1);
                 }
             } else {
                 let content = std::fs::read_to_string(&path).unwrap_or_default();
                 if !content.trim().is_empty() {
                     let msg = format!("Delete file '{}'?", node.name());
+                    view.update_macro_focus(false);
                     let res = crate::error::warning_box(
                         terminal,
                         canvas,
@@ -1090,6 +1124,7 @@ pub fn handle_list_action(
                         view.theme.warning_color.clone(),
                         |cvs, w, h, k| view.draw_background(cvs, w, h, k, config),
                     );
+                    view.update_macro_focus(true);
                     confirm = res == crate::PanelResult::Ok(1);
                 }
             }

@@ -155,6 +155,7 @@ fn main() {
                     main_view.editors[i].process_input_tx = None;
                     main_view.editors[i].is_waiting_for_input = false;
                     main_view.running_macros[i] = None;
+                    main_view.macro_focus_tokens[i] = None;
                     tabs_updated[i] = true;
                 }
             }
@@ -176,14 +177,17 @@ fn main() {
 
         if dirty {
             if term_w < main_view.min_w || term_h < main_view.min_h {
-                if !toosmall::run(
+                main_view.update_macro_focus(false);
+                let small_res = toosmall::run(
                     &terminal,
                     &mut canvas,
                     main_view.min_w,
                     main_view.min_h,
                     config.get_border(),
                     main_view.theme.warning_color.clone(),
-                ) {
+                );
+                main_view.update_macro_focus(true);
+                if !small_res {
                     break;
                 }
                 dirty = true;
@@ -197,6 +201,8 @@ fn main() {
         }
 
         let key = terminal.read_key(Duration::from_millis(16));
+
+        main_view.update_macro_focus(true);
 
         let mut anim_dirty = false;
         if config.deck_mode == "widget" {
@@ -347,6 +353,7 @@ fn main() {
                         }
                         Ok(false) => {}
                         Err(e) => {
+                            main_view.update_macro_focus(false);
                             error::error_box(
                                 &terminal,
                                 &mut canvas,
@@ -389,6 +396,7 @@ fn main() {
                         }
                         Ok(false) => {}
                         Err(e) => {
+                            main_view.update_macro_focus(false);
                             error::error_box(
                                 &terminal,
                                 &mut canvas,
@@ -411,12 +419,14 @@ fn main() {
                     Key::Tab => main_view.toggle_focus(&config),
 
                     Key::Esc => {
+                        main_view.update_macro_focus(false);
                         let should_quit = settings::settings_modal(
                             &terminal,
                             &mut canvas,
                             &mut config,
                             &mut main_view,
                         );
+                        main_view.update_macro_focus(true);
 
                         if let Ok(l) = lib::init(&config.lib_sorting) {
                             main_view.library_tree = l.tree;

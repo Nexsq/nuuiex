@@ -112,11 +112,13 @@ impl Terminal {
                     }
                     return match seq.as_slice() {
                         b"I" => {
-                            crate::render::terminal::HAS_FOCUS.store(true, std::sync::atomic::Ordering::Relaxed);
+                            crate::render::terminal::HAS_FOCUS
+                                .store(true, std::sync::atomic::Ordering::Relaxed);
                             Key::None
                         }
                         b"O" => {
-                            crate::render::terminal::HAS_FOCUS.store(false, std::sync::atomic::Ordering::Relaxed);
+                            crate::render::terminal::HAS_FOCUS
+                                .store(false, std::sync::atomic::Ordering::Relaxed);
                             Key::None
                         }
                         b"A" => Key::Up,

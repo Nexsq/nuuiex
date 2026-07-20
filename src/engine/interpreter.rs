@@ -609,7 +609,7 @@ fn parse_linux_key(key: &str) -> Result<LinuxKeyInfo, String> {
 #[cfg(target_os = "linux")]
 fn check_x11_key_down(key_str: &str) -> Option<bool> {
     let info = parse_linux_key(key_str).ok()?;
-    
+
     use libc::{RTLD_LAZY, c_void, dlclose, dlopen, dlsym};
 
     unsafe {
@@ -628,7 +628,8 @@ fn check_x11_key_down(key_str: &str) -> Option<bool> {
         }
 
         let xopendisplay: extern "C" fn(*const i8) -> *mut c_void = std::mem::transmute(xopen_sym);
-        let xquerykeymap: extern "C" fn(*mut c_void, *mut u8) -> i32 = std::mem::transmute(xquery_sym);
+        let xquerykeymap: extern "C" fn(*mut c_void, *mut u8) -> i32 =
+            std::mem::transmute(xquery_sym);
         let xclosedisplay: extern "C" fn(*mut c_void) -> i32 = std::mem::transmute(xclose_sym);
 
         let display = xopendisplay(std::ptr::null());
@@ -1448,6 +1449,7 @@ pub struct Interpreter {
     pub should_exit: bool,
     pub env: Environment,
     cancel_token: Arc<AtomicBool>,
+    focus_token: Arc<AtomicBool>,
 }
 
 #[derive(PartialEq)]
@@ -1462,6 +1464,7 @@ impl Interpreter {
         tx: SyncSender<crate::EngineMessage>,
         input_rx: Receiver<String>,
         cancel_token: Arc<AtomicBool>,
+        focus_token: Arc<AtomicBool>,
     ) -> Self {
         Self {
             output: Arc::new(std::sync::Mutex::new(Vec::new())),
@@ -1472,6 +1475,7 @@ impl Interpreter {
             should_exit: false,
             env: Environment::new(),
             cancel_token,
+            focus_token,
         }
     }
 
@@ -2162,6 +2166,7 @@ impl Interpreter {
 
                 let tx_clone = self.tx.clone();
                 let cancel_token_clone = Arc::clone(&self.cancel_token);
+                let focus_token_clone = Arc::clone(&self.focus_token);
                 let body_clone = body.clone();
 
                 let output_clone = Arc::clone(&self.output);
@@ -2179,6 +2184,7 @@ impl Interpreter {
                         should_exit: false,
                         env: async_env,
                         cancel_token: cancel_token_clone,
+                        focus_token: focus_token_clone,
                     };
 
                     let _ = async_interp.exec_block(&body_clone);
@@ -2906,7 +2912,14 @@ impl Interpreter {
                             Err(e) => return Err(format!("Line {}: {}", line, e)),
                         };
 
-                        let is_down = if name.ends_with("focus") {
+                        let is_focus_cmd = name.ends_with("focus");
+                        let has_macro_focus = self.focus_token.load(Ordering::Relaxed);
+
+                        if is_focus_cmd && !has_macro_focus {
+                            return Ok(Value::Bool(false));
+                        }
+
+                        let is_down = if is_focus_cmd {
                             match check_key_down_focus(&key_str) {
                                 Ok(b) => b,
                                 Err(e) => return Err(format!("Line {}: {}", line, e)),

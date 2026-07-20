@@ -96,6 +96,7 @@ pub fn run_in_thread(
     tx: SyncSender<EngineMessage>,
     input_rx: Receiver<String>,
     cancel_token: Arc<AtomicBool>,
+    focus_token: Arc<AtomicBool>,
 ) {
     let mut lexer = lexer::Lexer::new(source);
     let tokens = lexer.tokenize();
@@ -120,6 +121,6 @@ pub fn run_in_thread(
         return;
     }
 
-    let mut interpreter = interpreter::Interpreter::new(tx, input_rx, cancel_token);
+    let mut interpreter = interpreter::Interpreter::new(tx, input_rx, cancel_token, focus_token);
     interpreter.exec(&ast);
 }
