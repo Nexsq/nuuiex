@@ -2856,7 +2856,6 @@ impl Interpreter {
                             "Italic",
                             "Underline",
                             "Reverse",
-                            "Hidden",
                             "Strikethrough",
                         ];
                         if !valid_variants.contains(&prop.as_str()) {
@@ -3001,7 +3000,6 @@ impl Interpreter {
                             "Italic",
                             "Underline",
                             "Reverse",
-                            "Hidden",
                             "Strikethrough",
                         ];
                         if !valid_variants.contains(&method.as_str()) {

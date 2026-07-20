@@ -1781,7 +1781,6 @@ impl Editor {
                                     "Italic" => Some(Modifier::Italic),
                                     "Underline" => Some(Modifier::Underline),
                                     "Reverse" => Some(Modifier::Reverse),
-                                    "Hidden" => Some(Modifier::Hidden),
                                     "Strikethrough" => Some(Modifier::Strikethrough),
                                     _ => None,
                                 };
@@ -1939,7 +1938,6 @@ impl Editor {
                                         let possible_mod: String =
                                             line_chars[p..p + 9].iter().collect();
                                         if possible_mod == "Modifier:" {
-                                            let mod_word_start = p;
                                             let var_start = p + 9;
                                             let mut var_end = var_start;
                                             while var_end < interp_end
@@ -1957,14 +1955,25 @@ impl Editor {
                                                 "Italic" => Some(Modifier::Italic),
                                                 "Underline" => Some(Modifier::Underline),
                                                 "Reverse" => Some(Modifier::Reverse),
-                                                "Hidden" => Some(Modifier::Hidden),
                                                 "Strikethrough" => Some(Modifier::Strikethrough),
                                                 _ => None,
                                             };
                                             if let Some(m) = custom_mod {
-                                                for _ in mod_word_start..var_end {
+                                                for k in p..(p + 8) {
                                                     syntax_colors.push(
-                                                        theme.editor_variables.color_at(0, 1),
+                                                        theme.editor_keywords.color_at(k - p, 8),
+                                                    );
+                                                    syntax_modifiers.push(m);
+                                                }
+                                                syntax_colors
+                                                    .push(theme.editor_operators.color_at(0, 1));
+                                                syntax_modifiers.push(m);
+                                                for k in var_start..var_end {
+                                                    syntax_colors.push(
+                                                        theme.editor_keywords.color_at(
+                                                            k - var_start,
+                                                            var_end - var_start,
+                                                        ),
                                                     );
                                                     syntax_modifiers.push(m);
                                                 }
@@ -2131,14 +2140,28 @@ impl Editor {
                                             "Italic" => Some(Modifier::Italic),
                                             "Underline" => Some(Modifier::Underline),
                                             "Reverse" => Some(Modifier::Reverse),
-                                            "Hidden" => Some(Modifier::Hidden),
                                             "Strikethrough" => Some(Modifier::Strikethrough),
                                             _ => None,
                                         };
                                         if let Some(m) = custom_mod {
-                                            for _ in start..temp_idx {
+                                            for k in start..idx {
+                                                syntax_colors.push(
+                                                    theme
+                                                        .editor_keywords
+                                                        .color_at(k - start, idx - start),
+                                                );
+                                                syntax_modifiers.push(m);
+                                            }
+                                            for _ in idx..variant_start {
                                                 syntax_colors
-                                                    .push(theme.editor_variables.color_at(0, 1));
+                                                    .push(theme.editor_operators.color_at(0, 1));
+                                                syntax_modifiers.push(m);
+                                            }
+                                            for k in variant_start..temp_idx {
+                                                syntax_colors.push(theme.editor_keywords.color_at(
+                                                    k - variant_start,
+                                                    temp_idx - variant_start,
+                                                ));
                                                 syntax_modifiers.push(m);
                                             }
                                             idx = temp_idx;

@@ -81,7 +81,6 @@ pub enum Modifier {
     Italic,
     Underline,
     Reverse,
-    Hidden,
     Strikethrough,
 }
 
@@ -241,7 +240,6 @@ impl Modifier {
             Modifier::Italic => "\x1b[3m",
             Modifier::Underline => "\x1b[4m",
             Modifier::Reverse => "\x1b[7m",
-            Modifier::Hidden => "\x1b[8m",
             Modifier::Strikethrough => "\x1b[9m",
         }
     }
