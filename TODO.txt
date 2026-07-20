@@ -1,1 +1,3 @@
-add function to move the print cursor
+Add macro data
+
+Add screen analyzing functions

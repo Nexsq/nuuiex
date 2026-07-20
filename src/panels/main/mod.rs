@@ -237,6 +237,8 @@ impl MainView {
                 self.editors[i].error_count = 0;
                 self.editors[i].error_lines.clear();
                 self.editors[i].defined_functions.clear();
+                self.editors[i].search_query.clear();
+                self.editors[i].last_search.clear();
             }
         }
     }
@@ -292,6 +294,11 @@ impl MainView {
             editor.state.cursor_x = 0;
             editor.state.cursor_y = 0;
             editor.state.selection_start = None;
+
+            editor.search_query.clear();
+            editor.last_search.clear();
+            editor.undo_stack.clear();
+            editor.redo_stack.clear();
         }
     }
 

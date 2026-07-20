@@ -152,6 +152,8 @@ impl Editor {
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.last_edit_pos = None;
+        self.search_query.clear();
+        self.last_search.clear();
         self.reset_keys();
         if self.is_editing {
             self.refresh_analysis(true);
