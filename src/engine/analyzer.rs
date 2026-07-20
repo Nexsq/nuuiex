@@ -348,6 +348,18 @@ impl Analyzer {
                     if args.len() < 2 || args.len() > 3 {
                         self.error(*line, format!("'{}' expects 2 or 3 arguments", name));
                     }
+                } else if name == "setcaret" {
+                    if args.len() != 2 {
+                        self.error(*line, format!("'{}' expects exactly 2 arguments", name));
+                    }
+                } else if name == "scroll" {
+                    if args.len() != 1 {
+                        self.error(*line, format!("'{}' expects exactly 1 argument", name));
+                    }
+                } else if name == "clear" {
+                    if args.len() > 1 {
+                        self.error(*line, format!("'{}' expects 0 or 1 argument", name));
+                    }
                 }
                 for (_, arg) in args {
                     self.analyze_expr(arg);

@@ -13,6 +13,7 @@ pub struct Config {
     pub lib_width: usize,
     pub deck_mode: String,
     pub deck_widget: String,
+    pub show_caret: bool,
 
     pub monitor_cpu: String,
     pub monitor_gpu: String,
@@ -80,6 +81,7 @@ impl Default for Config {
             lib_width: 24,
             deck_mode: String::new(),
             deck_widget: String::new(),
+            show_caret: false,
 
             monitor_cpu: String::new(),
             monitor_gpu: String::new(),
@@ -174,6 +176,7 @@ impl Config {
                     }
                     "deck_mode" => self.deck_mode = val.to_string(),
                     "deck_widget" => self.deck_widget = val.to_string(),
+                    "show_caret" => self.show_caret = val.parse().unwrap_or(self.show_caret),
 
                     "monitor_cpu" => self.monitor_cpu = val.to_string(),
                     "monitor_gpu" => self.monitor_gpu = val.to_string(),
@@ -426,6 +429,7 @@ impl Config {
         self.theme = default.theme;
         self.tabs_num = default.tabs_num;
         self.lib_width = default.lib_width;
+        self.show_caret = default.show_caret;
     }
 
     pub fn reset_deck(&mut self) {
@@ -551,6 +555,10 @@ impl Config {
                     }
                     "deck_widget" => {
                         writeln!(&mut output, "{} = {}{}", key_str, self.deck_widget, comment)
+                            .unwrap()
+                    }
+                    "show_caret" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.show_caret, comment)
                             .unwrap()
                     }
 

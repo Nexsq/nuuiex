@@ -114,6 +114,14 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     ),
                 },
                 Setting {
+                    name: "Show Caret",
+                    key: "show_caret",
+                    kind: SettingType::Choice(
+                        vec!["true".to_string(), "false".to_string()],
+                        if config.show_caret { 0 } else { 1 },
+                    ),
+                },
+                Setting {
                     name: "Tabs",
                     key: "tabs_num",
                     kind: SettingType::Choice(
@@ -858,6 +866,7 @@ pub fn settings_modal(
                 apply_setting!(config, set, parse_clamp "lib_width", lib_width, 16, 64);
                 apply_setting!(config, set, choice "deck_mode", deck_mode);
                 apply_setting!(config, set, choice "deck_widget", deck_widget);
+                apply_setting!(config, set, bool "show_caret", show_caret);
 
                 apply_setting!(config, set, choice "clock_date", clock_date);
                 apply_setting!(config, set, choice "clock_mode", clock_mode);

@@ -9,7 +9,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{Receiver, SyncSender};
 
 pub enum EngineMessage {
-    Output(Vec<String>),
+    Output(Vec<String>, usize, usize),
     InputRequest,
 }
 
@@ -37,6 +37,8 @@ pub const BUILTIN_FUNCS: &[&str] = &[
     "cursory",
     "setcursor",
     "clear",
+    "setcaret",
+    "scroll",
 ];
 
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {
@@ -107,7 +109,7 @@ pub fn run_in_thread(
     if !parser.errors.is_empty() {
         let mut res = vec!["Syntax Errors:".to_string()];
         res.extend(parser.errors);
-        let _ = tx.send(EngineMessage::Output(res));
+        let _ = tx.send(EngineMessage::Output(res, 0, 0));
         return;
     }
 
@@ -117,7 +119,7 @@ pub fn run_in_thread(
     if !analyzer.errors.is_empty() {
         let mut res = vec!["Analysis Errors:".to_string()];
         res.extend(analyzer.errors);
-        let _ = tx.send(EngineMessage::Output(res));
+        let _ = tx.send(EngineMessage::Output(res, 0, 0));
         return;
     }
 

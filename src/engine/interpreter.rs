@@ -853,6 +853,7 @@ fn get_or_create_uinput() -> Result<i32, String> {
 
             libc::ioctl(fd, 0x40045566, 0);
             libc::ioctl(fd, 0x40045566, 1);
+            libc::ioctl(fd, 0x40045566, 8);
 
             #[repr(C)]
             struct input_id {
@@ -1358,6 +1359,60 @@ fn set_cursor_pos(_x: i32, _y: i32, _relative: bool) -> Result<(), String> {
     Err("Setting cursor position is not supported on this OS".to_string())
 }
 
+#[cfg(windows)]
+fn simulate_scroll(num: i32) -> Result<(), String> {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        INPUT, INPUT_MOUSE, MOUSEEVENTF_WHEEL, SendInput,
+    };
+    unsafe {
+        let mut input: INPUT = std::mem::zeroed();
+        input.r#type = INPUT_MOUSE;
+        input.Anonymous.mi.mouseData = (num * 120) as u32;
+        input.Anonymous.mi.dwFlags = MOUSEEVENTF_WHEEL;
+        SendInput(1, &input, std::mem::size_of::<INPUT>() as i32);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn simulate_scroll(num: i32) -> Result<(), String> {
+    let fd = get_or_create_uinput()?;
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct input_event {
+        time: libc::timeval,
+        type_: u16,
+        code: u16,
+        value: i32,
+    }
+    let mut evs: Vec<input_event> = Vec::with_capacity(2);
+    macro_rules! add_ev {
+        ($type:expr, $code:expr, $val:expr) => {
+            let mut ev: input_event = unsafe { std::mem::zeroed() };
+            ev.type_ = $type;
+            ev.code = $code;
+            ev.value = $val;
+            evs.push(ev);
+        };
+    }
+    add_ev!(2, 8, num);
+    add_ev!(0, 0, 0);
+
+    unsafe {
+        libc::write(
+            fd,
+            evs.as_ptr() as *const libc::c_void,
+            evs.len() * std::mem::size_of::<input_event>(),
+        );
+    }
+    Ok(())
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn simulate_scroll(_num: i32) -> Result<(), String> {
+    Err("Scrolling is not supported on this OS".to_string())
+}
+
 pub struct Environment {
     pub scopes: Vec<std::sync::Arc<std::sync::Mutex<HashMap<String, Value>>>>,
     pub constants: Vec<std::sync::Arc<std::sync::Mutex<HashSet<String>>>>,
@@ -1443,7 +1498,8 @@ impl Environment {
 pub struct Interpreter {
     pub output: Arc<std::sync::Mutex<Vec<String>>>,
     pub errors: Arc<std::sync::Mutex<Vec<String>>>,
-    pub current_line: Arc<std::sync::Mutex<String>>,
+    pub caret_x: usize,
+    pub caret_y: usize,
     tx: SyncSender<crate::EngineMessage>,
     input_rx: Receiver<String>,
     pub should_exit: bool,
@@ -1470,7 +1526,8 @@ impl Interpreter {
         Self {
             output: Arc::new(std::sync::Mutex::new(Vec::new())),
             errors: Arc::new(std::sync::Mutex::new(Vec::new())),
-            current_line: Arc::new(std::sync::Mutex::new(String::new())),
+            caret_x: 0,
+            caret_y: 0,
             tx,
             input_rx,
             should_exit: false,
@@ -1482,19 +1539,19 @@ impl Interpreter {
 
     fn send_output(&mut self, is_finished: bool) {
         let mut out_lock = self.output.lock().unwrap();
-        let cur_lock = self.current_line.lock().unwrap();
         let err_lock = self.errors.lock().unwrap();
 
         if out_lock.len() > 1000 {
             let excess = out_lock.len() - 1000;
             out_lock.drain(0..excess);
+            self.caret_y = self.caret_y.saturating_sub(excess);
+        }
+
+        while out_lock.len() <= self.caret_y {
+            out_lock.push(String::new());
         }
 
         let mut res = out_lock.clone();
-
-        if !cur_lock.is_empty() {
-            res.push(cur_lock.clone());
-        }
 
         if !err_lock.is_empty() {
             if !res.is_empty() && !res.last().unwrap().is_empty() {
@@ -1504,15 +1561,27 @@ impl Interpreter {
             res.extend(err_lock.clone());
         }
 
-        if is_finished && res.is_empty() {
-            res.push("Finished with no output.".to_string());
+        if res.is_empty() {
+            if is_finished {
+                res.push("Finished with no output.".to_string());
+            } else {
+                res.push(String::new());
+            }
         }
 
+        let send_res = res.clone();
         drop(out_lock);
-        drop(cur_lock);
         drop(err_lock);
 
-        if self.tx.send(crate::EngineMessage::Output(res)).is_err() {
+        if self
+            .tx
+            .send(crate::EngineMessage::Output(
+                send_res,
+                self.caret_x,
+                self.caret_y,
+            ))
+            .is_err()
+        {
             self.should_exit = true;
         }
     }
@@ -2179,14 +2248,16 @@ impl Interpreter {
 
                 let output_clone = Arc::clone(&self.output);
                 let errors_clone = Arc::clone(&self.errors);
-                let current_line_clone = Arc::clone(&self.current_line);
+                let caret_x_clone = self.caret_x;
+                let caret_y_clone = self.caret_y;
 
                 std::thread::spawn(move || {
                     let (_, dummy_rx) = std::sync::mpsc::channel();
                     let mut async_interp = Interpreter {
                         output: output_clone,
                         errors: errors_clone,
-                        current_line: current_line_clone,
+                        caret_x: caret_x_clone,
+                        caret_y: caret_y_clone,
                         tx: tx_clone,
                         input_rx: dummy_rx,
                         should_exit: false,
@@ -2604,23 +2675,40 @@ impl Interpreter {
                             combined.push_str(&arg.to_string());
                         }
 
-                        let segments: Vec<&str> = combined.split('\n').collect();
-                        for (i, segment) in segments.iter().enumerate() {
-                            if i == 0 {
-                                self.current_line.lock().unwrap().push_str(segment);
-                            } else {
-                                let mut cur = self.current_line.lock().unwrap();
-                                let prev_line = std::mem::take(&mut *cur);
-                                self.output.lock().unwrap().push(prev_line);
-                                *cur = segment.to_string();
-                            }
+                        if name == "println" {
+                            combined.push('\n');
                         }
 
-                        if name == "println" {
-                            let mut cur = self.current_line.lock().unwrap();
-                            let prev_line = std::mem::take(&mut *cur);
-                            self.output.lock().unwrap().push(prev_line);
+                        let mut out = self.output.lock().unwrap();
+                        for c in combined.chars() {
+                            if c == '\n' {
+                                self.caret_x = 0;
+                                self.caret_y += 1;
+                            } else {
+                                while out.len() <= self.caret_y {
+                                    out.push(String::new());
+                                }
+                                let line = &mut out[self.caret_y];
+                                let char_count = line.chars().count();
+                                if self.caret_x < char_count {
+                                    let byte_idx = line.char_indices().nth(self.caret_x).unwrap().0;
+                                    let next_byte_idx = line
+                                        .char_indices()
+                                        .nth(self.caret_x + 1)
+                                        .map(|x| x.0)
+                                        .unwrap_or(line.len());
+                                    line.replace_range(byte_idx..next_byte_idx, &c.to_string());
+                                } else {
+                                    let spaces = self.caret_x - char_count;
+                                    for _ in 0..spaces {
+                                        line.push(' ');
+                                    }
+                                    line.push(c);
+                                }
+                                self.caret_x += 1;
+                            }
                         }
+                        drop(out);
 
                         self.send_output(false);
                         return Ok(Value::Nil);
@@ -2723,7 +2811,37 @@ impl Interpreter {
                     "input" => {
                         if !eval_args.is_empty() {
                             let prompt = eval_args[0].1.to_string();
-                            self.current_line.lock().unwrap().push_str(&prompt);
+                            let mut out = self.output.lock().unwrap();
+                            for c in prompt.chars() {
+                                if c == '\n' {
+                                    self.caret_x = 0;
+                                    self.caret_y += 1;
+                                } else {
+                                    while out.len() <= self.caret_y {
+                                        out.push(String::new());
+                                    }
+                                    let line = &mut out[self.caret_y];
+                                    let char_count = line.chars().count();
+                                    if self.caret_x < char_count {
+                                        let byte_idx =
+                                            line.char_indices().nth(self.caret_x).unwrap().0;
+                                        let next_byte_idx = line
+                                            .char_indices()
+                                            .nth(self.caret_x + 1)
+                                            .map(|x| x.0)
+                                            .unwrap_or(line.len());
+                                        line.replace_range(byte_idx..next_byte_idx, &c.to_string());
+                                    } else {
+                                        let spaces = self.caret_x - char_count;
+                                        for _ in 0..spaces {
+                                            line.push(' ');
+                                        }
+                                        line.push(c);
+                                    }
+                                    self.caret_x += 1;
+                                }
+                            }
+                            drop(out);
                         }
                         self.send_output(false);
 
@@ -2745,7 +2863,37 @@ impl Interpreter {
                             }
                         };
 
-                        self.current_line.lock().unwrap().push_str(&result);
+                        let mut out = self.output.lock().unwrap();
+                        for c in result.chars() {
+                            if c == '\n' {
+                                self.caret_x = 0;
+                                self.caret_y += 1;
+                            } else {
+                                while out.len() <= self.caret_y {
+                                    out.push(String::new());
+                                }
+                                let line = &mut out[self.caret_y];
+                                let char_count = line.chars().count();
+                                if self.caret_x < char_count {
+                                    let byte_idx = line.char_indices().nth(self.caret_x).unwrap().0;
+                                    let next_byte_idx = line
+                                        .char_indices()
+                                        .nth(self.caret_x + 1)
+                                        .map(|x| x.0)
+                                        .unwrap_or(line.len());
+                                    line.replace_range(byte_idx..next_byte_idx, &c.to_string());
+                                } else {
+                                    let spaces = self.caret_x - char_count;
+                                    for _ in 0..spaces {
+                                        line.push(' ');
+                                    }
+                                    line.push(c);
+                                }
+                                self.caret_x += 1;
+                            }
+                        }
+                        drop(out);
+
                         return Ok(Value::String(result));
                     }
                     "len" => {
@@ -3037,15 +3185,63 @@ impl Interpreter {
                         return Ok(Value::Nil);
                     }
                     "clear" => {
-                        if eval_args.len() != 0 {
+                        if eval_args.len() > 1 {
+                            return Err(format!("Line {}: 'clear' expects 0 or 1 argument", line));
+                        }
+                        let mut do_send = true;
+                        if eval_args.len() == 1 {
+                            if let Value::Bool(b) = eval_args[0].1 {
+                                do_send = b;
+                            } else {
+                                return Err(format!(
+                                    "Line {}: 'clear' argument must be a boolean",
+                                    line
+                                ));
+                            }
+                        }
+                        self.output.lock().unwrap().clear();
+                        self.caret_x = 0;
+                        self.caret_y = 0;
+                        if do_send {
+                            self.send_output(false);
+                        }
+                        return Ok(Value::Nil);
+                    }
+                    "setcaret" => {
+                        if eval_args.len() != 2 {
                             return Err(format!(
-                                "Line {}: 'clear' expects exactly 0 arguments",
+                                "Line {}: 'setcaret' expects exactly 2 arguments",
                                 line
                             ));
                         }
-                        self.output.lock().unwrap().clear();
-                        self.current_line.lock().unwrap().clear();
+                        let x = if let Value::Number(n) = eval_args[0].1 {
+                            n.max(0.0) as usize
+                        } else {
+                            return Err(format!("Line {}: 'setcaret' x must be a number", line));
+                        };
+                        let y = if let Value::Number(n) = eval_args[1].1 {
+                            n.max(0.0) as usize
+                        } else {
+                            return Err(format!("Line {}: 'setcaret' y must be a number", line));
+                        };
+                        self.caret_x = x;
+                        self.caret_y = y;
                         self.send_output(false);
+                        return Ok(Value::Nil);
+                    }
+                    "scroll" => {
+                        if eval_args.len() != 1 {
+                            return Err(format!(
+                                "Line {}: 'scroll' expects exactly 1 argument",
+                                line
+                            ));
+                        }
+                        let num = if let Value::Number(n) = eval_args[0].1 {
+                            n as i32
+                        } else {
+                            return Err(format!("Line {}: 'scroll' num must be a number", line));
+                        };
+                        simulate_scroll(num).map_err(|e| format!("Line {}: {}", line, e))?;
                         return Ok(Value::Nil);
                     }
                     _ => {}

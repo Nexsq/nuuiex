@@ -1598,9 +1598,28 @@ impl Editor {
         let text_inner_w = inner_w.saturating_sub(prefix_width);
 
         let d_lines = self.get_display_lines();
+
+        let mut target_y = self.state.cursor_y;
+        let mut target_x = self.state.cursor_x;
+
+        if self.is_output && !config.show_caret && !self.is_waiting_for_input {
+            if target_y > 0 && target_y == self.state.lines.len().saturating_sub(1) {
+                if self.state.lines[target_y].is_empty() {
+                    target_y -= 1;
+                    target_x = self.state.lines[target_y].chars().count();
+                }
+            }
+            if target_y < self.state.lines.len() {
+                let current_line_len = self.state.lines[target_y].chars().count();
+                if target_x > 0 && target_x >= current_line_len {
+                    target_x = current_line_len.saturating_sub(1);
+                }
+            }
+        }
+
         let cursor_d_idx = d_lines
             .iter()
-            .position(|&x| x == self.state.cursor_y as isize)
+            .position(|&x| x == target_y as isize)
             .unwrap_or(0);
 
         if cursor_d_idx < self.scroll_y {
@@ -1609,10 +1628,10 @@ impl Editor {
             self.scroll_y = cursor_d_idx - text_inner_h + 1;
         }
 
-        if self.state.cursor_x < self.scroll_x {
-            self.scroll_x = self.state.cursor_x;
-        } else if self.state.cursor_x >= self.scroll_x + text_inner_w && text_inner_w > 0 {
-            self.scroll_x = self.state.cursor_x - text_inner_w + 1;
+        if target_x < self.scroll_x {
+            self.scroll_x = target_x;
+        } else if target_x >= self.scroll_x + text_inner_w && text_inner_w > 0 {
+            self.scroll_x = target_x - text_inner_w + 1;
         }
 
         let selection = self.get_selection_bounds();
@@ -1737,21 +1756,30 @@ impl Editor {
                 line_chars.extend(line_str.chars());
             }
 
-            if self.is_output
-                && self.is_waiting_for_input
-                && i == self.state.lines.len().saturating_sub(1)
-            {
+            if self.is_output && self.is_waiting_for_input && i == self.state.cursor_y {
                 let last_color = syntax_colors.last().copied().unwrap_or(Color::White);
-                for c in self.input_buffer.chars() {
-                    line_chars.push(c);
+                let pad_spaces = self.state.cursor_x.saturating_sub(line_chars.len());
+                for _ in 0..pad_spaces {
+                    line_chars.push(' ');
                     syntax_colors.push(last_color);
                 }
-                if self.last_blink_state {
-                    line_chars.push('_');
-                } else {
-                    line_chars.push(' ');
+
+                let insert_idx = self.state.cursor_x;
+
+                let mut input_chars = Vec::new();
+                for c in self.input_buffer.chars() {
+                    input_chars.push(c);
                 }
-                syntax_colors.push(last_color);
+                if self.last_blink_state {
+                    input_chars.push('_');
+                } else {
+                    input_chars.push(' ');
+                }
+
+                for (offset, c) in input_chars.into_iter().enumerate() {
+                    line_chars.insert(insert_idx + offset, c);
+                    syntax_colors.insert(insert_idx + offset, last_color);
+                }
             }
 
             if !self.is_output {
@@ -2113,9 +2141,12 @@ impl Editor {
                 };
 
                 if self.mode != Mode::Search
-                    && self.is_editing
-                    && i == self.state.cursor_y
-                    && j == self.state.cursor_x
+                    && ((self.is_editing && i == self.state.cursor_y && j == self.state.cursor_x)
+                        || (self.is_output
+                            && config.show_caret
+                            && !self.is_waiting_for_input
+                            && i == self.state.cursor_y
+                            && j == self.state.cursor_x))
                 {
                     style.bg = Color::White;
                     style.fg = Color::Black;
@@ -2135,9 +2166,13 @@ impl Editor {
                 }
             }
 
-            if self.mode != Mode::Search && self.is_editing && i == self.state.cursor_y {
+            if self.mode != Mode::Search
+                && ((self.is_editing)
+                    || (self.is_output && config.show_caret && !self.is_waiting_for_input))
+                && i == self.state.cursor_y
+            {
                 let line_len = line_chars.len();
-                if self.state.cursor_x == line_len {
+                if self.state.cursor_x >= line_len {
                     if self.state.cursor_x >= self.scroll_x {
                         let display_x = self.state.cursor_x - self.scroll_x + prefix_width;
                         if display_x < inner_w {

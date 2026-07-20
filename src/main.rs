@@ -127,8 +127,10 @@ fn main() {
                 let mut processed = 0;
                 loop {
                     match rx.try_recv() {
-                        Ok(nuui::EngineMessage::Output(lines)) => {
+                        Ok(nuui::EngineMessage::Output(lines, caret_x, caret_y)) => {
                             main_view.editors[i].state.lines = lines;
+                            main_view.editors[i].state.cursor_x = caret_x;
+                            main_view.editors[i].state.cursor_y = caret_y;
                             main_view.editors[i].error_count = 0;
                             main_view.editors[i].error_lines.clear();
                             tabs_updated[i] = true;
