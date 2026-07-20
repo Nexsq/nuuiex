@@ -1231,6 +1231,233 @@ fn get_cursor_pos() -> Result<(i32, i32), String> {
 }
 
 #[cfg(windows)]
+fn get_screen_pixel(x: i32, y: i32) -> Result<(u8, u8, u8), String> {
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn GetDC(hWnd: isize) -> isize;
+        fn ReleaseDC(hWnd: isize, hDC: isize) -> i32;
+    }
+    #[link(name = "gdi32")]
+    unsafe extern "system" {
+        fn GetPixel(hDC: isize, x: i32, y: i32) -> u32;
+    }
+
+    struct ScreenDC(isize);
+    impl Drop for ScreenDC {
+        fn drop(&mut self) {
+            unsafe {
+                ReleaseDC(0, self.0);
+            }
+        }
+    }
+
+    thread_local! {
+        static DC: std::cell::RefCell<Option<ScreenDC>> = std::cell::RefCell::new(None);
+    }
+
+    DC.with(|dc_cell| {
+        let mut dc_opt = dc_cell.borrow_mut();
+        if dc_opt.is_none() {
+            let hdc = unsafe { GetDC(0) };
+            if hdc == 0 {
+                return Err("Failed to get screen DC".into());
+            }
+            *dc_opt = Some(ScreenDC(hdc));
+        }
+
+        let hdc = dc_opt.as_ref().unwrap().0;
+        let color = unsafe { GetPixel(hdc, x, y) };
+        if color == 0xFFFFFFFF {
+            return Err("Coordinates out of bounds".into());
+        }
+
+        let r = (color & 0xFF) as u8;
+        let g = ((color >> 8) & 0xFF) as u8;
+        let b = ((color >> 16) & 0xFF) as u8;
+        Ok((r, g, b))
+    })
+}
+
+#[cfg(target_os = "linux")]
+#[repr(C)]
+struct XImageFuncs {
+    create_image: *const libc::c_void,
+    destroy_image: extern "C" fn(*mut XImage) -> i32,
+    get_pixel: extern "C" fn(*mut XImage, i32, i32) -> libc::c_ulong,
+    put_pixel: *const libc::c_void,
+    sub_image: *const libc::c_void,
+    add_pixel: *const libc::c_void,
+}
+
+#[cfg(target_os = "linux")]
+#[repr(C)]
+struct XImage {
+    pub width: i32,
+    pub height: i32,
+    pub xoffset: i32,
+    pub format: i32,
+    pub data: *mut u8,
+    pub byte_order: i32,
+    pub bitmap_unit: i32,
+    pub bitmap_bit_order: i32,
+    pub bitmap_pad: i32,
+    pub depth: i32,
+    pub bytes_per_line: i32,
+    pub bits_per_pixel: i32,
+    pub red_mask: libc::c_ulong,
+    pub green_mask: libc::c_ulong,
+    pub blue_mask: libc::c_ulong,
+    pub obdata: *mut libc::c_void,
+    pub f: XImageFuncs,
+}
+
+#[cfg(target_os = "linux")]
+struct X11PixelContext {
+    lib: *mut libc::c_void,
+    display: *mut libc::c_void,
+    root: libc::c_ulong,
+    xgetimage: extern "C" fn(
+        *mut libc::c_void,
+        libc::c_ulong,
+        i32,
+        i32,
+        u32,
+        u32,
+        libc::c_ulong,
+        i32,
+    ) -> *mut XImage,
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for X11PixelContext {
+    fn drop(&mut self) {
+        unsafe {
+            let xclose_sym = libc::dlsym(self.lib, b"XCloseDisplay\0".as_ptr() as *const i8);
+            if !xclose_sym.is_null() {
+                let xclosedisplay: extern "C" fn(*mut libc::c_void) -> i32 =
+                    std::mem::transmute(xclose_sym);
+                xclosedisplay(self.display);
+            }
+            libc::dlclose(self.lib);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn get_screen_pixel(x: i32, y: i32) -> Result<(u8, u8, u8), String> {
+    use libc::{RTLD_LAZY, dlclose, dlopen, dlsym};
+
+    thread_local! {
+        static X11_PIXEL_CTX: std::cell::RefCell<Option<Result<X11PixelContext, String>>> = std::cell::RefCell::new(None);
+    }
+
+    X11_PIXEL_CTX.with(|ctx_cell| {
+        let mut ctx_opt = ctx_cell.borrow_mut();
+        if ctx_opt.is_none() {
+            unsafe {
+                let lib = dlopen(b"libX11.so.6\0".as_ptr() as *const i8, RTLD_LAZY);
+                if lib.is_null() {
+                    let err = "Failed to load libX11.so.6".to_string();
+                    *ctx_opt = Some(Err(err.clone()));
+                    return Err(err);
+                }
+                let xopen = dlsym(lib, b"XOpenDisplay\0".as_ptr() as *const i8);
+                let xgetimage = dlsym(lib, b"XGetImage\0".as_ptr() as *const i8);
+                let xroot = dlsym(lib, b"XDefaultRootWindow\0".as_ptr() as *const i8);
+
+                if xopen.is_null() || xgetimage.is_null() || xroot.is_null() {
+                    dlclose(lib);
+                    let err = "Failed to load X11 symbols".to_string();
+                    *ctx_opt = Some(Err(err.clone()));
+                    return Err(err);
+                }
+
+                let xopendisplay: extern "C" fn(*const i8) -> *mut libc::c_void =
+                    std::mem::transmute(xopen);
+                let xdefaultrootwindow: extern "C" fn(*mut libc::c_void) -> libc::c_ulong =
+                    std::mem::transmute(xroot);
+
+                let display = xopendisplay(std::ptr::null());
+                if display.is_null() {
+                    dlclose(lib);
+                    let err = "Failed to open X display".to_string();
+                    *ctx_opt = Some(Err(err.clone()));
+                    return Err(err);
+                }
+
+                let root = xdefaultrootwindow(display);
+                let xgetimage_fn: extern "C" fn(
+                    *mut libc::c_void,
+                    libc::c_ulong,
+                    i32,
+                    i32,
+                    u32,
+                    u32,
+                    libc::c_ulong,
+                    i32,
+                ) -> *mut XImage = std::mem::transmute(xgetimage);
+
+                *ctx_opt = Some(Ok(X11PixelContext {
+                    lib,
+                    display,
+                    root,
+                    xgetimage: xgetimage_fn,
+                }));
+            }
+        }
+
+        match ctx_opt.as_ref().unwrap() {
+            Ok(x11) => unsafe {
+                let image = (x11.xgetimage)(x11.display, x11.root, x, y, 1, 1, !0, 2);
+                if image.is_null() {
+                    return Err("Coordinates out of bounds or invalid drawable".into());
+                }
+
+                let pixel = ((*image).f.get_pixel)(image, 0, 0);
+
+                let rm = (*image).red_mask;
+                let gm = (*image).green_mask;
+                let bm = (*image).blue_mask;
+
+                let r_shift = rm.trailing_zeros();
+                let r_max = rm >> r_shift;
+                let r = if r_max > 0 {
+                    (((pixel & rm) >> r_shift) * 255 / r_max) as u8
+                } else {
+                    0
+                };
+
+                let g_shift = gm.trailing_zeros();
+                let g_max = gm >> g_shift;
+                let g = if g_max > 0 {
+                    (((pixel & gm) >> g_shift) * 255 / g_max) as u8
+                } else {
+                    0
+                };
+
+                let b_shift = bm.trailing_zeros();
+                let b_max = bm >> b_shift;
+                let b = if b_max > 0 {
+                    (((pixel & bm) >> b_shift) * 255 / b_max) as u8
+                } else {
+                    0
+                };
+
+                ((*image).f.destroy_image)(image);
+
+                Ok((r, g, b))
+            },
+            Err(e) => Err(e.clone()),
+        }
+    })
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn get_screen_pixel(_x: i32, _y: i32) -> Result<(u8, u8, u8), String> {
+    Err("getpixel is not supported on this OS".to_string())
+}
+
+#[cfg(windows)]
 fn set_cursor_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
     if relative {
         use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
@@ -3243,6 +3470,108 @@ impl Interpreter {
                         };
                         simulate_scroll(num).map_err(|e| format!("Line {}: {}", line, e))?;
                         return Ok(Value::Nil);
+                    }
+                    "getpixel" => {
+                        if eval_args.len() != 2 {
+                            return Err(format!(
+                                "Line {}: 'getpixel' expects exactly 2 arguments",
+                                line
+                            ));
+                        }
+                        let x = if let Value::Number(n) = eval_args[0].1 {
+                            n as i32
+                        } else {
+                            return Err(format!("Line {}: 'getpixel' x must be a number", line));
+                        };
+                        let y = if let Value::Number(n) = eval_args[1].1 {
+                            n as i32
+                        } else {
+                            return Err(format!("Line {}: 'getpixel' y must be a number", line));
+                        };
+
+                        match get_screen_pixel(x, y) {
+                            Ok((r, g, b)) => {
+                                let hex = format!("{:02x}{:02x}{:02x}", r, g, b);
+                                return Ok(Value::EnumVariant("Color".to_string(), hex, None));
+                            }
+                            Err(e) => return Err(format!("Line {}: {}", line, e)),
+                        }
+                    }
+                    "compixel" => {
+                        if eval_args.len() < 3 || eval_args.len() > 4 {
+                            return Err(format!(
+                                "Line {}: 'compixel' expects 3 or 4 arguments",
+                                line
+                            ));
+                        }
+                        let x = if let Value::Number(n) = eval_args[0].1 {
+                            n as i32
+                        } else {
+                            return Err(format!("Line {}: 'compixel' x must be a number", line));
+                        };
+                        let y = if let Value::Number(n) = eval_args[1].1 {
+                            n as i32
+                        } else {
+                            return Err(format!("Line {}: 'compixel' y must be a number", line));
+                        };
+
+                        let target_color = if let Value::EnumVariant(enum_name, variant, _) =
+                            &eval_args[2].1
+                        {
+                            if enum_name == "Color" {
+                                if let Ok(c) = crate::theme::themecore::parse_color(variant) {
+                                    if let Some(rgb) = c.to_rgb() {
+                                        rgb
+                                    } else {
+                                        return Err(format!(
+                                            "Line {}: 'compixel' color cannot be None",
+                                            line
+                                        ));
+                                    }
+                                } else {
+                                    return Err(format!(
+                                        "Line {}: Invalid color variant '{}'",
+                                        line, variant
+                                    ));
+                                }
+                            } else {
+                                return Err(format!(
+                                    "Line {}: 'compixel' expects a Color enum for the 3rd argument",
+                                    line
+                                ));
+                            }
+                        } else {
+                            return Err(format!(
+                                "Line {}: 'compixel' expects a Color enum for the 3rd argument",
+                                line
+                            ));
+                        };
+
+                        let offset = if eval_args.len() == 4 {
+                            if let Value::Number(n) = eval_args[3].1 {
+                                n.clamp(0.0, 255.0) as u8
+                            } else {
+                                return Err(format!(
+                                    "Line {}: 'compixel' offset must be a number",
+                                    line
+                                ));
+                            }
+                        } else {
+                            0u8
+                        };
+
+                        match get_screen_pixel(x, y) {
+                            Ok((r, g, b)) => {
+                                let (tr, tg, tb) = target_color;
+
+                                let match_r = r.abs_diff(tr) <= offset;
+                                let match_g = g.abs_diff(tg) <= offset;
+                                let match_b = b.abs_diff(tb) <= offset;
+
+                                return Ok(Value::Bool(match_r && match_g && match_b));
+                            }
+                            Err(e) => return Err(format!("Line {}: {}", line, e)),
+                        }
                     }
                     _ => {}
                 }

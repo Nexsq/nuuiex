@@ -39,6 +39,8 @@ pub const BUILTIN_FUNCS: &[&str] = &[
     "clear",
     "setcaret",
     "scroll",
+    "getpixel",
+    "compixel",
 ];
 
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {
