@@ -324,7 +324,7 @@ fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
         cmd.args(&[
             "-NoProfile",
             "-Command",
-            "while($true) { $val = (Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'engtype_3D' } | Measure-Object -Property UtilizationPercentage -Maximum).Maximum; if ($null -eq $val) { echo 0 } else { echo $val }; Start-Sleep -Seconds 1 }"
+            "while($true) { $val = (Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -ErrorAction SilentlyContinue | Measure-Object -Property UtilizationPercentage -Sum).Sum; if ($null -eq $val) { echo 0 } else { echo $val }; Start-Sleep -Seconds 1 }"
         ]);
         cmd.creation_flags(0x08000000);
         cmd.stdout(std::process::Stdio::piped());
@@ -334,7 +334,8 @@ fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
                 let reader = std::io::BufReader::new(stdout);
                 for line in reader.lines().filter_map(Result::ok) {
                     if let Ok(usage) = line.trim().parse::<f64>() {
-                        let _ = tx.send(usage.round() as u8);
+                        let u = (usage.round() as u32).min(100) as u8;
+                        let _ = tx.send(u);
                     }
                 }
             }
