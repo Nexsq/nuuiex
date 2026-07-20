@@ -87,6 +87,7 @@ pub enum Stmt {
     While(Expr, Vec<Stmt>),
     For(String, Expr, Vec<Stmt>, usize),
     Break(usize),
+    Continue(usize),
     Fn(String, Vec<Param>, Vec<Stmt>, usize),
     Return(Option<Expr>),
     Async(Vec<Stmt>, usize),

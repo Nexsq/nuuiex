@@ -1456,6 +1456,7 @@ pub struct Interpreter {
 pub enum Signal {
     Empty,
     Break,
+    Continue,
     Return(Value),
 }
 
@@ -1533,6 +1534,10 @@ impl Interpreter {
             match self.execute_stmt(stmt) {
                 Ok(Signal::Break) => {
                     res = Ok(Signal::Break);
+                    break;
+                }
+                Ok(Signal::Continue) => {
+                    res = Ok(Signal::Continue);
                     break;
                 }
                 Ok(Signal::Return(val)) => {
@@ -2103,6 +2108,7 @@ impl Interpreter {
                     }
                     match self.exec_block(body)? {
                         Signal::Break => break,
+                        Signal::Continue => continue,
                         Signal::Return(v) => return Ok(Signal::Return(v)),
                         Signal::Empty => continue,
                     }
@@ -2123,6 +2129,7 @@ impl Interpreter {
 
                     match self.exec_block(body)? {
                         Signal::Break => break,
+                        Signal::Continue => continue,
                         Signal::Return(v) => return Ok(Signal::Return(v)),
                         Signal::Empty => continue,
                     }
@@ -2148,6 +2155,7 @@ impl Interpreter {
                     let _ = self.env.assign(name, item);
                     match self.exec_block(body)? {
                         Signal::Break => break,
+                        Signal::Continue => continue,
                         Signal::Return(v) => {
                             self.env.pop();
                             return Ok(Signal::Return(v));
@@ -2194,6 +2202,7 @@ impl Interpreter {
                 Ok(Signal::Empty)
             }
             Stmt::Break(_) => Ok(Signal::Break),
+            Stmt::Continue(_) => Ok(Signal::Continue),
             Stmt::Fn(name, params, body, line) => {
                 let func_def = Arc::new(FunctionDef {
                     name: name.clone(),

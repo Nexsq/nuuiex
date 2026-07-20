@@ -535,7 +535,7 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     },
                 },
                 Setting {
-                    name: "Reset Keybinds",
+                    name: "Reset Library Keybinds",
                     key: "reset_lib_keybinds",
                     kind: SettingType::Action,
                 },
@@ -544,6 +544,14 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
         Category {
             name: "Editor",
             settings: vec![
+                Setting {
+                    name: "Tab Backspace",
+                    key: "edit_tab_backspace",
+                    kind: SettingType::Choice(
+                        vec!["true".to_string(), "false".to_string()],
+                        if config.edit_tab_backspace { 0 } else { 1 },
+                    ),
+                },
                 Setting {
                     name: "Insert Mode",
                     key: "bind_edit_insert",
@@ -725,7 +733,7 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     },
                 },
                 Setting {
-                    name: "Reset Keybinds",
+                    name: "Reset Editor",
                     key: "reset_edit_keybinds",
                     kind: SettingType::Action,
                 },
@@ -875,6 +883,7 @@ pub fn settings_modal(
                 apply_setting!(config, set, parse_clamp "monitor_bar_width", monitor_bar_width, 4, 16);
                 apply_setting!(config, set, bool "monitor_icons", monitor_icons);
 
+                apply_setting!(config, set, bool "edit_tab_backspace", edit_tab_backspace);
                 apply_setting!(config, set, char "bind_edit_insert", bind_edit_insert);
                 apply_setting!(config, set, char "bind_edit_visual", bind_edit_visual);
                 apply_setting!(config, set, char "bind_edit_fold", bind_edit_fold);

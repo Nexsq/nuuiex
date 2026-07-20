@@ -295,24 +295,67 @@ fn get_windows_metrics(
 
 fn get_gpu_usage() -> u8 {
     let mut max_usage: u8 = 0;
+    #[allow(unused_variables)]
+    let mut success = false;
 
     #[cfg(target_os = "windows")]
-    use std::os::windows::process::CommandExt;
+    {
+        use std::os::windows::process::CommandExt;
 
-    let mut cmd = std::process::Command::new("nvidia-smi");
-    cmd.args(&[
-        "--query-gpu=utilization.gpu",
-        "--format=csv,noheader,nounits",
-    ]);
+        let mut cmd = std::process::Command::new("nvidia-smi");
+        cmd.args(&[
+            "--query-gpu=utilization.gpu",
+            "--format=csv,noheader,nounits",
+        ]);
+        cmd.creation_flags(0x08000000);
 
-    #[cfg(target_os = "windows")]
-    cmd.creation_flags(0x08000000);
+        if let Ok(output) = cmd.output() {
+            if let Ok(s) = String::from_utf8(output.stdout) {
+                for line in s.lines() {
+                    if let Ok(usage) = line.trim().parse::<u8>() {
+                        max_usage = max_usage.max(usage);
+                        success = true;
+                    }
+                }
+            }
+        }
 
-    if let Ok(output) = cmd.output() {
-        if let Ok(s) = String::from_utf8(output.stdout) {
-            for line in s.lines() {
-                if let Ok(usage) = line.trim().parse::<u8>() {
-                    max_usage = max_usage.max(usage);
+        if !success {
+            let mut cmd = std::process::Command::new("wmic");
+            cmd.args(&[
+                "path",
+                "Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine",
+                "get",
+                "UtilizationPercentage",
+            ]);
+            cmd.creation_flags(0x08000000);
+
+            if let Ok(output) = cmd.output() {
+                if let Ok(s) = String::from_utf8(output.stdout) {
+                    for line in s.lines() {
+                        if let Ok(usage) = line.trim().parse::<u8>() {
+                            max_usage = max_usage.max(usage);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut cmd = std::process::Command::new("nvidia-smi");
+        cmd.args(&[
+            "--query-gpu=utilization.gpu",
+            "--format=csv,noheader,nounits",
+        ]);
+
+        if let Ok(output) = cmd.output() {
+            if let Ok(s) = String::from_utf8(output.stdout) {
+                for line in s.lines() {
+                    if let Ok(usage) = line.trim().parse::<u8>() {
+                        max_usage = max_usage.max(usage);
+                    }
                 }
             }
         }

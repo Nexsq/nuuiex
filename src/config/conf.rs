@@ -38,6 +38,7 @@ pub struct Config {
     pub keyvis_tension: f32,
     pub keyvis_base: bool,
 
+    pub edit_tab_backspace: bool,
     pub bind_edit_insert: char,
     pub bind_edit_visual: char,
     pub bind_edit_fold: char,
@@ -104,6 +105,7 @@ impl Default for Config {
             keyvis_tension: 0.0,
             keyvis_base: false,
 
+            edit_tab_backspace: true,
             bind_edit_insert: '\0',
             bind_edit_visual: '\0',
             bind_edit_fold: '\0',
@@ -218,6 +220,9 @@ impl Config {
                     }
                     "keyvis_base" => self.keyvis_base = val.parse().unwrap_or(self.keyvis_base),
 
+                    "edit_tab_backspace" => {
+                        self.edit_tab_backspace = val.parse().unwrap_or(self.edit_tab_backspace)
+                    }
                     "bind_edit_insert" => {
                         self.bind_edit_insert = val
                             .chars()
@@ -452,6 +457,7 @@ impl Config {
 
     pub fn reset_edit_keybinds(&mut self) {
         let default = Config::default();
+        self.edit_tab_backspace = default.edit_tab_backspace;
         self.bind_edit_insert = default.bind_edit_insert;
         self.bind_edit_visual = default.bind_edit_visual;
         self.bind_edit_fold = default.bind_edit_fold;
@@ -665,6 +671,12 @@ impl Config {
                             .unwrap()
                     }
 
+                    "edit_tab_backspace" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.edit_tab_backspace, comment
+                    )
+                    .unwrap(),
                     "bind_edit_insert" => writeln!(
                         &mut output,
                         "{} = {}{}",

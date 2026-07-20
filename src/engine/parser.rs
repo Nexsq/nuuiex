@@ -89,6 +89,16 @@ impl Parser {
                 return None;
             }
         }
+        if self.check(&TokenKind::Continue) {
+            let token = self.advance().clone();
+            if self.check_statement_end() {
+                self.consume_statement_end();
+                return Some(Stmt::Continue(token.line));
+            } else {
+                self.error("Expected newline after continue.");
+                return None;
+            }
+        }
 
         let expr = self.parse_expression()?;
 

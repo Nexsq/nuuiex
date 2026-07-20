@@ -1,3 +1,1 @@
 add function to move the print cursor
-
-Alt, Shift etc.. do not work in keydownfocus()

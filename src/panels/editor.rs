@@ -651,7 +651,24 @@ impl Editor {
                         self.prepare_edit(is_ws);
                     } else {
                         self.push_undo(EditAction::Char(is_ws));
-                        self.delete_char_before();
+
+                        let mut spaces_to_delete = 1;
+                        if config.edit_tab_backspace && self.state.cursor_x > 0 {
+                            let line = &self.state.lines[self.state.cursor_y];
+                            let char_idx = self.state.cursor_x;
+                            let before_cursor: String = line.chars().take(char_idx).collect();
+
+                            if before_cursor.trim().is_empty() {
+                                let rem = char_idx % 4;
+                                spaces_to_delete = if rem == 0 { 4 } else { rem };
+                            } else if before_cursor.ends_with("    ") {
+                                spaces_to_delete = 4;
+                            }
+                        }
+
+                        for _ in 0..spaces_to_delete {
+                            self.delete_char_before();
+                        }
                     }
                     needs_analysis = true;
                 }
@@ -1971,6 +1988,7 @@ impl Editor {
                                     | "elif"
                                     | "else"
                                     | "break"
+                                    | "continue"
                                     | "async"
                             );
                             let is_op_word = matches!(word_str.as_str(), "and" | "or" | "not");
