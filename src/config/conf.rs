@@ -40,6 +40,8 @@ pub struct Config {
     pub keyvis_base: bool,
 
     pub edit_tab_backspace: bool,
+    pub edit_auto_indent: bool,
+    pub edit_error_highlight: String,
     pub bind_edit_insert: char,
     pub bind_edit_visual: char,
     pub bind_edit_fold: char,
@@ -108,6 +110,8 @@ impl Default for Config {
             keyvis_base: false,
 
             edit_tab_backspace: true,
+            edit_auto_indent: true,
+            edit_error_highlight: String::new(),
             bind_edit_insert: '\0',
             bind_edit_visual: '\0',
             bind_edit_fold: '\0',
@@ -226,6 +230,10 @@ impl Config {
                     "edit_tab_backspace" => {
                         self.edit_tab_backspace = val.parse().unwrap_or(self.edit_tab_backspace)
                     }
+                    "edit_auto_indent" => {
+                        self.edit_auto_indent = val.parse().unwrap_or(self.edit_auto_indent)
+                    }
+                    "edit_error_highlight" => self.edit_error_highlight = val.to_string(),
                     "bind_edit_insert" => {
                         self.bind_edit_insert = val
                             .chars()
@@ -462,6 +470,8 @@ impl Config {
     pub fn reset_edit_keybinds(&mut self) {
         let default = Config::default();
         self.edit_tab_backspace = default.edit_tab_backspace;
+        self.edit_auto_indent = default.edit_auto_indent;
+        self.edit_error_highlight = default.edit_error_highlight;
         self.bind_edit_insert = default.bind_edit_insert;
         self.bind_edit_visual = default.bind_edit_visual;
         self.bind_edit_fold = default.bind_edit_fold;
@@ -683,6 +693,18 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.edit_tab_backspace, comment
+                    )
+                    .unwrap(),
+                    "edit_auto_indent" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.edit_auto_indent, comment
+                    )
+                    .unwrap(),
+                    "edit_error_highlight" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.edit_error_highlight, comment
                     )
                     .unwrap(),
                     "bind_edit_insert" => writeln!(

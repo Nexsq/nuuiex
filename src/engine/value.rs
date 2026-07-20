@@ -154,6 +154,8 @@ impl fmt::Display for Value {
             Value::EnumVariant(e, v, inner) => {
                 if e == "Color" {
                     write!(f, "{{Color:{}}}", v)
+                } else if e == "Modifier" {
+                    write!(f, "{{Modifier:{}}}", v)
                 } else if let Some(i) = inner {
                     write!(f, "{}::{}({})", e, v, i)
                 } else {

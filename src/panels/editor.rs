@@ -638,7 +638,7 @@ impl Editor {
                 }
                 Key::Enter => {
                     self.prepare_edit(true);
-                    self.insert_newline();
+                    self.insert_newline(config);
                     needs_analysis = true;
                 }
                 Key::CtrlLeft => self.jump_word_backward(false),
@@ -826,7 +826,7 @@ impl Editor {
         self.state.cursor_x += 1;
     }
 
-    fn insert_newline(&mut self) {
+    fn insert_newline(&mut self, config: &Config) {
         let line = &mut self.state.lines[self.state.cursor_y];
         let byte_idx = line
             .char_indices()
@@ -835,10 +835,27 @@ impl Editor {
             .unwrap_or(line.len());
         let new_line = line.split_off(byte_idx);
 
+        let mut indent_spaces = 0;
+        if config.edit_auto_indent {
+            let before_cursor = &line[..];
+            indent_spaces = before_cursor
+                .chars()
+                .take_while(|c| c.is_whitespace())
+                .count();
+            if before_cursor.trim_end().ends_with(':') {
+                indent_spaces += 4;
+            }
+        }
+
+        let mut final_new_line = " ".repeat(indent_spaces);
+        final_new_line.push_str(&new_line);
+
         self.shift_folds(self.state.cursor_y + 1, 1);
-        self.state.lines.insert(self.state.cursor_y + 1, new_line);
+        self.state
+            .lines
+            .insert(self.state.cursor_y + 1, final_new_line);
         self.state.cursor_y += 1;
-        self.state.cursor_x = 0;
+        self.state.cursor_x = indent_spaces;
     }
 
     fn delete_word_before(&mut self) {
@@ -1711,8 +1728,12 @@ impl Editor {
             }
 
             let is_error_line = self.is_editing && self.error_lines.contains(&(i + 1));
+            let error_underline = is_error_line && config.edit_error_highlight == "underline";
+            let error_bg = is_error_line && !error_underline;
+
             line_chars.clear();
             syntax_colors.clear();
+            let mut syntax_modifiers = Vec::with_capacity(128);
 
             let mut line_str = self.state.lines[i].as_str();
             if self.folded_lines.contains(&i) {
@@ -1724,10 +1745,11 @@ impl Editor {
             if self.is_output {
                 let mut chars = line_str.chars().peekable();
                 let mut current_color = Color::White;
+                let mut current_modifier = Modifier::None;
 
                 while let Some(c) = chars.next() {
                     if c == '{' {
-                        let mut color_str = String::new();
+                        let mut valid_tag = String::new();
                         let mut is_valid = false;
                         let mut lookahead = chars.clone();
                         while let Some(nc) = lookahead.next() {
@@ -1735,24 +1757,47 @@ impl Editor {
                                 is_valid = true;
                                 break;
                             }
-                            color_str.push(nc);
+                            valid_tag.push(nc);
                         }
 
-                        if is_valid && color_str.starts_with("Color:") {
-                            let color_name = &color_str[6..];
-                            if let Ok(parsed_color) =
-                                crate::theme::themecore::parse_color(color_name)
-                            {
-                                current_color = parsed_color;
-                                for _ in 0..=color_str.len() {
-                                    chars.next();
+                        if is_valid {
+                            if valid_tag.starts_with("Color:") {
+                                let color_name = &valid_tag[6..];
+                                if let Ok(parsed_color) =
+                                    crate::theme::themecore::parse_color(color_name)
+                                {
+                                    current_color = parsed_color;
+                                    for _ in 0..=valid_tag.len() {
+                                        chars.next();
+                                    }
+                                    continue;
                                 }
-                                continue;
+                            } else if valid_tag.starts_with("Modifier:") {
+                                let mod_name = &valid_tag[9..];
+                                let parsed_mod = match mod_name {
+                                    "None" => Some(Modifier::None),
+                                    "Bold" => Some(Modifier::Bold),
+                                    "Dim" => Some(Modifier::Dim),
+                                    "Italic" => Some(Modifier::Italic),
+                                    "Underline" => Some(Modifier::Underline),
+                                    "Reverse" => Some(Modifier::Reverse),
+                                    "Hidden" => Some(Modifier::Hidden),
+                                    "Strikethrough" => Some(Modifier::Strikethrough),
+                                    _ => None,
+                                };
+                                if let Some(m) = parsed_mod {
+                                    current_modifier = m;
+                                    for _ in 0..=valid_tag.len() {
+                                        chars.next();
+                                    }
+                                    continue;
+                                }
                             }
                         }
                     }
                     line_chars.push(c);
                     syntax_colors.push(current_color);
+                    syntax_modifiers.push(current_modifier);
                 }
             } else {
                 line_chars.extend(line_str.chars());
@@ -1760,10 +1805,12 @@ impl Editor {
 
             if self.is_output && self.is_waiting_for_input && i == self.state.cursor_y {
                 let last_color = syntax_colors.last().copied().unwrap_or(Color::White);
+                let last_modifier = syntax_modifiers.last().copied().unwrap_or(Modifier::None);
                 let pad_spaces = self.state.cursor_x.saturating_sub(line_chars.len());
                 for _ in 0..pad_spaces {
                     line_chars.push(' ');
                     syntax_colors.push(last_color);
+                    syntax_modifiers.push(last_modifier);
                 }
 
                 let insert_idx = self.state.cursor_x;
@@ -1781,6 +1828,7 @@ impl Editor {
                 for (offset, c) in input_chars.into_iter().enumerate() {
                     line_chars.insert(insert_idx + offset, c);
                     syntax_colors.insert(insert_idx + offset, last_color);
+                    syntax_modifiers.insert(insert_idx + offset, last_modifier);
                 }
             }
 
@@ -1806,6 +1854,7 @@ impl Editor {
                         while k < idx {
                             if line_chars[k] == '{' && (k == start || line_chars[k - 1] != '\\') {
                                 syntax_colors.push(theme.editor_brackets.color_at(0, 1));
+                                syntax_modifiers.push(Modifier::None);
                                 k += 1;
 
                                 let interp_start = k;
@@ -1864,30 +1913,75 @@ impl Editor {
                                             if let Some(cc) = custom_c {
                                                 for _ in color_word_start..var_end {
                                                     syntax_colors.push(cc);
+                                                    syntax_modifiers.push(Modifier::None);
                                                 }
                                             } else {
                                                 for _ in 0..5 {
                                                     syntax_colors
                                                         .push(theme.editor_keywords.color_at(0, 1));
+                                                    syntax_modifiers.push(Modifier::None);
                                                 }
                                                 syntax_colors
                                                     .push(theme.editor_operators.color_at(0, 1));
+                                                syntax_modifiers.push(Modifier::None);
                                                 for _ in var_start..var_end {
                                                     syntax_colors.push(
                                                         theme.editor_variables.color_at(0, 1),
                                                     );
+                                                    syntax_modifiers.push(Modifier::None);
                                                 }
                                             }
                                             p = var_end;
                                             continue;
                                         }
                                     }
+                                    if p + 9 <= interp_end {
+                                        let possible_mod: String =
+                                            line_chars[p..p + 9].iter().collect();
+                                        if possible_mod == "Modifier:" {
+                                            let mod_word_start = p;
+                                            let var_start = p + 9;
+                                            let mut var_end = var_start;
+                                            while var_end < interp_end
+                                                && (line_chars[var_end].is_ascii_alphanumeric()
+                                                    || line_chars[var_end] == '_')
+                                            {
+                                                var_end += 1;
+                                            }
+                                            let variant_str: String =
+                                                line_chars[var_start..var_end].iter().collect();
+                                            let custom_mod = match variant_str.as_str() {
+                                                "None" => Some(Modifier::None),
+                                                "Bold" => Some(Modifier::Bold),
+                                                "Dim" => Some(Modifier::Dim),
+                                                "Italic" => Some(Modifier::Italic),
+                                                "Underline" => Some(Modifier::Underline),
+                                                "Reverse" => Some(Modifier::Reverse),
+                                                "Hidden" => Some(Modifier::Hidden),
+                                                "Strikethrough" => Some(Modifier::Strikethrough),
+                                                _ => None,
+                                            };
+                                            if let Some(m) = custom_mod {
+                                                for _ in mod_word_start..var_end {
+                                                    syntax_colors.push(
+                                                        theme.editor_variables.color_at(0, 1),
+                                                    );
+                                                    syntax_modifiers.push(m);
+                                                }
+                                                p = var_end;
+                                                continue;
+                                            }
+                                        }
+                                    }
+
                                     syntax_colors.push(theme.editor_variables.color_at(0, 1));
+                                    syntax_modifiers.push(Modifier::None);
                                     p += 1;
                                 }
 
                                 if interp_end < idx && line_chars[interp_end] == '}' {
                                     syntax_colors.push(theme.editor_brackets.color_at(0, 1));
+                                    syntax_modifiers.push(Modifier::None);
                                     k = interp_end + 1;
                                 } else {
                                     k = interp_end;
@@ -1895,6 +1989,7 @@ impl Editor {
                             } else {
                                 syntax_colors
                                     .push(theme.editor_strings.color_at(k - start, idx - start));
+                                syntax_modifiers.push(Modifier::None);
                                 k += 1;
                             }
                         }
@@ -1904,6 +1999,7 @@ impl Editor {
                         for k in start..end {
                             syntax_colors
                                 .push(theme.editor_comments.color_at(k - start, end - start));
+                            syntax_modifiers.push(Modifier::None);
                         }
                         break;
                     } else if c.is_ascii_digit() || c.is_ascii_alphabetic() || c == '_' {
@@ -1942,6 +2038,7 @@ impl Editor {
                             for k in start..idx {
                                 syntax_colors
                                     .push(theme.editor_numbers.color_at(k - start, idx - start));
+                                syntax_modifiers.push(Modifier::None);
                             }
                         } else {
                             while idx < line_chars.len()
@@ -1996,6 +2093,53 @@ impl Editor {
                                         if let Some(cc) = custom_color {
                                             for _ in start..temp_idx {
                                                 syntax_colors.push(cc);
+                                                syntax_modifiers.push(Modifier::None);
+                                            }
+                                            idx = temp_idx;
+                                            continue;
+                                        }
+                                    }
+                                }
+                            } else if word_str == "Modifier" {
+                                let mut temp_idx = idx;
+                                while temp_idx < line_chars.len()
+                                    && line_chars[temp_idx].is_whitespace()
+                                {
+                                    temp_idx += 1;
+                                }
+                                if temp_idx < line_chars.len() && line_chars[temp_idx] == ':' {
+                                    temp_idx += 1;
+                                    while temp_idx < line_chars.len()
+                                        && line_chars[temp_idx].is_whitespace()
+                                    {
+                                        temp_idx += 1;
+                                    }
+                                    let variant_start = temp_idx;
+                                    while temp_idx < line_chars.len()
+                                        && (line_chars[temp_idx].is_ascii_alphanumeric()
+                                            || line_chars[temp_idx] == '_')
+                                    {
+                                        temp_idx += 1;
+                                    }
+                                    if temp_idx > variant_start {
+                                        let variant_str: String =
+                                            line_chars[variant_start..temp_idx].iter().collect();
+                                        let custom_mod = match variant_str.as_str() {
+                                            "None" => Some(Modifier::None),
+                                            "Bold" => Some(Modifier::Bold),
+                                            "Dim" => Some(Modifier::Dim),
+                                            "Italic" => Some(Modifier::Italic),
+                                            "Underline" => Some(Modifier::Underline),
+                                            "Reverse" => Some(Modifier::Reverse),
+                                            "Hidden" => Some(Modifier::Hidden),
+                                            "Strikethrough" => Some(Modifier::Strikethrough),
+                                            _ => None,
+                                        };
+                                        if let Some(m) = custom_mod {
+                                            for _ in start..temp_idx {
+                                                syntax_colors
+                                                    .push(theme.editor_variables.color_at(0, 1));
+                                                syntax_modifiers.push(m);
                                             }
                                             idx = temp_idx;
                                             continue;
@@ -2024,7 +2168,8 @@ impl Editor {
                             let is_op_word = matches!(word_str.as_str(), "and" | "or" | "not");
                             let is_bool = matches!(word_str.as_str(), "True" | "False");
 
-                            let is_enum_base = word_str == "Color" || word_str == "Key";
+                            let is_enum_base =
+                                word_str == "Color" || word_str == "Key" || word_str == "Modifier";
 
                             let is_enum_variant = start >= 1 && {
                                 let mut k = start;
@@ -2046,6 +2191,8 @@ impl Editor {
                                     let prev_word: String =
                                         line_chars[k..end_prev].iter().collect();
                                     prev_word == "Key"
+                                        || prev_word == "Modifier"
+                                        || prev_word == "Color"
                                 } else {
                                     false
                                 }
@@ -2073,6 +2220,7 @@ impl Editor {
 
                             for k in start..idx {
                                 syntax_colors.push(color.color_at(k - start, idx - start));
+                                syntax_modifiers.push(Modifier::None);
                             }
                         }
                     } else if "+-=*/<>!:".contains(c) {
@@ -2084,12 +2232,15 @@ impl Editor {
                         for k in start..idx {
                             syntax_colors
                                 .push(theme.editor_operators.color_at(k - start, idx - start));
+                            syntax_modifiers.push(Modifier::None);
                         }
                     } else if "()[]{}".contains(c) {
                         syntax_colors.push(theme.editor_brackets.color_at(0, 1));
+                        syntax_modifiers.push(Modifier::None);
                         idx += 1;
                     } else {
                         syntax_colors.push(theme.main_label.color_at(0, 1));
+                        syntax_modifiers.push(Modifier::None);
                         idx += 1;
                     }
                 }
@@ -2121,6 +2272,8 @@ impl Editor {
                         } else {
                             Color::White
                         }
+                    } else if error_underline {
+                        theme.editor_errors.color_at(display_x as usize, inner_w)
                     } else if j < syntax_colors.len() {
                         syntax_colors[j]
                     } else {
@@ -2128,7 +2281,7 @@ impl Editor {
                     },
                     bg: if is_selected {
                         Color::DarkGray
-                    } else if is_error_line {
+                    } else if error_bg {
                         theme.editor_errors.color_at(display_x as usize, inner_w)
                     } else {
                         Color::None
@@ -2137,6 +2290,10 @@ impl Editor {
                         Modifier::Dim
                     } else if is_output_err_header {
                         Modifier::Bold
+                    } else if error_underline {
+                        Modifier::Underline
+                    } else if j < syntax_modifiers.len() && syntax_modifiers[j] != Modifier::None {
+                        syntax_modifiers[j]
                     } else {
                         Modifier::None
                     },

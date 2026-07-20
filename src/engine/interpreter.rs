@@ -1663,6 +1663,12 @@ impl Environment {
             true,
         )
         .unwrap();
+        env.define(
+            "Modifier".to_string(),
+            Value::BuiltinEnum("Modifier".to_string()),
+            true,
+        )
+        .unwrap();
         env
     }
 
@@ -1733,6 +1739,7 @@ pub struct Interpreter {
     pub env: Environment,
     cancel_token: Arc<AtomicBool>,
     focus_token: Arc<AtomicBool>,
+    rng_state: u64,
 }
 
 #[derive(PartialEq)]
@@ -1750,6 +1757,11 @@ impl Interpreter {
         cancel_token: Arc<AtomicBool>,
         focus_token: Arc<AtomicBool>,
     ) -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap();
+        let rng_state = now.as_secs() ^ (now.subsec_nanos() as u64).wrapping_shl(32);
+
         Self {
             output: Arc::new(std::sync::Mutex::new(Vec::new())),
             errors: Arc::new(std::sync::Mutex::new(Vec::new())),
@@ -1761,6 +1773,85 @@ impl Interpreter {
             env: Environment::new(),
             cancel_token,
             focus_token,
+            rng_state,
+        }
+    }
+
+    fn write_to_output(&mut self, text: &str) {
+        let mut out = self.output.lock().unwrap();
+        for c in text.chars() {
+            if c == '\n' {
+                self.caret_x = 0;
+                self.caret_y += 1;
+            } else {
+                while out.len() <= self.caret_y {
+                    out.push(String::new());
+                }
+                let line = &mut out[self.caret_y];
+                let char_count = line.chars().count();
+                if self.caret_x < char_count {
+                    let byte_idx = line.char_indices().nth(self.caret_x).unwrap().0;
+                    let next_byte_idx = line
+                        .char_indices()
+                        .nth(self.caret_x + 1)
+                        .map(|x| x.0)
+                        .unwrap_or(line.len());
+                    line.replace_range(byte_idx..next_byte_idx, &c.to_string());
+                } else {
+                    let spaces = self.caret_x - char_count;
+                    for _ in 0..spaces {
+                        line.push(' ');
+                    }
+                    line.push(c);
+                }
+                self.caret_x += 1;
+            }
+        }
+    }
+
+    fn parse_range_args(
+        &self,
+        eval_args: &[(Option<String>, Value)],
+        func_name: &str,
+        line: usize,
+    ) -> Result<(f64, f64, f64), String> {
+        match eval_args.len() {
+            1 => {
+                if let Value::Number(stop) = eval_args[0].1 {
+                    Ok((0.0, stop, 1.0))
+                } else {
+                    Err(format!("Line {}: '{}' expects numbers", line, func_name))
+                }
+            }
+            2 => {
+                if let (Value::Number(start), Value::Number(stop)) =
+                    (&eval_args[0].1, &eval_args[1].1)
+                {
+                    Ok((*start, *stop, 1.0))
+                } else {
+                    Err(format!("Line {}: '{}' expects numbers", line, func_name))
+                }
+            }
+            3 => {
+                if let (Value::Number(start), Value::Number(stop), Value::Number(step)) =
+                    (&eval_args[0].1, &eval_args[1].1, &eval_args[2].1)
+                {
+                    if *step == 0.0 {
+                        Err(format!(
+                            "Line {}: '{}' step cannot be zero",
+                            line, func_name
+                        ))
+                    } else {
+                        Ok((*start, *stop, *step))
+                    }
+                } else {
+                    Err(format!("Line {}: '{}' expects numbers", line, func_name))
+                }
+            }
+            _ => Err(format!(
+                "Line {}: '{}' expects 1 to 3 arguments",
+                line, func_name
+            )),
         }
     }
 
@@ -1927,6 +2018,12 @@ impl Interpreter {
     ) -> Result<Value, String> {
         if let Value::List(vec) = val {
             match method {
+                "len" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'len' expects 0 arguments", line));
+                    }
+                    Ok(Value::Number(vec.len() as f64))
+                }
                 "append" => {
                     if args.len() != 1 {
                         return Err(format!("Line {}: 'append' expects 1 argument", line));
@@ -2026,6 +2123,12 @@ impl Interpreter {
             }
         } else if let Value::Dict(map) = val {
             match method {
+                "len" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'len' expects 0 arguments", line));
+                    }
+                    Ok(Value::Number(map.len() as f64))
+                }
                 "clear" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'clear' expects 0 arguments", line));
@@ -2105,6 +2208,12 @@ impl Interpreter {
             }
         } else if let Value::String(s) = val {
             match method {
+                "len" => {
+                    if args.len() != 0 {
+                        return Err(format!("Line {}: 'len' expects 0 arguments", line));
+                    }
+                    Ok(Value::Number(s.chars().count() as f64))
+                }
                 "capitalize" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'capitalize' expects 0 arguments", line));
@@ -2486,6 +2595,7 @@ impl Interpreter {
                 let errors_clone = Arc::clone(&self.errors);
                 let caret_x_clone = self.caret_x;
                 let caret_y_clone = self.caret_y;
+                let next_rng_state = self.rng_state.wrapping_add(1);
 
                 std::thread::spawn(move || {
                     let (_, dummy_rx) = std::sync::mpsc::channel();
@@ -2500,6 +2610,7 @@ impl Interpreter {
                         env: async_env,
                         cancel_token: cancel_token_clone,
                         focus_token: focus_token_clone,
+                        rng_state: next_rng_state,
                     };
 
                     let _ = async_interp.exec_block(&body_clone);
@@ -2737,6 +2848,23 @@ impl Interpreter {
                         if crate::theme::themecore::parse_color(&prop).is_err() {
                             return Err(format!("Line {}: Invalid color variant '{}'", line, prop));
                         }
+                    } else if enum_name == "Modifier" {
+                        let valid_variants = [
+                            "None",
+                            "Bold",
+                            "Dim",
+                            "Italic",
+                            "Underline",
+                            "Reverse",
+                            "Hidden",
+                            "Strikethrough",
+                        ];
+                        if !valid_variants.contains(&prop.as_str()) {
+                            return Err(format!(
+                                "Line {}: Invalid variant '{}' for enum 'Modifier'",
+                                line, prop
+                            ));
+                        }
                     }
                     Ok(Value::EnumVariant(enum_name, prop.clone(), None))
                 } else {
@@ -2865,6 +2993,30 @@ impl Interpreter {
                             ));
                         }
                         return Ok(Value::EnumVariant(enum_name.clone(), method.clone(), None));
+                    } else if enum_name == "Modifier" {
+                        let valid_variants = [
+                            "None",
+                            "Bold",
+                            "Dim",
+                            "Italic",
+                            "Underline",
+                            "Reverse",
+                            "Hidden",
+                            "Strikethrough",
+                        ];
+                        if !valid_variants.contains(&method.as_str()) {
+                            return Err(format!(
+                                "Line {}: Invalid variant '{}' for enum 'Modifier'",
+                                line, method
+                            ));
+                        }
+                        if !eval_args.is_empty() {
+                            return Err(format!(
+                                "Line {}: Modifier variant does not take arguments",
+                                line
+                            ));
+                        }
+                        return Ok(Value::EnumVariant(enum_name.clone(), method.clone(), None));
                     }
                 }
 
@@ -2915,36 +3067,7 @@ impl Interpreter {
                             combined.push('\n');
                         }
 
-                        let mut out = self.output.lock().unwrap();
-                        for c in combined.chars() {
-                            if c == '\n' {
-                                self.caret_x = 0;
-                                self.caret_y += 1;
-                            } else {
-                                while out.len() <= self.caret_y {
-                                    out.push(String::new());
-                                }
-                                let line = &mut out[self.caret_y];
-                                let char_count = line.chars().count();
-                                if self.caret_x < char_count {
-                                    let byte_idx = line.char_indices().nth(self.caret_x).unwrap().0;
-                                    let next_byte_idx = line
-                                        .char_indices()
-                                        .nth(self.caret_x + 1)
-                                        .map(|x| x.0)
-                                        .unwrap_or(line.len());
-                                    line.replace_range(byte_idx..next_byte_idx, &c.to_string());
-                                } else {
-                                    let spaces = self.caret_x - char_count;
-                                    for _ in 0..spaces {
-                                        line.push(' ');
-                                    }
-                                    line.push(c);
-                                }
-                                self.caret_x += 1;
-                            }
-                        }
-                        drop(out);
+                        self.write_to_output(&combined);
 
                         self.send_output();
                         return Ok(Value::Nil);
@@ -2996,48 +3119,8 @@ impl Interpreter {
                         return Ok(Value::Nil);
                     }
                     "range" => {
-                        let (start, stop, step) = match eval_args.len() {
-                            1 => {
-                                if let Value::Number(stop) = eval_args[0].1 {
-                                    (0.0, stop, 1.0)
-                                } else {
-                                    return Err(format!("Line {}: 'range' expects numbers", line));
-                                }
-                            }
-                            2 => {
-                                if let (Value::Number(start), Value::Number(stop)) =
-                                    (&eval_args[0].1, &eval_args[1].1)
-                                {
-                                    (*start, *stop, 1.0)
-                                } else {
-                                    return Err(format!("Line {}: 'range' expects numbers", line));
-                                }
-                            }
-                            3 => {
-                                if let (
-                                    Value::Number(start),
-                                    Value::Number(stop),
-                                    Value::Number(step),
-                                ) = (&eval_args[0].1, &eval_args[1].1, &eval_args[2].1)
-                                {
-                                    if *step == 0.0 {
-                                        return Err(format!(
-                                            "Line {}: 'range' step cannot be zero",
-                                            line
-                                        ));
-                                    }
-                                    (*start, *stop, *step)
-                                } else {
-                                    return Err(format!("Line {}: 'range' expects numbers", line));
-                                }
-                            }
-                            _ => {
-                                return Err(format!(
-                                    "Line {}: 'range' expects 1 to 3 arguments",
-                                    line
-                                ));
-                            }
-                        };
+                        let (start, stop, step) =
+                            self.parse_range_args(&eval_args, "range", *line)?;
 
                         let mut items = Vec::new();
                         let mut curr = start;
@@ -3054,40 +3137,33 @@ impl Interpreter {
                         }
                         return Ok(Value::List(items));
                     }
+                    "random" => {
+                        let (start, stop, step) =
+                            self.parse_range_args(&eval_args, "random", *line)?;
+
+                        let steps = if step > 0.0 {
+                            ((stop - start) / step).ceil()
+                        } else {
+                            ((stop - start) / step).ceil()
+                        };
+
+                        if steps <= 0.0 {
+                            return Err(format!("Line {}: 'random' empty range", line));
+                        }
+
+                        self.rng_state = self
+                            .rng_state
+                            .wrapping_mul(6364136223846793005)
+                            .wrapping_add(1);
+                        let r = (self.rng_state >> 11) as f64 / (1u64 << 53) as f64;
+                        let choice = (r * steps).floor();
+
+                        return Ok(Value::Number(start + choice * step));
+                    }
                     "input" => {
                         if !eval_args.is_empty() {
                             let prompt = eval_args[0].1.to_string();
-                            let mut out = self.output.lock().unwrap();
-                            for c in prompt.chars() {
-                                if c == '\n' {
-                                    self.caret_x = 0;
-                                    self.caret_y += 1;
-                                } else {
-                                    while out.len() <= self.caret_y {
-                                        out.push(String::new());
-                                    }
-                                    let line = &mut out[self.caret_y];
-                                    let char_count = line.chars().count();
-                                    if self.caret_x < char_count {
-                                        let byte_idx =
-                                            line.char_indices().nth(self.caret_x).unwrap().0;
-                                        let next_byte_idx = line
-                                            .char_indices()
-                                            .nth(self.caret_x + 1)
-                                            .map(|x| x.0)
-                                            .unwrap_or(line.len());
-                                        line.replace_range(byte_idx..next_byte_idx, &c.to_string());
-                                    } else {
-                                        let spaces = self.caret_x - char_count;
-                                        for _ in 0..spaces {
-                                            line.push(' ');
-                                        }
-                                        line.push(c);
-                                    }
-                                    self.caret_x += 1;
-                                }
-                            }
-                            drop(out);
+                            self.write_to_output(&prompt);
                         }
                         self.send_output();
 
@@ -3109,36 +3185,7 @@ impl Interpreter {
                             }
                         };
 
-                        let mut out = self.output.lock().unwrap();
-                        for c in result.chars() {
-                            if c == '\n' {
-                                self.caret_x = 0;
-                                self.caret_y += 1;
-                            } else {
-                                while out.len() <= self.caret_y {
-                                    out.push(String::new());
-                                }
-                                let line = &mut out[self.caret_y];
-                                let char_count = line.chars().count();
-                                if self.caret_x < char_count {
-                                    let byte_idx = line.char_indices().nth(self.caret_x).unwrap().0;
-                                    let next_byte_idx = line
-                                        .char_indices()
-                                        .nth(self.caret_x + 1)
-                                        .map(|x| x.0)
-                                        .unwrap_or(line.len());
-                                    line.replace_range(byte_idx..next_byte_idx, &c.to_string());
-                                } else {
-                                    let spaces = self.caret_x - char_count;
-                                    for _ in 0..spaces {
-                                        line.push(' ');
-                                    }
-                                    line.push(c);
-                                }
-                                self.caret_x += 1;
-                            }
-                        }
-                        drop(out);
+                        self.write_to_output(&result);
 
                         return Ok(Value::String(result));
                     }

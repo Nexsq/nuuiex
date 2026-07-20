@@ -561,6 +561,25 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     ),
                 },
                 Setting {
+                    name: "Auto Indent",
+                    key: "edit_auto_indent",
+                    kind: SettingType::Choice(
+                        vec!["true".to_string(), "false".to_string()],
+                        if config.edit_auto_indent { 0 } else { 1 },
+                    ),
+                },
+                Setting {
+                    name: "Error Highlight",
+                    key: "edit_error_highlight",
+                    kind: SettingType::Choice(
+                        vec!["background".to_string(), "underline".to_string()],
+                        match config.edit_error_highlight.as_str() {
+                            "underline" => 1,
+                            _ => 0,
+                        },
+                    ),
+                },
+                Setting {
                     name: "Insert Mode",
                     key: "bind_edit_insert",
                     kind: SettingType::Custom {
@@ -893,6 +912,8 @@ pub fn settings_modal(
                 apply_setting!(config, set, bool "monitor_icons", monitor_icons);
 
                 apply_setting!(config, set, bool "edit_tab_backspace", edit_tab_backspace);
+                apply_setting!(config, set, bool "edit_auto_indent", edit_auto_indent);
+                apply_setting!(config, set, choice "edit_error_highlight", edit_error_highlight);
                 apply_setting!(config, set, char "bind_edit_insert", bind_edit_insert);
                 apply_setting!(config, set, char "bind_edit_visual", bind_edit_visual);
                 apply_setting!(config, set, char "bind_edit_fold", bind_edit_fold);

@@ -13,6 +13,7 @@ impl Analyzer {
         let mut root_scope = HashSet::new();
         root_scope.insert("Key".to_string());
         root_scope.insert("Color".to_string());
+        root_scope.insert("Modifier".to_string());
         Self {
             errors: Vec::new(),
             error_lines: HashSet::new(),
@@ -246,6 +247,23 @@ impl Analyzer {
                         if crate::theme::themecore::parse_color(prop).is_err() {
                             self.error(*line, format!("Invalid color variant '{}'", prop));
                         }
+                    } else if name == "Modifier" {
+                        let valid_variants = [
+                            "None",
+                            "Bold",
+                            "Dim",
+                            "Italic",
+                            "Underline",
+                            "Reverse",
+                            "Hidden",
+                            "Strikethrough",
+                        ];
+                        if !valid_variants.contains(&prop.as_str()) {
+                            self.error(
+                                *line,
+                                format!("Invalid variant '{}' for enum 'Modifier'", prop),
+                            );
+                        }
                     }
                 }
             }
@@ -314,6 +332,29 @@ impl Analyzer {
                         }
                         if !args.is_empty() {
                             self.error(*line, "Color variant does not take arguments".to_string());
+                        }
+                    } else if name == "Modifier" {
+                        let valid_variants = [
+                            "None",
+                            "Bold",
+                            "Dim",
+                            "Italic",
+                            "Underline",
+                            "Reverse",
+                            "Hidden",
+                            "Strikethrough",
+                        ];
+                        if !valid_variants.contains(&method.as_str()) {
+                            self.error(
+                                *line,
+                                format!("Invalid variant '{}' for enum 'Modifier'", method),
+                            );
+                        }
+                        if !args.is_empty() {
+                            self.error(
+                                *line,
+                                "Modifier variant does not take arguments".to_string(),
+                            );
                         }
                     }
                 }

@@ -1,3 +1,1 @@
 Add macro data
-
-add random generation function
