@@ -2203,11 +2203,8 @@ impl Interpreter {
                     if args.len() != 2 {
                         return Err(format!("Line {}: 'set' expects 2 arguments", line));
                     }
-                    let res = map
-                        .entry(args[0].clone())
-                        .or_insert(args[1].clone())
-                        .clone();
-                    Ok(res)
+                    map.insert(args[0].clone(), args[1].clone());
+                    Ok(Value::Dict(map.clone()))
                 }
                 _ => Err(format!("Line {}: Undefined dict method '{}'", line, method)),
             }
