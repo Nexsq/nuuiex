@@ -1908,7 +1908,7 @@ impl Editor {
             if target_y > 0 && target_y == self.state.lines.len().saturating_sub(1) {
                 if self.state.lines[target_y].is_empty() {
                     target_y -= 1;
-                    target_x = self.state.lines[target_y].chars().count();
+                    target_x = 0;
                 }
             }
             if target_y < self.state.lines.len() {
@@ -1930,10 +1930,76 @@ impl Editor {
             self.scroll_y = cursor_d_idx - text_inner_h + 1;
         }
 
+        let mut eff_len = d_lines.len();
+        if self.is_output && !config.show_caret && !self.is_waiting_for_input {
+            if eff_len > 0 && self.state.lines.last().map_or(false, |l| l.is_empty()) {
+                eff_len -= 1;
+            }
+        }
+        let max_scroll_y = eff_len.saturating_sub(text_inner_h);
+        if self.scroll_y > max_scroll_y {
+            self.scroll_y = max_scroll_y;
+        }
+
         if target_x < self.scroll_x {
             self.scroll_x = target_x;
         } else if target_x >= self.scroll_x + text_inner_w && text_inner_w > 0 {
             self.scroll_x = target_x - text_inner_w + 1;
+        }
+
+        let mut max_line_len = if self.is_output {
+            self.state
+                .lines
+                .iter()
+                .map(|l| {
+                    let mut len = 0;
+                    let mut chars = l.chars().peekable();
+                    while let Some(c) = chars.next() {
+                        if c == '{' {
+                            let mut valid = false;
+                            let mut lookahead = chars.clone();
+                            let mut tag = String::new();
+                            while let Some(nc) = lookahead.next() {
+                                if nc == '}' {
+                                    valid = true;
+                                    break;
+                                }
+                                tag.push(nc);
+                            }
+                            if valid && (tag.starts_with("Color:") || tag.starts_with("Modifier:"))
+                            {
+                                for _ in 0..=tag.len() {
+                                    chars.next();
+                                }
+                                continue;
+                            }
+                        }
+                        len += 1;
+                    }
+                    len
+                })
+                .max()
+                .unwrap_or(0)
+        } else {
+            self.state
+                .lines
+                .iter()
+                .map(|l| l.chars().count())
+                .max()
+                .unwrap_or(0)
+        };
+
+        if self.is_output && self.is_waiting_for_input {
+            let input_len = self.input_buffer.chars().count() + 1;
+            let cursor_line_len = self.state.cursor_x + input_len;
+            if cursor_line_len > max_line_len {
+                max_line_len = cursor_line_len;
+            }
+        }
+
+        let max_scroll_x = max_line_len.saturating_sub(text_inner_w);
+        if self.scroll_x > max_scroll_x {
+            self.scroll_x = max_scroll_x;
         }
 
         let selection = self.get_selection_bounds();
