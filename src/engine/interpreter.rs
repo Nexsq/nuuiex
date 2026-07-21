@@ -1731,8 +1731,7 @@ impl Environment {
 pub struct Interpreter {
     pub output: Arc<std::sync::Mutex<Vec<String>>>,
     pub errors: Arc<std::sync::Mutex<Vec<String>>>,
-    pub caret_x: usize,
-    pub caret_y: usize,
+    pub caret: Arc<std::sync::Mutex<(usize, usize)>>,
     tx: SyncSender<crate::EngineMessage>,
     input_rx: Receiver<String>,
     pub should_exit: bool,
@@ -1767,8 +1766,7 @@ impl Interpreter {
         Self {
             output: Arc::new(std::sync::Mutex::new(Vec::new())),
             errors: Arc::new(std::sync::Mutex::new(Vec::new())),
-            caret_x: 0,
-            caret_y: 0,
+            caret: Arc::new(std::sync::Mutex::new((0, 0))),
             tx,
             input_rx,
             should_exit: false,
@@ -1782,32 +1780,34 @@ impl Interpreter {
 
     fn write_to_output(&mut self, text: &str) {
         let mut out = self.output.lock().unwrap();
+        let mut caret = self.caret.lock().unwrap();
+
         for c in text.chars() {
             if c == '\n' {
-                self.caret_x = 0;
-                self.caret_y += 1;
+                caret.0 = 0;
+                caret.1 += 1;
             } else {
-                while out.len() <= self.caret_y {
+                while out.len() <= caret.1 {
                     out.push(String::new());
                 }
-                let line = &mut out[self.caret_y];
+                let line = &mut out[caret.1];
                 let char_count = line.chars().count();
-                if self.caret_x < char_count {
-                    let byte_idx = line.char_indices().nth(self.caret_x).unwrap().0;
+                if caret.0 < char_count {
+                    let byte_idx = line.char_indices().nth(caret.0).unwrap().0;
                     let next_byte_idx = line
                         .char_indices()
-                        .nth(self.caret_x + 1)
+                        .nth(caret.0 + 1)
                         .map(|x| x.0)
                         .unwrap_or(line.len());
                     line.replace_range(byte_idx..next_byte_idx, &c.to_string());
                 } else {
-                    let spaces = self.caret_x - char_count;
+                    let spaces = caret.0 - char_count;
                     for _ in 0..spaces {
                         line.push(' ');
                     }
                     line.push(c);
                 }
-                self.caret_x += 1;
+                caret.0 += 1;
             }
         }
     }
@@ -1861,14 +1861,15 @@ impl Interpreter {
     fn send_output(&mut self) {
         let mut out_lock = self.output.lock().unwrap();
         let err_lock = self.errors.lock().unwrap();
+        let mut caret = self.caret.lock().unwrap();
 
         if out_lock.len() > 1000 {
             let excess = out_lock.len() - 1000;
             out_lock.drain(0..excess);
-            self.caret_y = self.caret_y.saturating_sub(excess);
+            caret.1 = caret.1.saturating_sub(excess);
         }
 
-        while out_lock.len() <= self.caret_y {
+        while out_lock.len() <= caret.1 {
             out_lock.push(String::new());
         }
 
@@ -1884,16 +1885,15 @@ impl Interpreter {
         }
 
         let send_res = res.clone();
+        let cx = caret.0;
+        let cy = caret.1;
+        drop(caret);
         drop(out_lock);
         drop(err_lock);
 
         if self
             .tx
-            .send(crate::EngineMessage::Output(
-                send_res,
-                self.caret_x,
-                self.caret_y,
-            ))
+            .send(crate::EngineMessage::Output(send_res, cx, cy))
             .is_err()
         {
             self.should_exit = true;
@@ -2595,8 +2595,7 @@ impl Interpreter {
 
                 let output_clone = Arc::clone(&self.output);
                 let errors_clone = Arc::clone(&self.errors);
-                let caret_x_clone = self.caret_x;
-                let caret_y_clone = self.caret_y;
+                let caret_clone = Arc::clone(&self.caret);
                 let next_rng_state = self.rng_state.wrapping_add(1);
                 let macro_rel_path_clone = self.macro_rel_path.clone();
 
@@ -2605,8 +2604,7 @@ impl Interpreter {
                     let mut async_interp = Interpreter {
                         output: output_clone,
                         errors: errors_clone,
-                        caret_x: caret_x_clone,
-                        caret_y: caret_y_clone,
+                        caret: caret_clone,
                         tx: tx_clone,
                         input_rx: dummy_rx,
                         should_exit: false,
@@ -3494,9 +3492,15 @@ impl Interpreter {
                                 ));
                             }
                         }
-                        self.output.lock().unwrap().clear();
-                        self.caret_x = 0;
-                        self.caret_y = 0;
+
+                        let mut out = self.output.lock().unwrap();
+                        out.clear();
+                        let mut caret = self.caret.lock().unwrap();
+                        caret.0 = 0;
+                        caret.1 = 0;
+                        drop(caret);
+                        drop(out);
+
                         if do_send {
                             self.send_output();
                         }
@@ -3519,8 +3523,12 @@ impl Interpreter {
                         } else {
                             return Err(format!("Line {}: 'setcaret' y must be a number", line));
                         };
-                        self.caret_x = x;
-                        self.caret_y = y;
+
+                        let mut caret = self.caret.lock().unwrap();
+                        caret.0 = x;
+                        caret.1 = y;
+                        drop(caret);
+
                         self.send_output();
                         return Ok(Value::Nil);
                     }
