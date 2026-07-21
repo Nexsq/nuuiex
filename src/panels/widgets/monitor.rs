@@ -397,7 +397,7 @@ fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
                                 path.join("engine/rcs0/busy_time"),
                                 path.join("gt/gt0/engine/rcs0/busy_time"),
                             ];
-
+                            let mut found_busy = false;
                             for busy_path in paths_to_check {
                                 if let Ok(s) = std::fs::read_to_string(&busy_path) {
                                     if let Ok(busy_ns) = s.trim().parse::<u64>() {
@@ -416,8 +416,39 @@ fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
                                         }
                                         prev_busy.insert(busy_path.clone(), busy_ns);
                                         prev_time.insert(busy_path, now);
+                                        found_busy = true;
                                         break;
                                     }
+                                }
+                            }
+
+                            if found_busy {
+                                continue;
+                            }
+
+                            let act_path = path.join("gt_act_freq_mhz");
+                            let max_path = path.join("gt_max_freq_mhz");
+                            let min_path = path.join("gt_min_freq_mhz");
+
+                            if let (Ok(act_str), Ok(max_str)) = (
+                                std::fs::read_to_string(&act_path),
+                                std::fs::read_to_string(&max_path),
+                            ) {
+                                let act = act_str.trim().parse::<u64>().unwrap_or(0);
+                                let max = max_str.trim().parse::<u64>().unwrap_or(1);
+                                let min = std::fs::read_to_string(&min_path)
+                                    .unwrap_or_default()
+                                    .trim()
+                                    .parse::<u64>()
+                                    .unwrap_or(0);
+
+                                if max > min {
+                                    let clamped_act = act.max(min).min(max);
+                                    let usage = ((clamped_act - min) * 100) / (max - min);
+                                    max_usage = max_usage.max(usage as u8);
+                                } else if max > 0 {
+                                    let usage = (act * 100) / max;
+                                    max_usage = max_usage.max(usage.clamp(0, 100) as u8);
                                 }
                             }
                         }

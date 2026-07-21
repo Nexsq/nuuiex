@@ -16,6 +16,62 @@ fn calculate_hash(lines: &[String]) -> u64 {
     hasher.finish()
 }
 
+fn set_clipboard(text: String) {
+    if let Ok(mut cb) = Clipboard::new() {
+        if cb.set_text(text.clone()).is_ok() {
+            return;
+        }
+    }
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        use std::io::Write;
+        if let Ok(mut child) = std::process::Command::new("wl-copy")
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+        {
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(text.as_bytes());
+            }
+            let _ = child.wait();
+            return;
+        }
+    }
+    use std::io::Write;
+    if let Ok(mut child) = std::process::Command::new("xclip")
+        .args(["-selection", "clipboard", "-i"])
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+    {
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        let _ = child.wait();
+    }
+}
+
+fn get_clipboard() -> Option<String> {
+    if let Ok(mut cb) = Clipboard::new() {
+        if let Ok(text) = cb.get_text() {
+            return Some(text);
+        }
+    }
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        if let Ok(output) = std::process::Command::new("wl-paste").output() {
+            if output.status.success() {
+                return Some(String::from_utf8_lossy(&output.stdout).into_owned());
+            }
+        }
+    }
+    if let Ok(output) = std::process::Command::new("xclip")
+        .args(["-selection", "clipboard", "-o"])
+        .output()
+    {
+        if output.status.success() {
+            return Some(String::from_utf8_lossy(&output.stdout).into_owned());
+        }
+    }
+    None
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Mode {
     Command,
@@ -57,7 +113,6 @@ pub struct Editor {
     pub saved_scroll_y: usize,
     pub saved_folded_lines: HashSet<usize>,
     pub rel_path: String,
-    pub clipboard: Option<Clipboard>,
     pub saved_hash: u64,
     pub is_dirty_flag: bool,
 
@@ -116,7 +171,6 @@ impl Editor {
             saved_scroll_y: 0,
             saved_folded_lines: HashSet::new(),
             rel_path: String::new(),
-            clipboard: Clipboard::new().ok(),
             saved_hash: 0,
             is_dirty_flag: false,
             folded_lines: HashSet::new(),
@@ -1182,54 +1236,50 @@ impl Editor {
     fn copy_current_line(&mut self) {
         let mut line = self.state.lines[self.state.cursor_y].clone();
         line.push('\n');
-        if let Some(cb) = &mut self.clipboard {
-            let _ = cb.set_text(line);
-        }
+        set_clipboard(line);
     }
 
     fn paste_from_clipboard(&mut self) {
-        if let Some(cb) = &mut self.clipboard {
-            if let Ok(text) = cb.get_text() {
-                let lines_to_insert: Vec<&str> = text.split('\n').collect();
-                if lines_to_insert.is_empty() {
-                    return;
+        if let Some(text) = get_clipboard() {
+            let lines_to_insert: Vec<&str> = text.split('\n').collect();
+            if lines_to_insert.is_empty() {
+                return;
+            }
+
+            let line = &mut self.state.lines[self.state.cursor_y];
+            let byte_idx = line
+                .char_indices()
+                .nth(self.state.cursor_x)
+                .map(|(i, _)| i)
+                .unwrap_or(line.len());
+            let after = line.split_off(byte_idx);
+
+            if lines_to_insert.len() == 1 {
+                let cleaned = lines_to_insert[0].replace('\r', "");
+                self.state.lines[self.state.cursor_y].push_str(&cleaned);
+                self.state.cursor_x += cleaned.chars().count();
+                self.state.lines[self.state.cursor_y].push_str(&after);
+            } else {
+                let first_cleaned = lines_to_insert[0].replace('\r', "");
+                self.state.lines[self.state.cursor_y].push_str(&first_cleaned);
+
+                let mut new_lines = Vec::new();
+                for i in 1..lines_to_insert.len() - 1 {
+                    new_lines.push(lines_to_insert[i].replace('\r', ""));
                 }
 
-                let line = &mut self.state.lines[self.state.cursor_y];
-                let byte_idx = line
-                    .char_indices()
-                    .nth(self.state.cursor_x)
-                    .map(|(i, _)| i)
-                    .unwrap_or(line.len());
-                let after = line.split_off(byte_idx);
+                let last_cleaned = lines_to_insert.last().unwrap().replace('\r', "");
+                self.state.cursor_x = last_cleaned.chars().count();
 
-                if lines_to_insert.len() == 1 {
-                    let cleaned = lines_to_insert[0].replace('\r', "");
-                    self.state.lines[self.state.cursor_y].push_str(&cleaned);
-                    self.state.cursor_x += cleaned.chars().count();
-                    self.state.lines[self.state.cursor_y].push_str(&after);
-                } else {
-                    let first_cleaned = lines_to_insert[0].replace('\r', "");
-                    self.state.lines[self.state.cursor_y].push_str(&first_cleaned);
+                let mut final_line = String::new();
+                final_line.push_str(&last_cleaned);
+                final_line.push_str(&after);
+                new_lines.push(final_line);
 
-                    let mut new_lines = Vec::new();
-                    for i in 1..lines_to_insert.len() - 1 {
-                        new_lines.push(lines_to_insert[i].replace('\r', ""));
-                    }
-
-                    let last_cleaned = lines_to_insert.last().unwrap().replace('\r', "");
-                    self.state.cursor_x = last_cleaned.chars().count();
-
-                    let mut final_line = String::new();
-                    final_line.push_str(&last_cleaned);
-                    final_line.push_str(&after);
-                    new_lines.push(final_line);
-
-                    let insert_idx = self.state.cursor_y + 1;
-                    self.shift_folds(insert_idx, (lines_to_insert.len() - 1) as isize);
-                    self.state.lines.splice(insert_idx..insert_idx, new_lines);
-                    self.state.cursor_y += lines_to_insert.len() - 1;
-                }
+                let insert_idx = self.state.cursor_y + 1;
+                self.shift_folds(insert_idx, (lines_to_insert.len() - 1) as isize);
+                self.state.lines.splice(insert_idx..insert_idx, new_lines);
+                self.state.cursor_y += lines_to_insert.len() - 1;
             }
         }
     }
@@ -1425,9 +1475,7 @@ impl Editor {
                     }
                 }
             }
-            if let Some(cb) = &mut self.clipboard {
-                let _ = cb.set_text(text);
-            }
+            set_clipboard(text);
         }
     }
 
