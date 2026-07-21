@@ -34,6 +34,7 @@
 6. [Configuration & Theming](#-configuration--theming)
     - [1. Theming (themes/*.conf)](#1-theming-themesconf)
     - [2. Config (config.conf)](#2-config-configconf)
+7. [Examples](#-examples)
 8. [Building & Installation](#-building--installation)
 
 ---
@@ -392,7 +393,7 @@ Settings are configured via the built-in **Settings Modal**, but can also be man
 
 ## ▪ Examples
 
-**1. Basic Auto-Clicker**
+**Basic Auto-Clicker**
 ```python
 # Press 'esc' to stop the macro at any time!
 let clicks = 0
@@ -410,7 +411,7 @@ loop:
     clicks += 1
 ```
 
-**2. Persistent Data Storage**
+**Persistent Data Storage**
 ```python
 # Load saved data
 let data = macrodata()
@@ -425,7 +426,7 @@ macrodata(data)
 println("You have run this macro {runs} times!")
 ```
 
-**3. Pixel Bot**
+**Pixel Bot**
 ```python
 let target_color = Color:ff0055
 
