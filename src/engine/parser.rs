@@ -554,7 +554,10 @@ impl Parser {
             } else if !self.in_dict_key
                 && (self.check(&TokenKind::DoubleColon) || self.check(&TokenKind::Colon))
                 && (matches!(self.peek_next_kind(), Some(TokenKind::Ident(_)))
-                    || matches!(self.peek_next_kind(), Some(TokenKind::Number(_))))
+                    || matches!(self.peek_next_kind(), Some(TokenKind::Number(_)))
+                    || matches!(self.peek_next_kind(), Some(TokenKind::NoneValue))
+                    || matches!(self.peek_next_kind(), Some(TokenKind::True))
+                    || matches!(self.peek_next_kind(), Some(TokenKind::False)))
             {
                 let is_double = self.check(&TokenKind::DoubleColon);
                 let line = self.advance().line;
@@ -567,6 +570,9 @@ impl Parser {
                             n.to_string()
                         }
                     }
+                    TokenKind::NoneValue => "None".to_string(),
+                    TokenKind::True => "True".to_string(),
+                    TokenKind::False => "False".to_string(),
                     _ => unreachable!(),
                 };
                 self.advance();

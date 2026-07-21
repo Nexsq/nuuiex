@@ -1333,6 +1333,34 @@ struct XImage {
 }
 
 #[cfg(target_os = "linux")]
+#[repr(C)]
+struct XWindowAttributes {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub border_width: i32,
+    pub depth: i32,
+    pub visual: *mut libc::c_void,
+    pub root: libc::c_ulong,
+    pub class: i32,
+    pub bit_gravity: i32,
+    pub win_gravity: i32,
+    pub backing_store: i32,
+    pub backing_planes: libc::c_ulong,
+    pub backing_pixel: libc::c_ulong,
+    pub save_under: i32,
+    pub colormap: libc::c_ulong,
+    pub map_installed: i32,
+    pub map_state: i32,
+    pub all_event_masks: libc::c_long,
+    pub your_event_mask: libc::c_long,
+    pub do_not_propagate_mask: libc::c_long,
+    pub override_redirect: i32,
+    pub screen: *mut libc::c_void,
+}
+
+#[cfg(target_os = "linux")]
 struct X11PixelContext {
     lib: *mut libc::c_void,
     display: *mut libc::c_void,
