@@ -469,3 +469,7 @@ To build portable:
 ```bash
 cargo build --release --features portable
 ```
+
+***
+
+huge thanks to [@Grengorio](https://github.com/Grengorio) for bug hunting
