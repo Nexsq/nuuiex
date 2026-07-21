@@ -372,6 +372,11 @@ fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
             let _ = child.wait();
         }
 
+        let mut prev_busy: std::collections::HashMap<std::path::PathBuf, u64> =
+            std::collections::HashMap::new();
+        let mut prev_time: std::collections::HashMap<std::path::PathBuf, std::time::Instant> =
+            std::collections::HashMap::new();
+
         loop {
             let mut max_usage: u8 = 0;
             if let Ok(entries) = std::fs::read_dir("/sys/class/drm") {
@@ -380,10 +385,39 @@ fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
                     if let Some(name) = path.file_name() {
                         let name_str = name.to_string_lossy();
                         if name_str.starts_with("card") && !name_str.contains('-') {
-                            let busy_path = path.join("device/gpu_busy_percent");
-                            if let Ok(s) = std::fs::read_to_string(&busy_path) {
+                            let busy_percent_path = path.join("device/gpu_busy_percent");
+                            if let Ok(s) = std::fs::read_to_string(&busy_percent_path) {
                                 if let Ok(usage) = s.trim().parse::<u8>() {
                                     max_usage = max_usage.max(usage);
+                                    continue;
+                                }
+                            }
+
+                            let paths_to_check = [
+                                path.join("engine/rcs0/busy_time"),
+                                path.join("gt/gt0/engine/rcs0/busy_time"),
+                            ];
+
+                            for busy_path in paths_to_check {
+                                if let Ok(s) = std::fs::read_to_string(&busy_path) {
+                                    if let Ok(busy_ns) = s.trim().parse::<u64>() {
+                                        let now = std::time::Instant::now();
+                                        if let (Some(&p_busy), Some(&p_time)) =
+                                            (prev_busy.get(&busy_path), prev_time.get(&busy_path))
+                                        {
+                                            let elapsed_ns =
+                                                now.duration_since(p_time).as_nanos() as u64;
+                                            if elapsed_ns > 0 {
+                                                let busy_diff = busy_ns.saturating_sub(p_busy);
+                                                let usage = (busy_diff * 100) / elapsed_ns;
+                                                max_usage =
+                                                    max_usage.max(usage.clamp(0, 100) as u8);
+                                            }
+                                        }
+                                        prev_busy.insert(busy_path.clone(), busy_ns);
+                                        prev_time.insert(busy_path, now);
+                                        break;
+                                    }
                                 }
                             }
                         }
