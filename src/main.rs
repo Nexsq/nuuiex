@@ -331,14 +331,24 @@ fn main() {
                                 continue;
                             }
 
-                            if editor.mode == nuui::editor::Mode::Insert && key == Key::Tab {
+                            if editor.mode == nuui::editor::Mode::Insert
+                                && (key == Key::Tab || key == Key::ShiftTab)
+                            {
+                                let was_dirty = editor.is_dirty();
                                 editor.handle_key(key, &config);
+                                let is_dirty = editor.is_dirty();
+                                if was_dirty != is_dirty {
+                                    main_view.refresh_list(&config);
+                                }
                                 main_view.refresh_main(&config);
                                 dirty = true;
                                 continue;
                             }
 
+                            let was_dirty = editor.is_dirty();
                             let saved = editor.handle_key(key, &config);
+                            let is_dirty = editor.is_dirty();
+
                             if saved {
                                 if let Some(path) = editor.file_path.clone() {
                                     for i in 0..6 {
@@ -349,6 +359,10 @@ fn main() {
                                         }
                                     }
                                 }
+                            }
+
+                            if was_dirty != is_dirty || saved {
+                                main_view.refresh_list(&config);
                             }
 
                             main_view.refresh_main(&config);
@@ -458,7 +472,7 @@ fn main() {
                             main_view.library_root = l.root_path;
                         }
                         main_view.auto_load();
-                        main_view.update_min_h(&config);
+                        main_view.update_min_sizes(&config);
                         main_view.resize(term_w, term_h, &config);
 
                         if should_quit {

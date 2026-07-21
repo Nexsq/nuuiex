@@ -1638,7 +1638,7 @@ pub fn settings_modal(
                 match crate::theme::themecore::init(&config.theme) {
                     Ok(new_theme) => {
                         main_view.theme = new_theme;
-                        main_view.update_min_h(config);
+                        main_view.update_min_sizes(config);
 
                         let (term_w, term_h) = Terminal::size();
                         main_view.resize(term_w, term_h, config);
@@ -1708,7 +1708,7 @@ pub fn settings_modal(
                 prev_deck_mode = config.deck_mode.clone();
                 prev_deck_widget = config.deck_widget.clone();
             } else {
-                main_view.update_min_h(config);
+                main_view.update_min_sizes(config);
                 let (term_w, term_h) = Terminal::size();
                 main_view.resize(term_w, term_h, config);
             }

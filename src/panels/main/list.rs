@@ -37,6 +37,7 @@ pub fn refresh(
     list_selected: &mut usize,
     list_scroll: &mut usize,
     editing_path: Option<&std::path::Path>,
+    is_dirty: bool,
     config: &Config,
     theme: &Theme,
     list_input: &ListInputMode,
@@ -427,7 +428,11 @@ pub fn refresh(
         }
 
         if is_editing_this {
-            text.push_str(" •");
+            if is_dirty {
+                text.push_str(" ◦");
+            } else {
+                text.push_str(" •");
+            }
         }
 
         let display_y = (display_line - *list_scroll) as i16;

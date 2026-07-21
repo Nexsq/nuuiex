@@ -135,7 +135,7 @@ impl MainView {
             list_input: ListInputMode::None,
         };
 
-        view.update_min_h(config);
+        view.update_min_sizes(config);
         view.auto_load();
         view.resize(term_w, term_h, config);
         view
@@ -202,9 +202,10 @@ impl MainView {
         anim
     }
 
-    pub fn update_min_h(&mut self, config: &Config) {
+    pub fn update_min_sizes(&mut self, config: &Config) {
         let (_, deck_h) = self.get_layout_heights(config);
         self.min_h = 13 + deck_h;
+        self.min_w = (config.lib_width as u16 + layout::TABS_W + 36).max(64);
     }
 
     pub fn get_selected_node(&self) -> Option<&MacroNode> {
@@ -354,7 +355,7 @@ impl MainView {
     pub fn resize(&mut self, term_w: u16, term_h: u16, config: &Config) {
         self.term_w = term_w;
         self.term_h = term_h;
-        self.update_min_h(config);
+        self.update_min_sizes(config);
 
         let (header_h, deck_h) = self.get_layout_heights(config);
 
@@ -406,6 +407,8 @@ impl MainView {
             .as_deref()
             .or(self.editors[self.current_tab].file_path.as_deref());
 
+        let is_dirty = self.editors[self.current_tab].is_dirty();
+
         self.list_box = list::refresh(
             self.term_h,
             header_h,
@@ -415,6 +418,7 @@ impl MainView {
             &mut self.list_selected[self.current_tab],
             &mut self.list_scroll[self.current_tab],
             active_path,
+            is_dirty,
             config,
             &self.theme,
             &self.list_input,

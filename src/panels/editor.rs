@@ -1,10 +1,20 @@
-use arboard::Clipboard;
-use std::collections::HashSet;
-use std::fs;
-use std::path::PathBuf;
-
 use crate::conf::Config;
 use crate::{Box, Color, Gradient, Key, Modifier, Style, theme::themecore::Theme};
+use arboard::Clipboard;
+use std::collections::HashSet;
+use std::collections::hash_map::DefaultHasher;
+use std::fs;
+use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
+
+fn calculate_hash(lines: &[String]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    for line in lines {
+        line.hash(&mut hasher);
+        '\n'.hash(&mut hasher);
+    }
+    hasher.finish()
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Mode {
@@ -48,6 +58,8 @@ pub struct Editor {
     pub saved_folded_lines: HashSet<usize>,
     pub rel_path: String,
     pub clipboard: Option<Clipboard>,
+    pub saved_hash: u64,
+    pub is_dirty_flag: bool,
 
     pub folded_lines: HashSet<usize>,
 
@@ -105,6 +117,8 @@ impl Editor {
             saved_folded_lines: HashSet::new(),
             rel_path: String::new(),
             clipboard: Clipboard::new().ok(),
+            saved_hash: 0,
+            is_dirty_flag: false,
             folded_lines: HashSet::new(),
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -167,6 +181,9 @@ impl Editor {
                 self.is_editing = edit;
                 self.is_output = false;
 
+                self.saved_hash = calculate_hash(&self.state.lines);
+                self.is_dirty_flag = false;
+
                 if edit {
                     if self.last_edited_path.as_deref() != Some(path.as_path()) {
                         self.undo_stack.clear();
@@ -194,6 +211,9 @@ impl Editor {
                 self.is_editing = false;
                 self.is_output = false;
                 self.folded_lines.clear();
+
+                self.saved_hash = 0;
+                self.is_dirty_flag = false;
 
                 if edit {
                     self.undo_stack.clear();
@@ -227,6 +247,8 @@ impl Editor {
                         .collect()
                 };
                 self.state.lines = lines;
+                self.saved_hash = calculate_hash(&self.state.lines);
+                self.is_dirty_flag = false;
                 self.folded_lines.clear();
                 self.clamp_cursor();
                 self.refresh_analysis(self.is_editing);
@@ -237,9 +259,16 @@ impl Editor {
     pub fn save(&mut self) {
         if let Some(path) = &self.file_path {
             let content = self.state.lines.join("\n");
-            let _ = fs::write(path, content);
+            if fs::write(path, content).is_ok() {
+                self.saved_hash = calculate_hash(&self.state.lines);
+                self.is_dirty_flag = false;
+            }
             self.refresh_analysis(true);
         }
+    }
+
+    pub fn is_dirty(&self) -> bool {
+        self.is_dirty_flag
     }
 
     fn reset_keys(&mut self) {
@@ -414,6 +443,7 @@ impl Editor {
     pub fn handle_key(&mut self, key: Key, config: &Config) -> bool {
         let mut saved = false;
         let mut needs_analysis = false;
+        let mut is_undo_redo = false;
 
         match self.mode {
             Mode::LineSearch => match key {
@@ -644,6 +674,7 @@ impl Editor {
                             self.redo_stack.push((old_state, old_folds, a));
                             self.last_edit_pos = None;
                             needs_analysis = true;
+                            is_undo_redo = true;
                         }
                     }
                     k if k == Key::Char(config.bind_edit_redo) => {
@@ -653,6 +684,7 @@ impl Editor {
                             self.undo_stack.push((old_state, old_folds, a));
                             self.last_edit_pos = None;
                             needs_analysis = true;
+                            is_undo_redo = true;
                         }
                     }
                     k if k == Key::Char(config.bind_edit_save) => {
@@ -662,6 +694,12 @@ impl Editor {
                     Key::Tab => {
                         if self.visual_mode {
                             self.indent_selection();
+                            needs_analysis = true;
+                        }
+                    }
+                    Key::ShiftTab => {
+                        if self.visual_mode {
+                            self.unindent_selection();
                             needs_analysis = true;
                         }
                     }
@@ -789,6 +827,10 @@ impl Editor {
                     }
                     needs_analysis = true;
                 }
+                Key::ShiftTab => {
+                    self.unindent_current_line();
+                    needs_analysis = true;
+                }
                 Key::Left => self.move_cursor(-1, 0, false),
                 Key::Right => self.move_cursor(1, 0, false),
                 Key::Up => self.move_cursor(0, -1, false),
@@ -802,6 +844,11 @@ impl Editor {
         }
 
         if needs_analysis {
+            if is_undo_redo {
+                self.is_dirty_flag = calculate_hash(&self.state.lines) != self.saved_hash;
+            } else if !self.is_dirty_flag {
+                self.is_dirty_flag = calculate_hash(&self.state.lines) != self.saved_hash;
+            }
             self.refresh_analysis(saved);
         }
 
@@ -1222,6 +1269,63 @@ impl Editor {
                 sel.0 += 4;
             }
 
+            self.clamp_cursor();
+        }
+    }
+
+    fn unindent_selection(&mut self) {
+        if let Some((start, end)) = self.get_selection_bounds() {
+            self.push_undo(EditAction::Bulk);
+            for y in start.1..=end.1 {
+                let (spaces, byte_idx) = {
+                    let line = &self.state.lines[y];
+                    let spaces = line.chars().take_while(|c| *c == ' ').count().min(4);
+                    let byte_idx = if spaces > 0 {
+                        line.char_indices()
+                            .nth(spaces)
+                            .map(|(i, _)| i)
+                            .unwrap_or(line.len())
+                    } else {
+                        0
+                    };
+                    (spaces, byte_idx)
+                };
+
+                if spaces > 0 {
+                    let new_line = self.state.lines[y][byte_idx..].to_string();
+                    self.state.lines[y] = new_line;
+                }
+            }
+
+            self.state.cursor_x = self.state.cursor_x.saturating_sub(4);
+            if let Some(sel) = self.state.selection_start.as_mut() {
+                sel.0 = sel.0.saturating_sub(4);
+            }
+            self.clamp_cursor();
+        }
+    }
+
+    fn unindent_current_line(&mut self) {
+        let y = self.state.cursor_y;
+        let (spaces, byte_idx) = {
+            let line = &self.state.lines[y];
+            let spaces = line.chars().take_while(|c| *c == ' ').count().min(4);
+            let byte_idx = if spaces > 0 {
+                line.char_indices()
+                    .nth(spaces)
+                    .map(|(i, _)| i)
+                    .unwrap_or(line.len())
+            } else {
+                0
+            };
+            (spaces, byte_idx)
+        };
+
+        if spaces > 0 {
+            self.push_undo(EditAction::Char(true));
+            let new_line = self.state.lines[y][byte_idx..].to_string();
+            self.state.lines[y] = new_line;
+            self.state.cursor_x = self.state.cursor_x.saturating_sub(spaces);
             self.clamp_cursor();
         }
     }
@@ -1665,15 +1769,43 @@ impl Editor {
             );
 
             if !self.rel_path.is_empty() {
-                b.insert_text(
-                    &format!(" {} ", self.rel_path),
-                    2 + mode_str.len() as i16,
-                    -1,
-                    false,
-                    theme.main_label.clone(),
-                    Gradient::Solid(Color::None),
-                    Modifier::Bold,
-                );
+                let start_x = 2 + mode_str.len() as u16;
+                let max_insert_len = (width.saturating_sub(start_x + 3)) as usize;
+
+                let mut display_path = self.rel_path.clone();
+                let path_chars = display_path.chars().count();
+
+                if path_chars + 2 > max_insert_len {
+                    if max_insert_len >= 4 {
+                        let keep = max_insert_len - 4;
+                        display_path = display_path.chars().take(keep).collect();
+                        display_path.push_str("..");
+                    } else {
+                        display_path.clear();
+                    }
+                }
+
+                if !display_path.is_empty() {
+                    b.insert_text(
+                        &format!(" {} ", display_path),
+                        start_x as i16,
+                        -1,
+                        false,
+                        theme.main_label.clone(),
+                        Gradient::Solid(Color::None),
+                        Modifier::Bold,
+                    );
+                } else {
+                    b.insert_text(
+                        " ",
+                        start_x as i16,
+                        -1,
+                        false,
+                        theme.main_label.clone(),
+                        Gradient::Solid(Color::None),
+                        Modifier::Bold,
+                    );
+                }
             } else {
                 b.insert_text(
                     " ",
