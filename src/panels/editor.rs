@@ -11,6 +11,7 @@ pub enum Mode {
     Command,
     Insert,
     Search,
+    LineSearch,
 }
 
 #[derive(Clone)]
@@ -62,6 +63,7 @@ pub struct Editor {
 
     pub search_query: String,
     pub last_search: String,
+    pub line_search_query: String,
 
     pub error_count: usize,
     pub error_lines: HashSet<usize>,
@@ -114,6 +116,7 @@ impl Editor {
             last_key_copy: false,
             search_query: String::new(),
             last_search: String::new(),
+            line_search_query: String::new(),
             error_count: 0,
             error_lines: HashSet::new(),
             defined_functions: HashSet::new(),
@@ -171,6 +174,7 @@ impl Editor {
                         self.last_edit_pos = None;
                         self.search_query.clear();
                         self.last_search.clear();
+                        self.line_search_query.clear();
                         self.saved_state = None;
                         self.saved_folded_lines.clear();
                         self.last_edited_path = Some(path.clone());
@@ -197,6 +201,7 @@ impl Editor {
                     self.last_edit_pos = None;
                     self.search_query.clear();
                     self.last_search.clear();
+                    self.line_search_query.clear();
                     self.saved_state = None;
                     self.saved_folded_lines.clear();
                     self.last_edited_path = None;
@@ -411,6 +416,27 @@ impl Editor {
         let mut needs_analysis = false;
 
         match self.mode {
+            Mode::LineSearch => match key {
+                Key::Esc | Key::Enter => {
+                    self.mode = Mode::Command;
+                }
+                Key::Backspace => {
+                    self.line_search_query.pop();
+                    self.jump_to_line_search();
+                }
+                Key::Char(c) if c.is_ascii_digit() => {
+                    let new_query = format!("{}{}", self.line_search_query, c);
+                    if let Ok(line_num) = new_query.parse::<usize>() {
+                        if line_num > 0 && line_num <= self.state.lines.len() {
+                            self.line_search_query = new_query;
+                            self.jump_to_line_search();
+                        }
+                    }
+                }
+                _ => {
+                    self.mode = Mode::Command;
+                }
+            },
             Mode::Search => match key {
                 Key::Esc => {
                     self.mode = Mode::Command;
@@ -570,6 +596,12 @@ impl Editor {
                         }
                         self.state.cursor_y = self.state.lines.len().saturating_sub(1);
                         self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
+                    }
+                    k if k == Key::Ctrl(config.bind_edit_file_bounds) => {
+                        self.mode = Mode::LineSearch;
+                        self.visual_mode = false;
+                        self.state.selection_start = None;
+                        self.line_search_query.clear();
                     }
                     k if k == Key::Char(config.bind_edit_delete) => {
                         if self.state.selection_start.is_some() {
@@ -774,6 +806,28 @@ impl Editor {
         }
 
         saved
+    }
+
+    fn jump_to_line_search(&mut self) {
+        if let Ok(line_num) = self.line_search_query.parse::<usize>() {
+            if line_num > 0 && line_num <= self.state.lines.len() {
+                self.state.cursor_y = line_num - 1;
+                self.state.cursor_x = 0;
+
+                let target = self.state.cursor_y;
+                let mut to_remove = Vec::new();
+                for &fold_start in &self.folded_lines {
+                    if target > fold_start && target <= self.get_block_end(fold_start) {
+                        to_remove.push(fold_start);
+                    }
+                }
+                for r in to_remove {
+                    self.folded_lines.remove(&r);
+                }
+
+                self.clamp_cursor();
+            }
+        }
     }
 
     fn find_next(&mut self) {
@@ -1586,7 +1640,8 @@ impl Editor {
                         ("[CMD]", &theme.editor_cmd)
                     }
                 }
-                Mode::Search => ("[FND]", &theme.editor_src),
+                Mode::Search => ("[FND]", &theme.editor_fnd),
+                Mode::LineSearch => ("[LNE]", &theme.editor_lne),
                 Mode::Insert => ("[INS]", &theme.editor_ins),
             };
 
@@ -1756,8 +1811,13 @@ impl Editor {
                 }
             }
 
+            let is_lne_highlight = self.mode == Mode::LineSearch
+                && !self.line_search_query.is_empty()
+                && (i + 1).to_string() == self.line_search_query;
+
             if show_line_numbers {
                 let prefix_str = format!("{:>w$}", i + 1, w = max_num_width);
+
                 let prefix_style = Style {
                     fg: Color::DarkGray,
                     bg: Color::None,
@@ -1766,11 +1826,12 @@ impl Editor {
 
                 for (idx, c) in prefix_str.chars().enumerate() {
                     if idx < inner_w {
-                        b.put_cell(
-                            crate::Cell { c, s: prefix_style },
-                            idx as u16 + 1,
-                            display_y as u16 + 1,
-                        );
+                        let mut s = prefix_style;
+                        if is_lne_highlight {
+                            s.fg = theme.editor_lne.color_at(idx, max_num_width);
+                            s.md = Modifier::Bold;
+                        }
+                        b.put_cell(crate::Cell { c, s }, idx as u16 + 1, display_y as u16 + 1);
                     }
                 }
             }
@@ -2371,6 +2432,7 @@ impl Editor {
                 };
 
                 if self.mode != Mode::Search
+                    && self.mode != Mode::LineSearch
                     && ((self.is_editing && i == self.state.cursor_y && j == self.state.cursor_x)
                         || (self.is_output
                             && config.show_caret
@@ -2397,6 +2459,7 @@ impl Editor {
             }
 
             if self.mode != Mode::Search
+                && self.mode != Mode::LineSearch
                 && ((self.is_editing)
                     || (self.is_output && config.show_caret && !self.is_waiting_for_input))
                 && i == self.state.cursor_y
@@ -2443,7 +2506,7 @@ impl Editor {
                 bar_text.push('_');
             }
 
-            let bar_bg = &theme.editor_src_bg;
+            let bar_bg = &theme.editor_fnd_bg;
 
             for (x, c) in bar_text.chars().enumerate().take(inner_w) {
                 b.put_cell(

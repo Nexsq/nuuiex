@@ -67,7 +67,8 @@ A modal code editor, complete with an AST-based real-time syntax checker.
 * **Command Mode `[CMD]`:** Default mode for navigation and manipulation.
 * **Insert Mode `[INS]`:** For typing code (Press `i` to enter).
 * **Visual Mode `[VIS]`:** For selecting text blocks (Press `v` to enter).
-* **Search Mode `[SRC]`:** For finding text (Press `f` to enter).
+* **Search Mode `[FND]`:** For finding text (Press `f` to enter).
+* **Line Search Mode `[LNE]`:** For jumping to specific lines by number (Press `Ctrl+g` to enter).
 
 **Default Editor Keybinds (Command Mode):**
 * `i`: Enter Insert Mode.
@@ -79,7 +80,7 @@ A modal code editor, complete with an AST-based real-time syntax checker.
 * `t`: Fold/Unfold function blocks.
 * `s`: Save file.
 * `a`: Select All.
-* `g` / `Shift+G`: Jump to start/end of file.
+* `g` / `Shift+g` / `Ctrl+g`: Jump to start / Jump to end / Open Line Search Mode.
 * `w` / `b`: Jump word forward/backward.
 
 ### 4. Deck & Dashboard Widgets
@@ -355,9 +356,9 @@ settings_special = Red
 editor_ins = Magenta
 editor_cmd = Blue
 editor_vis = Cyan
-editor_src = BrightCyan
+editor_fnd = BrightCyan
 
-editor_src_bg = White
+editor_fnd_bg = White
 editor_keywords = Magenta
 editor_functions = BrightBlue
 editor_strings = BrightGreen
