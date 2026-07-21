@@ -27,7 +27,7 @@ where
         .sum::<usize>()
         + options.len().saturating_sub(1);
 
-    let selected_opts: Vec<String> = options.iter().map(|o| format!("> {} <", o)).collect();
+    let selected_opts: Vec<String> = options.iter().map(|o| format!("❱ {} ❰", o)).collect();
     let unselected_opts: Vec<String> = options.iter().map(|o| format!("  {}  ", o)).collect();
 
     let mut selected_idx: usize = 0;
@@ -122,13 +122,13 @@ where
                     let (fg, bg, md) = if is_selected {
                         (
                             Gradient::Solid(Color::Black),
-                            Gradient::Solid(Color::White),
-                            Modifier::Bold,
+                            warning_color.clone(),
+                            Modifier::None,
                         )
                     } else {
                         (
-                            Gradient::Solid(Color::Black),
                             warning_color.clone(),
+                            Gradient::Solid(Color::None),
                             Modifier::None,
                         )
                     };
@@ -195,7 +195,7 @@ where
         .sum::<usize>()
         + options.len().saturating_sub(1);
 
-    let selected_opts: Vec<String> = options.iter().map(|o| format!("> {} <", o)).collect();
+    let selected_opts: Vec<String> = options.iter().map(|o| format!("❱ {} ❰", o)).collect();
     let unselected_opts: Vec<String> = options.iter().map(|o| format!("  {}  ", o)).collect();
 
     let mut selected_idx: usize = 0;
@@ -275,13 +275,13 @@ where
                     let (fg, bg, md) = if is_selected {
                         (
                             Gradient::Solid(Color::Black),
-                            Gradient::Solid(Color::White),
-                            Modifier::Bold,
+                            Gradient::Solid(Color::Red),
+                            Modifier::None,
                         )
                     } else {
                         (
-                            Gradient::Solid(Color::White),
                             Gradient::Solid(Color::Red),
+                            Gradient::Solid(Color::None),
                             Modifier::None,
                         )
                     };

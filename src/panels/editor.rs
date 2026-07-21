@@ -1586,7 +1586,7 @@ impl Editor {
                         ("[CMD]", &theme.editor_cmd)
                     }
                 }
-                Mode::Search => ("[SRC]", &theme.editor_src),
+                Mode::Search => ("[FND]", &theme.editor_src),
                 Mode::Insert => ("[INS]", &theme.editor_ins),
             };
 

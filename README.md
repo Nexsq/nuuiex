@@ -124,7 +124,7 @@ else:
 ```python
 # Infinite loop
 loop:
-    if isdown(Key::Esc):
+    if isdown(Key:Esc):
         break
 
 # While loop
