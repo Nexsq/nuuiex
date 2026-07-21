@@ -105,6 +105,7 @@ fn main() {
     );
 
     let mut dirty = true;
+    let mut q_pressed_once = false;
 
     loop {
         let (current_w, current_h) = Terminal::size();
@@ -203,6 +204,10 @@ fn main() {
         }
 
         let key = terminal.read_key(Duration::from_millis(16));
+
+        if key != Key::None && key != Key::Char('q') {
+            q_pressed_once = false;
+        }
 
         main_view.update_macro_focus(true);
 
@@ -305,6 +310,10 @@ fn main() {
                             break;
                         }
                         if editor.mode == nuui::editor::Mode::Command && key == Key::Char('q') {
+                            if config.double_q_exit && !q_pressed_once {
+                                q_pressed_once = true;
+                                continue;
+                            }
                             break;
                         }
 
@@ -424,7 +433,13 @@ fn main() {
                 }
 
                 match key {
-                    Key::Char('q') | Key::Char('\x03') => break,
+                    Key::Char('q') | Key::Char('\x03') => {
+                        if key == Key::Char('q') && config.double_q_exit && !q_pressed_once {
+                            q_pressed_once = true;
+                            continue;
+                        }
+                        break;
+                    }
 
                     Key::Tab => main_view.toggle_focus(&config),
 

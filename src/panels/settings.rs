@@ -770,6 +770,14 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
             name: "Advanced",
             settings: vec![
                 Setting {
+                    name: "Double Q Exit",
+                    key: "double_q_exit",
+                    kind: SettingType::Choice(
+                        vec!["true".to_string(), "false".to_string()],
+                        if config.double_q_exit { 0 } else { 1 },
+                    ),
+                },
+                Setting {
                     name: "Reset Config",
                     key: "reset_config",
                     kind: SettingType::Action,
@@ -818,6 +826,8 @@ pub fn settings_modal(
     let mut prev_deck_mode = config.deck_mode.clone();
     let mut prev_deck_widget = config.deck_widget.clone();
     let mut dirty = true;
+
+    let mut q_pressed_once = false;
 
     let version_str = format!(" v{} ", env!("CARGO_PKG_VERSION"));
     let version_len = version_str.chars().count() as u16;
@@ -906,6 +916,8 @@ pub fn settings_modal(
                 apply_setting!(config, set, parse_clamp "keyvis_gravity", keyvis_gravity, 0.1, 1.0);
                 apply_setting!(config, set, parse_clamp "keyvis_tension", keyvis_tension, 0.1, 1.0);
                 apply_setting!(config, set, bool "keyvis_base", keyvis_base);
+
+                apply_setting!(config, set, bool "double_q_exit", double_q_exit);
 
                 apply_setting!(config, set, choice "monitor_cpu", monitor_cpu);
                 apply_setting!(config, set, choice "monitor_gpu", monitor_gpu);
@@ -1272,6 +1284,10 @@ pub fn settings_modal(
                 .push_key(&key, config.keyvis_force, config.keyvis_spread);
         }
 
+        if key != Key::None && key != Key::Char('q') {
+            q_pressed_once = false;
+        }
+
         if key == Key::None {
             continue;
         }
@@ -1408,6 +1424,10 @@ pub fn settings_modal(
                     return false;
                 }
                 Key::Char('q') | Key::Char('\x03') => {
+                    if key == Key::Char('q') && config.double_q_exit && !q_pressed_once {
+                        q_pressed_once = true;
+                        continue;
+                    }
                     config.save();
                     return true;
                 }

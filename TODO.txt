@@ -1,6 +1,5 @@
 Grengorio bug hunting & feedback:
 - add indicator when file is not saved (potential ◦)
 - idea: in settings option to disable exiting on 'q'
-- idea: crtl G would go to a set line
 
 - a new deck widget exclusive for nuui macro editing

@@ -47,7 +47,7 @@ NUUI is divided into several panels. You can navigate between the **Library** an
 * **`Esc`**: Acts as the "back" key. 
   * If you are in the Editor in **Insert Mode** or **Visual Mode**, `Esc` will return you to **Command Mode**.
   * If you are already in **Command Mode**, or if you are browsing the **Library**, pressing `Esc` will open the **Settings Modal**.
-* **`q`**: Properly **exits the application**.
+* **`q`**: Properly **exits the application** (can be set to require a double-press in settings).
 
 ### 2. Library & File Manager
 The Library panel manages your `.nuui` scripts. It supports infinite nesting and custom sorting.

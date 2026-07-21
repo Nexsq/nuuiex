@@ -39,6 +39,8 @@ pub struct Config {
     pub keyvis_tension: f32,
     pub keyvis_base: bool,
 
+    pub double_q_exit: bool,
+
     pub edit_tab_backspace: bool,
     pub edit_auto_indent: bool,
     pub edit_error_highlight: String,
@@ -108,6 +110,8 @@ impl Default for Config {
             keyvis_gravity: 0.0,
             keyvis_tension: 0.0,
             keyvis_base: false,
+
+            double_q_exit: false,
 
             edit_tab_backspace: true,
             edit_auto_indent: true,
@@ -226,6 +230,10 @@ impl Config {
                             val.parse().unwrap_or(self.keyvis_tension).clamp(0.1, 1.0)
                     }
                     "keyvis_base" => self.keyvis_base = val.parse().unwrap_or(self.keyvis_base),
+
+                    "double_q_exit" => {
+                        self.double_q_exit = val.parse().unwrap_or(self.double_q_exit)
+                    }
 
                     "edit_tab_backspace" => {
                         self.edit_tab_backspace = val.parse().unwrap_or(self.edit_tab_backspace)
@@ -688,6 +696,13 @@ impl Config {
                         writeln!(&mut output, "{} = {}{}", key_str, self.keyvis_base, comment)
                             .unwrap()
                     }
+
+                    "double_q_exit" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.double_q_exit, comment
+                    )
+                    .unwrap(),
 
                     "edit_tab_backspace" => writeln!(
                         &mut output,
