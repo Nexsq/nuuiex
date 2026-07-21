@@ -1557,10 +1557,10 @@ pub fn settings_modal(
                                                 main_view.library_tree = l.tree;
                                                 main_view.library_root = l.root_path;
                                                 if action_type == 5 || action_type == 1 {
-                                                    main_view.expanded_path.clear();
-                                                    main_view.list_selected = 0;
-                                                    main_view.list_scroll = 0;
                                                     for i in 0..6 {
+                                                        main_view.expanded_path[i].clear();
+                                                        main_view.list_selected[i] = 0;
+                                                        main_view.list_scroll[i] = 0;
                                                         if let Some(token) =
                                                             main_view.cancellation_tokens[i].take()
                                                         {

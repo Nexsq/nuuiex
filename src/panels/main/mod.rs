@@ -31,8 +31,8 @@ pub struct MainView {
     pub min_w: u16,
     pub min_h: u16,
     pub active: ActivePanel,
-    pub list_selected: usize,
-    pub list_scroll: usize,
+    pub list_selected: [usize; 6],
+    pub list_scroll: [usize; 6],
 
     pub current_tab: usize,
     pub editors: [Editor; 6],
@@ -48,7 +48,7 @@ pub struct MainView {
     pub list_y: i16,
     pub library_tree: Vec<MacroNode>,
     pub library_root: PathBuf,
-    pub expanded_path: Vec<usize>,
+    pub expanded_path: [Vec<usize>; 6],
 
     pub tabs_box: Box,
     pub tabs_x: i16,
@@ -103,11 +103,11 @@ impl MainView {
             min_w: 64,
             min_h: 16,
             active,
-            list_selected: 0,
-            list_scroll: 0,
+            list_selected: [0; 6],
+            list_scroll: [0; 6],
             library_tree,
             library_root,
-            expanded_path: Vec::new(),
+            expanded_path: std::array::from_fn(|_| Vec::new()),
             current_tab: 0,
             editors,
             running_macros,
@@ -209,14 +209,14 @@ impl MainView {
 
     pub fn get_selected_node(&self) -> Option<&MacroNode> {
         let mut current = &self.library_tree;
-        for &idx in &self.expanded_path {
+        for &idx in &self.expanded_path[self.current_tab] {
             if let Some(MacroNode::Folder { children, .. }) = current.get(idx) {
                 current = children;
             } else {
                 return None;
             }
         }
-        current.get(self.list_selected)
+        current.get(self.list_selected[self.current_tab])
     }
 
     pub fn clear_editor_for_path(&mut self, path: &std::path::Path) {
@@ -411,9 +411,9 @@ impl MainView {
             header_h,
             self.active,
             &self.library_tree,
-            &self.expanded_path,
-            &mut self.list_selected,
-            &mut self.list_scroll,
+            &self.expanded_path[self.current_tab],
+            &mut self.list_selected[self.current_tab],
+            &mut self.list_scroll[self.current_tab],
             active_path,
             config,
             &self.theme,
@@ -465,12 +465,16 @@ impl MainView {
             return;
         }
 
-        let (_, empty_idx) = list::resolve_view(&self.expanded_path, &self.library_tree, false);
+        let (_, empty_idx) = list::resolve_view(
+            &self.expanded_path[self.current_tab],
+            &self.library_tree,
+            false,
+        );
 
-        if self.list_selected > 0 {
-            self.list_selected -= 1;
+        if self.list_selected[self.current_tab] > 0 {
+            self.list_selected[self.current_tab] -= 1;
             if empty_idx.is_some() {
-                self.expanded_path.pop();
+                self.expanded_path[self.current_tab].pop();
             }
         }
         self.auto_load();
@@ -483,8 +487,11 @@ impl MainView {
             return;
         }
 
-        let (view_path, empty_idx) =
-            list::resolve_view(&self.expanded_path, &self.library_tree, false);
+        let (view_path, empty_idx) = list::resolve_view(
+            &self.expanded_path[self.current_tab],
+            &self.library_tree,
+            false,
+        );
 
         let mut parent_nodes = &self.library_tree;
         for &idx in &view_path {
@@ -494,10 +501,10 @@ impl MainView {
         }
 
         let max_idx = parent_nodes.len().saturating_sub(1);
-        if self.list_selected < max_idx {
-            self.list_selected += 1;
+        if self.list_selected[self.current_tab] < max_idx {
+            self.list_selected[self.current_tab] += 1;
             if empty_idx.is_some() {
-                self.expanded_path.pop();
+                self.expanded_path[self.current_tab].pop();
             }
         }
         self.auto_load();
@@ -509,10 +516,18 @@ impl MainView {
         if config.lib_sorting != "custom" {
             return;
         }
-        if self.list_selected > 0 {
-            let (view_path, _) = list::resolve_view(&self.expanded_path, &self.library_tree, false);
-            self.swap_items(&view_path, self.list_selected, self.list_selected - 1);
-            self.list_selected -= 1;
+        if self.list_selected[self.current_tab] > 0 {
+            let (view_path, _) = list::resolve_view(
+                &self.expanded_path[self.current_tab],
+                &self.library_tree,
+                false,
+            );
+            self.swap_items(
+                &view_path,
+                self.list_selected[self.current_tab],
+                self.list_selected[self.current_tab] - 1,
+            );
+            self.list_selected[self.current_tab] -= 1;
             self.save_custom_order();
             self.refresh_list(config);
         }
@@ -522,7 +537,11 @@ impl MainView {
         if config.lib_sorting != "custom" {
             return;
         }
-        let (view_path, _) = list::resolve_view(&self.expanded_path, &self.library_tree, false);
+        let (view_path, _) = list::resolve_view(
+            &self.expanded_path[self.current_tab],
+            &self.library_tree,
+            false,
+        );
 
         let mut current = &self.library_tree;
         for &idx in &view_path {
@@ -531,9 +550,13 @@ impl MainView {
             }
         }
 
-        if self.list_selected + 1 < current.len() {
-            self.swap_items(&view_path, self.list_selected, self.list_selected + 1);
-            self.list_selected += 1;
+        if self.list_selected[self.current_tab] + 1 < current.len() {
+            self.swap_items(
+                &view_path,
+                self.list_selected[self.current_tab],
+                self.list_selected[self.current_tab] + 1,
+            );
+            self.list_selected[self.current_tab] += 1;
             self.save_custom_order();
             self.refresh_list(config);
         }
@@ -578,7 +601,7 @@ impl MainView {
         let mut current = &self.library_tree;
         let mut path = self.library_root.clone();
 
-        for &idx in &self.expanded_path {
+        for &idx in &self.expanded_path[self.current_tab] {
             if let Some(MacroNode::Folder {
                 path: p, children, ..
             }) = current.get(idx)
@@ -597,8 +620,11 @@ impl MainView {
             return;
         }
 
-        let (view_path, empty_idx) =
-            list::resolve_view(&self.expanded_path, &self.library_tree, false);
+        let (view_path, empty_idx) = list::resolve_view(
+            &self.expanded_path[self.current_tab],
+            &self.library_tree,
+            false,
+        );
 
         if empty_idx.is_some() {
             return;
@@ -614,16 +640,18 @@ impl MainView {
         let mut do_expand = false;
         let mut reset_scroll = false;
 
-        if let Some(MacroNode::Folder { children, .. }) = current_nodes.get(self.list_selected) {
+        if let Some(MacroNode::Folder { children, .. }) =
+            current_nodes.get(self.list_selected[self.current_tab])
+        {
             do_expand = true;
             reset_scroll = !children.is_empty();
         }
 
         if do_expand {
-            self.expanded_path.push(self.list_selected);
+            self.expanded_path[self.current_tab].push(self.list_selected[self.current_tab]);
             if reset_scroll {
-                self.list_selected = 0;
-                self.list_scroll = 0;
+                self.list_selected[self.current_tab] = 0;
+                self.list_scroll[self.current_tab] = 0;
             }
             self.auto_load();
             self.refresh_list(config);
@@ -636,9 +664,9 @@ impl MainView {
             return;
         }
 
-        if let Some(previous_parent_idx) = self.expanded_path.pop() {
-            self.list_selected = previous_parent_idx;
-            self.list_scroll = 0;
+        if let Some(previous_parent_idx) = self.expanded_path[self.current_tab].pop() {
+            self.list_selected[self.current_tab] = previous_parent_idx;
+            self.list_scroll[self.current_tab] = 0;
             self.auto_load();
             self.refresh_list(config);
             self.refresh_main(config);
@@ -918,7 +946,7 @@ pub fn handle_list_input(
 
                     let mut current = &view.library_tree;
                     let (view_path, _) = crate::panels::main::list::resolve_view(
-                        &view.expanded_path,
+                        &view.expanded_path[view.current_tab],
                         &view.library_tree,
                         false,
                     );
@@ -935,7 +963,7 @@ pub fn handle_list_input(
                         n.name() == name
                             && matches!(n, crate::lib::MacroNode::Folder { .. }) == is_folder
                     }) {
-                        view.list_selected = idx;
+                        view.list_selected[view.current_tab] = idx;
                     }
 
                     view.list_input = ListInputMode::None;
@@ -985,7 +1013,7 @@ pub fn handle_list_input(
 
                 let mut current = &view.library_tree;
                 let (view_path, _) = crate::panels::main::list::resolve_view(
-                    &view.expanded_path,
+                    &view.expanded_path[view.current_tab],
                     &view.library_tree,
                     false,
                 );
@@ -999,7 +1027,7 @@ pub fn handle_list_input(
                     n.name() == name
                         && matches!(n, crate::lib::MacroNode::Folder { .. }) == is_folder
                 }) {
-                    view.list_selected = idx;
+                    view.list_selected[view.current_tab] = idx;
                 }
 
                 if config.lib_sorting == "custom" {

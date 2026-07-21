@@ -1,10 +1,6 @@
 Grengorio bug hunting & feedback:
-- [SRC] sounds to much like source (potential [FND] as find [SCH]) # DONE
 - add indicator when file is not saved (potential ◦)
-- selection should be different for every tab
-- warning box selection is not obvious # DONE
-- a new deck widget exclusive for nuui macro editing
-- idea: crtl G would go to a set line
 - idea: in settings option to disable exiting on 'q'
-- in visual mode clicking 'a' once should select all
-- readme examoples are not hyperlinked
+- idea: crtl G would go to a set line
+
+- a new deck widget exclusive for nuui macro editing

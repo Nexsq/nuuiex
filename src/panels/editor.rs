@@ -531,7 +531,7 @@ impl Editor {
                         self.state.cursor_x = self.state.lines[self.state.cursor_y].chars().count();
                     }
                     k if k == Key::Char(config.bind_edit_select_all) => {
-                        if self.last_key_select_all {
+                        if self.last_key_select_all || self.state.selection_start.is_some() {
                             self.visual_mode = true;
                             self.state.selection_start = Some((0, 0));
                             self.state.cursor_y = self.state.lines.len().saturating_sub(1);
