@@ -613,6 +613,10 @@ fn check_x11_key_down(key_str: &str) -> Option<bool> {
     use libc::{RTLD_LAZY, c_void, dlclose, dlopen, dlsym};
 
     unsafe {
+        if std::env::var("WAYLAND_DISPLAY").is_ok() || libc::geteuid() == 0 {
+            return None;
+        }
+
         let libx11 = dlopen(b"libX11.so.6\0".as_ptr() as *const i8, RTLD_LAZY);
         if libx11.is_null() {
             return None;
@@ -1140,66 +1144,83 @@ fn get_cursor_pos() -> Result<(i32, i32), String> {
 
 #[cfg(target_os = "linux")]
 fn get_cursor_pos() -> Result<(i32, i32), String> {
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        if let Ok(output) = std::process::Command::new("hyprctl")
+            .arg("cursorpos")
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let parts: Vec<&str> = stdout.trim().split(',').collect();
+            if parts.len() == 2 {
+                let x: i32 = parts[0].trim().parse().unwrap_or(0);
+                let y: i32 = parts[1].trim().parse().unwrap_or(0);
+                return Ok((x, y));
+            }
+        }
+    }
+
     use libc::{RTLD_LAZY, c_void, dlclose, dlopen, dlsym};
     unsafe {
-        let libx11 = dlopen(b"libX11.so.6\0".as_ptr() as *const i8, RTLD_LAZY);
-        if !libx11.is_null() {
-            let xopen_sym = dlsym(libx11, b"XOpenDisplay\0".as_ptr() as *const i8);
-            let xquery_sym = dlsym(libx11, b"XQueryPointer\0".as_ptr() as *const i8);
-            let xclose_sym = dlsym(libx11, b"XCloseDisplay\0".as_ptr() as *const i8);
-            let xroot_sym = dlsym(libx11, b"XDefaultRootWindow\0".as_ptr() as *const i8);
+        if std::env::var("WAYLAND_DISPLAY").is_err() && libc::geteuid() != 0 {
+            let libx11 = dlopen(b"libX11.so.6\0".as_ptr() as *const i8, RTLD_LAZY);
+            if !libx11.is_null() {
+                let xopen_sym = dlsym(libx11, b"XOpenDisplay\0".as_ptr() as *const i8);
+                let xquery_sym = dlsym(libx11, b"XQueryPointer\0".as_ptr() as *const i8);
+                let xclose_sym = dlsym(libx11, b"XCloseDisplay\0".as_ptr() as *const i8);
+                let xroot_sym = dlsym(libx11, b"XDefaultRootWindow\0".as_ptr() as *const i8);
 
-            if !xopen_sym.is_null()
-                && !xquery_sym.is_null()
-                && !xclose_sym.is_null()
-                && !xroot_sym.is_null()
-            {
-                let xopendisplay: extern "C" fn(*const i8) -> *mut c_void =
-                    std::mem::transmute(xopen_sym);
-                let xquerypointer: extern "C" fn(
-                    *mut c_void,
-                    libc::c_ulong,
-                    *mut libc::c_ulong,
-                    *mut libc::c_ulong,
-                    *mut i32,
-                    *mut i32,
-                    *mut i32,
-                    *mut i32,
-                    *mut u32,
-                ) -> i32 = std::mem::transmute(xquery_sym);
-                let xclosedisplay: extern "C" fn(*mut c_void) -> i32 =
-                    std::mem::transmute(xclose_sym);
-                let xdefaultrootwindow: extern "C" fn(*mut c_void) -> libc::c_ulong =
-                    std::mem::transmute(xroot_sym);
+                if !xopen_sym.is_null()
+                    && !xquery_sym.is_null()
+                    && !xclose_sym.is_null()
+                    && !xroot_sym.is_null()
+                {
+                    let xopendisplay: extern "C" fn(*const i8) -> *mut c_void =
+                        std::mem::transmute(xopen_sym);
+                    let xquerypointer: extern "C" fn(
+                        *mut c_void,
+                        libc::c_ulong,
+                        *mut libc::c_ulong,
+                        *mut libc::c_ulong,
+                        *mut i32,
+                        *mut i32,
+                        *mut i32,
+                        *mut i32,
+                        *mut u32,
+                    ) -> i32 = std::mem::transmute(xquery_sym);
+                    let xclosedisplay: extern "C" fn(*mut c_void) -> i32 =
+                        std::mem::transmute(xclose_sym);
+                    let xdefaultrootwindow: extern "C" fn(*mut c_void) -> libc::c_ulong =
+                        std::mem::transmute(xroot_sym);
 
-                let display = xopendisplay(std::ptr::null());
-                if !display.is_null() {
-                    let root = xdefaultrootwindow(display);
-                    let mut root_return = 0;
-                    let mut child_return = 0;
-                    let mut root_x = 0;
-                    let mut root_y = 0;
-                    let mut win_x = 0;
-                    let mut win_y = 0;
-                    let mut mask = 0;
+                    let display = xopendisplay(std::ptr::null());
+                    if !display.is_null() {
+                        let root = xdefaultrootwindow(display);
+                        let mut root_return = 0;
+                        let mut child_return = 0;
+                        let mut root_x = 0;
+                        let mut root_y = 0;
+                        let mut win_x = 0;
+                        let mut win_y = 0;
+                        let mut mask = 0;
 
-                    xquerypointer(
-                        display,
-                        root,
-                        &mut root_return,
-                        &mut child_return,
-                        &mut root_x,
-                        &mut root_y,
-                        &mut win_x,
-                        &mut win_y,
-                        &mut mask,
-                    );
-                    xclosedisplay(display);
-                    dlclose(libx11);
-                    return Ok((root_x, root_y));
+                        xquerypointer(
+                            display,
+                            root,
+                            &mut root_return,
+                            &mut child_return,
+                            &mut root_x,
+                            &mut root_y,
+                            &mut win_x,
+                            &mut win_y,
+                            &mut mask,
+                        );
+                        xclosedisplay(display);
+                        dlclose(libx11);
+                        return Ok((root_x, root_y));
+                    }
                 }
+                dlclose(libx11);
             }
-            dlclose(libx11);
         }
     }
 
@@ -1345,6 +1366,18 @@ impl Drop for X11PixelContext {
 
 #[cfg(target_os = "linux")]
 fn get_screen_pixel(x: i32, y: i32) -> Result<(u8, u8, u8), String> {
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        return Err(
+            "getpixel is not supported on Wayland (requires compositor-specific tools)."
+                .to_string(),
+        );
+    }
+    unsafe {
+        if libc::geteuid() == 0 {
+            return Err("Cannot use getpixel as root due to XAUTHORITY restrictions.".to_string());
+        }
+    }
+
     use libc::{RTLD_LAZY, dlclose, dlopen, dlsym};
 
     thread_local! {
@@ -1522,8 +1555,25 @@ fn set_cursor_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
         }
         Ok(())
     } else {
+        if std::env::var("WAYLAND_DISPLAY").is_ok() {
+            if let Ok(output) = std::process::Command::new("ydotool")
+                .args(["mousemove", "-a", &x.to_string(), &y.to_string()])
+                .output()
+            {
+                if output.status.success() {
+                    return Ok(());
+                }
+            }
+            return Err("Absolute cursor positioning on Wayland requires ydotool".to_string());
+        }
+
         use libc::{RTLD_LAZY, c_void, dlclose, dlopen, dlsym};
         unsafe {
+            if libc::geteuid() == 0 {
+                return Err(
+                    "Cannot use set_cursor_pos as root due to XAUTHORITY restrictions.".to_string(),
+                );
+            }
             let libx11 = dlopen(b"libX11.so.6\0".as_ptr() as *const i8, RTLD_LAZY);
             if !libx11.is_null() {
                 let xopen_sym = dlsym(libx11, b"XOpenDisplay\0".as_ptr() as *const i8);
