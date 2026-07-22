@@ -17,12 +17,10 @@ fn calculate_hash(lines: &[String]) -> u64 {
 }
 
 fn set_clipboard(text: String) {
-    if let Ok(mut cb) = Clipboard::new() {
-        if cb.set_text(text.clone()).is_ok() {
-            return;
-        }
-    }
-    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+    let is_wayland = std::env::var("WAYLAND_DISPLAY").is_ok()
+        || std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland";
+
+    if is_wayland {
         use std::io::Write;
         if let Ok(mut child) = std::process::Command::new("wl-copy")
             .stdin(std::process::Stdio::piped())
@@ -35,6 +33,13 @@ fn set_clipboard(text: String) {
             return;
         }
     }
+
+    if let Ok(mut cb) = Clipboard::new() {
+        if cb.set_text(text.clone()).is_ok() {
+            return;
+        }
+    }
+
     use std::io::Write;
     if let Ok(mut child) = std::process::Command::new("xclip")
         .args(["-selection", "clipboard", "-i"])
@@ -49,18 +54,28 @@ fn set_clipboard(text: String) {
 }
 
 fn get_clipboard() -> Option<String> {
-    if let Ok(mut cb) = Clipboard::new() {
-        if let Ok(text) = cb.get_text() {
-            return Some(text);
-        }
-    }
-    if std::env::var("WAYLAND_DISPLAY").is_ok() {
-        if let Ok(output) = std::process::Command::new("wl-paste").output() {
+    let is_wayland = std::env::var("WAYLAND_DISPLAY").is_ok()
+        || std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland";
+
+    if is_wayland {
+        if let Ok(output) = std::process::Command::new("wl-paste").arg("-n").output() {
             if output.status.success() {
-                return Some(String::from_utf8_lossy(&output.stdout).into_owned());
+                let text = String::from_utf8_lossy(&output.stdout).into_owned();
+                if !text.is_empty() {
+                    return Some(text);
+                }
             }
         }
     }
+
+    if let Ok(mut cb) = Clipboard::new() {
+        if let Ok(text) = cb.get_text() {
+            if !text.is_empty() || !is_wayland {
+                return Some(text);
+            }
+        }
+    }
+
     if let Ok(output) = std::process::Command::new("xclip")
         .args(["-selection", "clipboard", "-o"])
         .output()
@@ -69,6 +84,7 @@ fn get_clipboard() -> Option<String> {
             return Some(String::from_utf8_lossy(&output.stdout).into_owned());
         }
     }
+
     None
 }
 
