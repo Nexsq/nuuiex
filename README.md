@@ -276,6 +276,7 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 | `time()` | None | Returns the current system time in milliseconds (since UNIX epoch). |
 | `input(prompt?)`| `String` | Pauses execution and prompts the user for text input in the output panel. Returns a `String`. |
 | `sleep(ms)` | `Number` | Pauses the current thread for `ms` milliseconds. Number can be float. |
+| `sleepaccurate(ms)`| `Number` | Pauses the current thread for `ms` milliseconds. Uses high-precision hardware timers and active spin-waiting to guarantee microsecond-level accuracy at the cost of high CPU usage. |
 | `exit()` | None | Immediately terminates the script execution. |
 | `exec(cmd)` | `String` | Executes a shell command (using `sh` on Linux, `powershell` on Windows) and returns the output (stdout + stderr) as a String. |
 | `onlinux()` | None | Returns `True` if the OS is Linux, `False` otherwise. |

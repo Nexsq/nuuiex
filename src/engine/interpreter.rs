@@ -2137,7 +2137,8 @@ impl Interpreter {
                         .nth(caret.0 + 1)
                         .map(|x| x.0)
                         .unwrap_or(line.len());
-                    line.replace_range(byte_idx..next_byte_idx, &c.to_string());
+                    let mut buf = [0; 4];
+                    line.replace_range(byte_idx..next_byte_idx, c.encode_utf8(&mut buf));
                 } else {
                     let spaces = caret.0 - char_count;
                     for _ in 0..spaces {
@@ -3410,18 +3411,18 @@ impl Interpreter {
                         self.send_output();
                         return Ok(Value::Nil);
                     }
-                    "sleep" => {
+                    "sleep" | "sleepaccurate" => {
                         if eval_args.len() != 1 {
                             return Err(format!(
-                                "Line {}: 'sleep' expects exactly 1 argument",
-                                line
+                                "Line {}: '{}' expects exactly 1 argument",
+                                line, name
                             ));
                         }
                         if let Value::Number(ms) = eval_args[0].1 {
                             if ms < 0.0 {
                                 return Err(format!(
-                                    "Line {}: 'sleep' time cannot be negative",
-                                    line
+                                    "Line {}: '{}' time cannot be negative",
+                                    line, name
                                 ));
                             }
 
@@ -3440,15 +3441,25 @@ impl Interpreter {
                                 }
 
                                 let remaining = target - now;
-                                if remaining > std::time::Duration::from_millis(2) {
-                                    std::thread::sleep(std::time::Duration::from_millis(1));
+
+                                if name == "sleepaccurate" {
+                                    if remaining > std::time::Duration::from_millis(2) {
+                                        let safe_sleep = remaining
+                                            .saturating_sub(std::time::Duration::from_millis(2));
+                                        let chunk =
+                                            safe_sleep.min(std::time::Duration::from_millis(10));
+                                        std::thread::sleep(chunk);
+                                    } else {
+                                        std::hint::spin_loop();
+                                    }
                                 } else {
-                                    std::hint::spin_loop();
+                                    let chunk = remaining.min(std::time::Duration::from_millis(10));
+                                    std::thread::sleep(chunk);
                                 }
                             }
                             return Ok(Value::Nil);
                         } else {
-                            return Err(format!("Line {}: 'sleep' expects a number", line));
+                            return Err(format!("Line {}: '{}' expects a number", line, name));
                         }
                     }
                     "exit" => {

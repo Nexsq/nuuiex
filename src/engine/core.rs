@@ -17,6 +17,7 @@ pub const BUILTIN_FUNCS: &[&str] = &[
     "print",
     "println",
     "sleep",
+    "sleepaccurate",
     "exit",
     "range",
     "random",

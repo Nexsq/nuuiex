@@ -379,6 +379,10 @@ impl Analyzer {
                     } else if matches!(args[0].1, Expr::String(_)) {
                         self.error(*line, format!("'{}' expects a Key", name));
                     }
+                } else if name == "sleep" || name == "sleepaccurate" {
+                    if args.len() != 1 {
+                        self.error(*line, format!("'{}' expects exactly 1 argument", name));
+                    }
                 } else if name == "mousex" || name == "mousey" || name == "mousedelta" {
                     if args.len() != 0 {
                         self.error(*line, format!("'{}' expects exactly 0 arguments", name));
