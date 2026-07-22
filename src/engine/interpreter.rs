@@ -908,20 +908,11 @@ fn simulate_key(key: &str, down: bool) -> Result<(), String> {
     let info = parse_linux_key(key)?;
     let fd = get_or_create_uinput()?;
 
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct input_event {
-        time: libc::timeval,
-        type_: u16,
-        code: u16,
-        value: i32,
-    }
-
-    let mut evs: Vec<input_event> = Vec::with_capacity(8);
+    let mut evs: Vec<libc::input_event> = Vec::with_capacity(8);
 
     macro_rules! add_ev {
         ($code:expr, $val:expr) => {
-            let mut ev: input_event = unsafe { std::mem::zeroed() };
+            let mut ev: libc::input_event = unsafe { std::mem::zeroed() };
             ev.type_ = 1;
             ev.code = $code;
             ev.value = $val;
@@ -955,7 +946,7 @@ fn simulate_key(key: &str, down: bool) -> Result<(), String> {
         }
     }
 
-    let mut syn: input_event = unsafe { std::mem::zeroed() };
+    let mut syn: libc::input_event = unsafe { std::mem::zeroed() };
     syn.type_ = 0;
     syn.code = 0;
     syn.value = 0;
@@ -965,7 +956,7 @@ fn simulate_key(key: &str, down: bool) -> Result<(), String> {
         libc::write(
             fd,
             evs.as_ptr() as *const libc::c_void,
-            evs.len() * std::mem::size_of::<input_event>(),
+            evs.len() * std::mem::size_of::<libc::input_event>(),
         );
     }
 
@@ -976,15 +967,6 @@ fn simulate_key(key: &str, down: bool) -> Result<(), String> {
 fn simulate_write(text: &str) -> Result<(), String> {
     let fd = get_or_create_uinput()?;
 
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct input_event {
-        time: libc::timeval,
-        type_: u16,
-        code: u16,
-        value: i32,
-    }
-
     for c in text.chars() {
         let key_str = match c {
             '\n' => "enter".to_string(),
@@ -993,11 +975,11 @@ fn simulate_write(text: &str) -> Result<(), String> {
         };
 
         if let Ok(info) = parse_linux_key(&key_str) {
-            let mut evs: Vec<input_event> = Vec::with_capacity(8);
+            let mut evs: Vec<libc::input_event> = Vec::with_capacity(8);
 
             macro_rules! add_ev {
                 ($code:expr, $val:expr) => {
-                    let mut ev: input_event = unsafe { std::mem::zeroed() };
+                    let mut ev: libc::input_event = unsafe { std::mem::zeroed() };
                     ev.type_ = 1;
                     ev.code = $code;
                     ev.value = $val;
@@ -1017,7 +999,7 @@ fn simulate_write(text: &str) -> Result<(), String> {
 
             add_ev!(info.code, 1);
 
-            let mut syn: input_event = unsafe { std::mem::zeroed() };
+            let mut syn: libc::input_event = unsafe { std::mem::zeroed() };
             syn.type_ = 0;
             syn.code = 0;
             syn.value = 0;
@@ -1027,7 +1009,7 @@ fn simulate_write(text: &str) -> Result<(), String> {
                 libc::write(
                     fd,
                     evs.as_ptr() as *const libc::c_void,
-                    evs.len() * std::mem::size_of::<input_event>(),
+                    evs.len() * std::mem::size_of::<libc::input_event>(),
                 );
             }
 
@@ -1052,7 +1034,7 @@ fn simulate_write(text: &str) -> Result<(), String> {
                 libc::write(
                     fd,
                     evs.as_ptr() as *const libc::c_void,
-                    evs.len() * std::mem::size_of::<input_event>(),
+                    evs.len() * std::mem::size_of::<libc::input_event>(),
                 );
             }
         }
@@ -1132,6 +1114,8 @@ use std::sync::atomic::AtomicI32;
 
 static MOUSE_DX: AtomicI32 = AtomicI32::new(0);
 static MOUSE_DY: AtomicI32 = AtomicI32::new(0);
+static MOUSE_TRACKER_FAILED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 static INIT_MOUSE: std::sync::Once = std::sync::Once::new();
 
 #[cfg(windows)]
@@ -1219,6 +1203,11 @@ fn start_mouse_tracker() {
                 let path = entry.path();
                 if path.to_string_lossy().contains("event") {
                     if let Ok(file) = fs::File::open(&path) {
+                        unsafe {
+                            let fd = file.as_raw_fd();
+                            let flags = libc::fcntl(fd, libc::F_GETFL, 0);
+                            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+                        }
                         fds.push(file);
                     }
                 }
@@ -1226,6 +1215,7 @@ fn start_mouse_tracker() {
         }
 
         if fds.is_empty() {
+            MOUSE_TRACKER_FAILED.store(true, Ordering::Relaxed);
             return;
         }
 
@@ -1240,22 +1230,33 @@ fn start_mouse_tracker() {
 
         loop {
             unsafe {
-                libc::poll(poll_fds.as_mut_ptr(), poll_fds.len() as libc::nfds_t, -1);
+                let ret = libc::poll(poll_fds.as_mut_ptr(), poll_fds.len() as libc::nfds_t, -1);
+                if ret < 0 {
+                    continue;
+                }
 
                 for pfd in poll_fds.iter_mut() {
                     if (pfd.revents & libc::POLLIN) != 0 {
-                        let mut ev: libc::input_event = std::mem::zeroed();
-                        let size = std::mem::size_of::<libc::input_event>();
-                        let n = libc::read(pfd.fd, &mut ev as *mut _ as *mut libc::c_void, size);
-                        if n == size as isize {
-                            if ev.type_ == 2 {
-                                if ev.code == 0 {
-                                    MOUSE_DX.fetch_add(ev.value, Ordering::Relaxed);
-                                } else if ev.code == 1 {
-                                    MOUSE_DY.fetch_add(ev.value, Ordering::Relaxed);
+                        loop {
+                            let mut ev: libc::input_event = std::mem::zeroed();
+                            let size = std::mem::size_of::<libc::input_event>();
+                            let n =
+                                libc::read(pfd.fd, &mut ev as *mut _ as *mut libc::c_void, size);
+                            if n == size as isize {
+                                if ev.type_ == 2 {
+                                    if ev.code == 0 {
+                                        MOUSE_DX.fetch_add(ev.value, Ordering::Relaxed);
+                                    } else if ev.code == 1 {
+                                        MOUSE_DY.fetch_add(ev.value, Ordering::Relaxed);
+                                    }
                                 }
+                            } else {
+                                break;
                             }
                         }
+                    }
+                    if (pfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL)) != 0 {
+                        pfd.fd = -1;
                     }
                     pfd.revents = 0;
                 }
@@ -1378,11 +1379,6 @@ fn get_mouse_pos() -> Result<(i32, i32), String> {
         }
     }
     Ok((x, y))
-}
-
-#[cfg(not(any(windows, target_os = "linux")))]
-fn check_key_down(key: &str) -> Result<bool, String> {
-    Err("Key checking is not supported on this OS".to_string())
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]
@@ -1688,18 +1684,10 @@ fn set_mouse_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
 fn set_mouse_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
     if relative {
         let fd = get_or_create_uinput()?;
-        #[repr(C)]
-        #[derive(Clone, Copy)]
-        struct input_event {
-            time: libc::timeval,
-            type_: u16,
-            code: u16,
-            value: i32,
-        }
-        let mut evs: Vec<input_event> = Vec::with_capacity(3);
+        let mut evs: Vec<libc::input_event> = Vec::with_capacity(3);
         macro_rules! add_ev {
             ($type:expr, $code:expr, $val:expr) => {
-                let mut ev: input_event = unsafe { std::mem::zeroed() };
+                let mut ev: libc::input_event = unsafe { std::mem::zeroed() };
                 ev.type_ = $type;
                 ev.code = $code;
                 ev.value = $val;
@@ -1717,7 +1705,7 @@ fn set_mouse_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
             libc::write(
                 fd,
                 evs.as_ptr() as *const libc::c_void,
-                evs.len() * std::mem::size_of::<input_event>(),
+                evs.len() * std::mem::size_of::<libc::input_event>(),
             );
         }
         Ok(())
@@ -1821,18 +1809,10 @@ fn simulate_scroll(num: i32) -> Result<(), String> {
 #[cfg(target_os = "linux")]
 fn simulate_scroll(num: i32) -> Result<(), String> {
     let fd = get_or_create_uinput()?;
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct input_event {
-        time: libc::timeval,
-        type_: u16,
-        code: u16,
-        value: i32,
-    }
-    let mut evs: Vec<input_event> = Vec::with_capacity(2);
+    let mut evs: Vec<libc::input_event> = Vec::with_capacity(2);
     macro_rules! add_ev {
         ($type:expr, $code:expr, $val:expr) => {
-            let mut ev: input_event = unsafe { std::mem::zeroed() };
+            let mut ev: libc::input_event = unsafe { std::mem::zeroed() };
             ev.type_ = $type;
             ev.code = $code;
             ev.value = $val;
@@ -1846,7 +1826,7 @@ fn simulate_scroll(num: i32) -> Result<(), String> {
         libc::write(
             fd,
             evs.as_ptr() as *const libc::c_void,
-            evs.len() * std::mem::size_of::<input_event>(),
+            evs.len() * std::mem::size_of::<libc::input_event>(),
         );
     }
     Ok(())
@@ -3665,6 +3645,9 @@ impl Interpreter {
                     }
                     "mousedelta" => {
                         INIT_MOUSE.call_once(start_mouse_tracker);
+                        if MOUSE_TRACKER_FAILED.load(Ordering::Relaxed) {
+                            return Err("Permission denied for mouse tracking.\nRun with sudo or add user to 'input' group.".to_string());
+                        }
                         if eval_args.len() != 0 {
                             return Err(format!(
                                 "Line {}: 'mousedelta' expects exactly 0 arguments",
