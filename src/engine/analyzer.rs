@@ -13,6 +13,7 @@ impl Analyzer {
         let mut root_scope = HashSet::new();
         root_scope.insert("Key".to_string());
         root_scope.insert("Color".to_string());
+        root_scope.insert("Background".to_string());
         root_scope.insert("Modifier".to_string());
         Self {
             errors: Vec::new(),
@@ -243,7 +244,7 @@ impl Analyzer {
                         if !valid_variants.contains(&prop.as_str()) {
                             self.error(*line, format!("Invalid variant '{}' for enum 'Key'", prop));
                         }
-                    } else if name == "Color" {
+                    } else if name == "Color" || name == "Background" {
                         if crate::theme::themecore::parse_color(prop).is_err() {
                             self.error(*line, format!("Invalid color variant '{}'", prop));
                         }
@@ -325,12 +326,12 @@ impl Analyzer {
                                 format!("Invalid variant '{}' for enum 'Key'", method),
                             );
                         }
-                    } else if name == "Color" {
+                    } else if name == "Color" || name == "Background" {
                         if crate::theme::themecore::parse_color(method).is_err() {
                             self.error(*line, format!("Invalid color variant '{}'", method));
                         }
                         if !args.is_empty() {
-                            self.error(*line, "Color variant does not take arguments".to_string());
+                            self.error(*line, format!("{} variant does not take arguments", name));
                         }
                     } else if name == "Modifier" {
                         let valid_variants = [

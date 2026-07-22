@@ -1,4 +1,2 @@
 Grengorio bug hunting & feedback:
 - a new deck widget exclusive for nuui macro editing
-
-add ability to change background color in printing

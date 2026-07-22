@@ -2049,7 +2049,10 @@ impl Editor {
                                 }
                                 tag.push(nc);
                             }
-                            if valid && (tag.starts_with("Color:") || tag.starts_with("Modifier:"))
+                            if valid
+                                && (tag.starts_with("Color:")
+                                    || tag.starts_with("Modifier:")
+                                    || tag.starts_with("Background:"))
                             {
                                 for _ in 0..=tag.len() {
                                     chars.next();
@@ -2089,6 +2092,7 @@ impl Editor {
 
         let mut line_chars: Vec<_> = Vec::with_capacity(128);
         let mut syntax_colors = Vec::with_capacity(128);
+        let mut syntax_bg_colors = Vec::with_capacity(128);
 
         for (display_idx, &actual_y) in d_lines
             .iter()
@@ -2171,6 +2175,7 @@ impl Editor {
 
             line_chars.clear();
             syntax_colors.clear();
+            syntax_bg_colors.clear();
             let mut syntax_modifiers = Vec::with_capacity(128);
 
             let mut line_str = self.state.lines[i].as_str();
@@ -2183,6 +2188,7 @@ impl Editor {
             if self.is_output {
                 let mut chars = line_str.chars().peekable();
                 let mut current_color = Color::White;
+                let mut current_bg_color = Color::None;
                 let mut current_modifier = Modifier::None;
 
                 while let Some(c) = chars.next() {
@@ -2205,6 +2211,17 @@ impl Editor {
                                     crate::theme::themecore::parse_color(color_name)
                                 {
                                     current_color = parsed_color;
+                                    for _ in 0..=valid_tag.len() {
+                                        chars.next();
+                                    }
+                                    continue;
+                                }
+                            } else if valid_tag.starts_with("Background:") {
+                                let color_name = &valid_tag[11..];
+                                if let Ok(parsed_color) =
+                                    crate::theme::themecore::parse_color(color_name)
+                                {
+                                    current_bg_color = parsed_color;
                                     for _ in 0..=valid_tag.len() {
                                         chars.next();
                                     }
@@ -2234,6 +2251,7 @@ impl Editor {
                     }
                     line_chars.push(c);
                     syntax_colors.push(current_color);
+                    syntax_bg_colors.push(current_bg_color);
                     syntax_modifiers.push(current_modifier);
                 }
             } else {
@@ -2242,11 +2260,13 @@ impl Editor {
 
             if self.is_output && self.is_waiting_for_input && i == self.state.cursor_y {
                 let last_color = syntax_colors.last().copied().unwrap_or(Color::White);
+                let last_bg = syntax_bg_colors.last().copied().unwrap_or(Color::None);
                 let last_modifier = syntax_modifiers.last().copied().unwrap_or(Modifier::None);
                 let pad_spaces = self.state.cursor_x.saturating_sub(line_chars.len());
                 for _ in 0..pad_spaces {
                     line_chars.push(' ');
                     syntax_colors.push(last_color);
+                    syntax_bg_colors.push(last_bg);
                     syntax_modifiers.push(last_modifier);
                 }
 
@@ -2265,6 +2285,7 @@ impl Editor {
                 for (offset, c) in input_chars.into_iter().enumerate() {
                     line_chars.insert(insert_idx + offset, c);
                     syntax_colors.insert(insert_idx + offset, last_color);
+                    syntax_bg_colors.insert(insert_idx + offset, last_bg);
                     syntax_modifiers.insert(insert_idx + offset, last_modifier);
                 }
             }
@@ -2291,6 +2312,7 @@ impl Editor {
                         while k < idx {
                             if line_chars[k] == '{' && (k == start || line_chars[k - 1] != '\\') {
                                 syntax_colors.push(theme.editor_brackets.color_at(0, 1));
+                                syntax_bg_colors.push(Color::None);
                                 syntax_modifiers.push(Modifier::None);
                                 k += 1;
 
@@ -2311,67 +2333,74 @@ impl Editor {
 
                                 let mut p = interp_start;
                                 while p < interp_end {
-                                    if p + 6 <= interp_end {
-                                        let possible_color: String =
-                                            line_chars[p..p + 6].iter().collect();
-                                        if possible_color == "Color:" {
-                                            let color_word_start = p;
-                                            let var_start = p + 6;
-                                            let mut var_end = var_start;
-                                            while var_end < interp_end
-                                                && (line_chars[var_end].is_ascii_alphanumeric()
-                                                    || line_chars[var_end] == '_')
-                                            {
-                                                var_end += 1;
-                                            }
-                                            let variant_str: String =
-                                                line_chars[var_start..var_end].iter().collect();
+                                    let is_color = p + 6 <= interp_end
+                                        && line_chars[p..p + 6].iter().collect::<String>()
+                                            == "Color:";
+                                    let is_bg = p + 11 <= interp_end
+                                        && line_chars[p..p + 11].iter().collect::<String>()
+                                            == "Background:";
 
-                                            let custom_c = if let Ok(num) =
-                                                variant_str.parse::<f64>()
-                                            {
-                                                if num.fract() == 0.0
-                                                    && num >= 0.0
-                                                    && num <= 999999.0
-                                                {
-                                                    crate::theme::themecore::parse_color(&format!(
-                                                        "{:06}",
-                                                        num as u64
-                                                    ))
-                                                    .ok()
-                                                } else {
-                                                    None
-                                                }
-                                            } else {
-                                                crate::theme::themecore::parse_color(&variant_str)
-                                                    .ok()
-                                            };
-
-                                            if let Some(cc) = custom_c {
-                                                for _ in color_word_start..var_end {
-                                                    syntax_colors.push(cc);
-                                                    syntax_modifiers.push(Modifier::None);
-                                                }
-                                            } else {
-                                                for _ in 0..5 {
-                                                    syntax_colors
-                                                        .push(theme.editor_keywords.color_at(0, 1));
-                                                    syntax_modifiers.push(Modifier::None);
-                                                }
-                                                syntax_colors
-                                                    .push(theme.editor_operators.color_at(0, 1));
-                                                syntax_modifiers.push(Modifier::None);
-                                                for _ in var_start..var_end {
-                                                    syntax_colors.push(
-                                                        theme.editor_variables.color_at(0, 1),
-                                                    );
-                                                    syntax_modifiers.push(Modifier::None);
-                                                }
-                                            }
-                                            p = var_end;
-                                            continue;
+                                    if is_color || is_bg {
+                                        let color_word_start = p;
+                                        let var_start = if is_color { p + 6 } else { p + 11 };
+                                        let mut var_end = var_start;
+                                        while var_end < interp_end
+                                            && (line_chars[var_end].is_ascii_alphanumeric()
+                                                || line_chars[var_end] == '_')
+                                        {
+                                            var_end += 1;
                                         }
+                                        let variant_str: String =
+                                            line_chars[var_start..var_end].iter().collect();
+
+                                        let custom_c = if let Ok(num) = variant_str.parse::<f64>() {
+                                            if num.fract() == 0.0 && num >= 0.0 && num <= 999999.0 {
+                                                crate::theme::themecore::parse_color(&format!(
+                                                    "{:06}",
+                                                    num as u64
+                                                ))
+                                                .ok()
+                                            } else {
+                                                None
+                                            }
+                                        } else {
+                                            crate::theme::themecore::parse_color(&variant_str).ok()
+                                        };
+
+                                        if let Some(cc) = custom_c {
+                                            for _ in color_word_start..var_end {
+                                                if is_bg {
+                                                    syntax_colors.push(Color::Black);
+                                                    syntax_bg_colors.push(cc);
+                                                } else {
+                                                    syntax_colors.push(cc);
+                                                    syntax_bg_colors.push(Color::None);
+                                                }
+                                                syntax_modifiers.push(Modifier::None);
+                                            }
+                                        } else {
+                                            let prefix_len = if is_color { 5 } else { 10 };
+                                            for _ in 0..prefix_len {
+                                                syntax_colors
+                                                    .push(theme.editor_keywords.color_at(0, 1));
+                                                syntax_bg_colors.push(Color::None);
+                                                syntax_modifiers.push(Modifier::None);
+                                            }
+                                            syntax_colors
+                                                .push(theme.editor_operators.color_at(0, 1));
+                                            syntax_bg_colors.push(Color::None);
+                                            syntax_modifiers.push(Modifier::None);
+                                            for _ in var_start..var_end {
+                                                syntax_colors
+                                                    .push(theme.editor_variables.color_at(0, 1));
+                                                syntax_bg_colors.push(Color::None);
+                                                syntax_modifiers.push(Modifier::None);
+                                            }
+                                        }
+                                        p = var_end;
+                                        continue;
                                     }
+
                                     if p + 9 <= interp_end {
                                         let possible_mod: String =
                                             line_chars[p..p + 9].iter().collect();
@@ -2401,10 +2430,12 @@ impl Editor {
                                                     syntax_colors.push(
                                                         theme.editor_keywords.color_at(k - p, 8),
                                                     );
+                                                    syntax_bg_colors.push(Color::None);
                                                     syntax_modifiers.push(m);
                                                 }
                                                 syntax_colors
                                                     .push(theme.editor_operators.color_at(0, 1));
+                                                syntax_bg_colors.push(Color::None);
                                                 syntax_modifiers.push(m);
                                                 for k in var_start..var_end {
                                                     syntax_colors.push(
@@ -2413,7 +2444,28 @@ impl Editor {
                                                             var_end - var_start,
                                                         ),
                                                     );
+                                                    syntax_bg_colors.push(Color::None);
                                                     syntax_modifiers.push(m);
+                                                }
+                                                p = var_end;
+                                                continue;
+                                            } else {
+                                                for _ in 0..8 {
+                                                    syntax_colors
+                                                        .push(theme.editor_keywords.color_at(0, 1));
+                                                    syntax_bg_colors.push(Color::None);
+                                                    syntax_modifiers.push(Modifier::None);
+                                                }
+                                                syntax_colors
+                                                    .push(theme.editor_operators.color_at(0, 1));
+                                                syntax_bg_colors.push(Color::None);
+                                                syntax_modifiers.push(Modifier::None);
+                                                for _ in var_start..var_end {
+                                                    syntax_colors.push(
+                                                        theme.editor_variables.color_at(0, 1),
+                                                    );
+                                                    syntax_bg_colors.push(Color::None);
+                                                    syntax_modifiers.push(Modifier::None);
                                                 }
                                                 p = var_end;
                                                 continue;
@@ -2422,12 +2474,14 @@ impl Editor {
                                     }
 
                                     syntax_colors.push(theme.editor_variables.color_at(0, 1));
+                                    syntax_bg_colors.push(Color::None);
                                     syntax_modifiers.push(Modifier::None);
                                     p += 1;
                                 }
 
                                 if interp_end < idx && line_chars[interp_end] == '}' {
                                     syntax_colors.push(theme.editor_brackets.color_at(0, 1));
+                                    syntax_bg_colors.push(Color::None);
                                     syntax_modifiers.push(Modifier::None);
                                     k = interp_end + 1;
                                 } else {
@@ -2436,6 +2490,7 @@ impl Editor {
                             } else {
                                 syntax_colors
                                     .push(theme.editor_strings.color_at(k - start, idx - start));
+                                syntax_bg_colors.push(Color::None);
                                 syntax_modifiers.push(Modifier::None);
                                 k += 1;
                             }
@@ -2446,6 +2501,7 @@ impl Editor {
                         for k in start..end {
                             syntax_colors
                                 .push(theme.editor_comments.color_at(k - start, end - start));
+                            syntax_bg_colors.push(Color::None);
                             syntax_modifiers.push(Modifier::None);
                         }
                         break;
@@ -2485,6 +2541,7 @@ impl Editor {
                             for k in start..idx {
                                 syntax_colors
                                     .push(theme.editor_numbers.color_at(k - start, idx - start));
+                                syntax_bg_colors.push(Color::None);
                                 syntax_modifiers.push(Modifier::None);
                             }
                         } else {
@@ -2497,7 +2554,8 @@ impl Editor {
                             let word_chars = &line_chars[start..idx];
                             let word_str: String = word_chars.iter().collect();
 
-                            if word_str == "Color" {
+                            if word_str == "Color" || word_str == "Background" {
+                                let is_bg = word_str == "Background";
                                 let mut temp_idx = idx;
                                 while temp_idx < line_chars.len()
                                     && line_chars[temp_idx].is_whitespace()
@@ -2539,7 +2597,13 @@ impl Editor {
 
                                         if let Some(cc) = custom_color {
                                             for _ in start..temp_idx {
-                                                syntax_colors.push(cc);
+                                                if is_bg {
+                                                    syntax_colors.push(Color::Black);
+                                                    syntax_bg_colors.push(cc);
+                                                } else {
+                                                    syntax_colors.push(cc);
+                                                    syntax_bg_colors.push(Color::None);
+                                                }
                                                 syntax_modifiers.push(Modifier::None);
                                             }
                                             idx = temp_idx;
@@ -2588,11 +2652,13 @@ impl Editor {
                                                         .editor_keywords
                                                         .color_at(k - start, idx - start),
                                                 );
+                                                syntax_bg_colors.push(Color::None);
                                                 syntax_modifiers.push(m);
                                             }
                                             for _ in idx..variant_start {
                                                 syntax_colors
                                                     .push(theme.editor_operators.color_at(0, 1));
+                                                syntax_bg_colors.push(Color::None);
                                                 syntax_modifiers.push(m);
                                             }
                                             for k in variant_start..temp_idx {
@@ -2600,6 +2666,7 @@ impl Editor {
                                                     k - variant_start,
                                                     temp_idx - variant_start,
                                                 ));
+                                                syntax_bg_colors.push(Color::None);
                                                 syntax_modifiers.push(m);
                                             }
                                             idx = temp_idx;
@@ -2629,8 +2696,10 @@ impl Editor {
                             let is_op_word = matches!(word_str.as_str(), "and" | "or" | "not");
                             let is_bool = matches!(word_str.as_str(), "True" | "False");
 
-                            let is_enum_base =
-                                word_str == "Color" || word_str == "Key" || word_str == "Modifier";
+                            let is_enum_base = word_str == "Color"
+                                || word_str == "Key"
+                                || word_str == "Modifier"
+                                || word_str == "Background";
 
                             let is_enum_variant = start >= 1 && {
                                 let mut k = start;
@@ -2654,6 +2723,7 @@ impl Editor {
                                     prev_word == "Key"
                                         || prev_word == "Modifier"
                                         || prev_word == "Color"
+                                        || prev_word == "Background"
                                 } else {
                                     false
                                 }
@@ -2681,6 +2751,7 @@ impl Editor {
 
                             for k in start..idx {
                                 syntax_colors.push(color.color_at(k - start, idx - start));
+                                syntax_bg_colors.push(Color::None);
                                 syntax_modifiers.push(Modifier::None);
                             }
                         }
@@ -2693,14 +2764,17 @@ impl Editor {
                         for k in start..idx {
                             syntax_colors
                                 .push(theme.editor_operators.color_at(k - start, idx - start));
+                            syntax_bg_colors.push(Color::None);
                             syntax_modifiers.push(Modifier::None);
                         }
                     } else if "()[]{}".contains(c) {
                         syntax_colors.push(theme.editor_brackets.color_at(0, 1));
+                        syntax_bg_colors.push(Color::None);
                         syntax_modifiers.push(Modifier::None);
                         idx += 1;
                     } else {
                         syntax_colors.push(theme.main_label.color_at(0, 1));
+                        syntax_bg_colors.push(Color::None);
                         syntax_modifiers.push(Modifier::None);
                         idx += 1;
                     }
@@ -2744,6 +2818,8 @@ impl Editor {
                         Color::DarkGray
                     } else if error_bg {
                         theme.editor_errors.color_at(display_x as usize, inner_w)
+                    } else if j < syntax_bg_colors.len() && syntax_bg_colors[j] != Color::None {
+                        syntax_bg_colors[j]
                     } else {
                         Color::None
                     },

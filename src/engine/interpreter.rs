@@ -2002,6 +2002,12 @@ impl Environment {
         )
         .unwrap();
         env.define(
+            "Background".to_string(),
+            Value::BuiltinEnum("Background".to_string()),
+            true,
+        )
+        .unwrap();
+        env.define(
             "Modifier".to_string(),
             Value::BuiltinEnum("Modifier".to_string()),
             true,
@@ -2784,7 +2790,7 @@ impl Interpreter {
                 )),
             }
         } else if let Value::EnumVariant(enum_name, variant, _) = val {
-            if enum_name == "Color" && method == "tostring" {
+            if (enum_name == "Color" || enum_name == "Background") && method == "tostring" {
                 if args.len() != 0 {
                     return Err(format!("Line {}: 'tostring' expects 0 arguments", line));
                 }
@@ -3185,7 +3191,7 @@ impl Interpreter {
                                 line, prop
                             ));
                         }
-                    } else if enum_name == "Color" {
+                    } else if enum_name == "Color" || enum_name == "Background" {
                         if crate::theme::themecore::parse_color(&prop).is_err() {
                             return Err(format!("Line {}: Invalid color variant '{}'", line, prop));
                         }
@@ -3319,7 +3325,7 @@ impl Interpreter {
                             method.clone(),
                             Some(Box::new(eval_args[0].clone())),
                         ));
-                    } else if enum_name == "Color" {
+                    } else if enum_name == "Color" || enum_name == "Background" {
                         if crate::theme::themecore::parse_color(&method).is_err() {
                             return Err(format!(
                                 "Line {}: Invalid color variant '{}'",
@@ -3328,8 +3334,8 @@ impl Interpreter {
                         }
                         if !eval_args.is_empty() {
                             return Err(format!(
-                                "Line {}: Color variant does not take arguments",
-                                line
+                                "Line {}: {} variant does not take arguments",
+                                line, enum_name
                             ));
                         }
                         return Ok(Value::EnumVariant(enum_name.clone(), method.clone(), None));

@@ -580,7 +580,10 @@ impl Parser {
                 if self.check(&TokenKind::LParen) {
                     if !is_double {
                         let is_enum = if let Expr::Ident(ref name, _) = expr {
-                            name == "Key" || name == "Color"
+                            name == "Key"
+                                || name == "Color"
+                                || name == "Background"
+                                || name == "Modifier"
                         } else {
                             false
                         };
