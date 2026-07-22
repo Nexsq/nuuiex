@@ -1128,8 +1128,147 @@ fn variant_to_key_str(v: &Value) -> Result<String, String> {
     Err("Expected a Key".to_string())
 }
 
+use std::sync::atomic::AtomicI32;
+
+static MOUSE_DX: AtomicI32 = AtomicI32::new(0);
+static MOUSE_DY: AtomicI32 = AtomicI32::new(0);
+static INIT_MOUSE: std::sync::Once = std::sync::Once::new();
+
 #[cfg(windows)]
-fn get_cursor_pos() -> Result<(i32, i32), String> {
+fn start_mouse_tracker() {
+    use std::thread;
+    use windows_sys::Win32::UI::Input::*;
+    use windows_sys::Win32::UI::WindowsAndMessaging::*;
+
+    thread::spawn(|| unsafe {
+        let class_name: Vec<u16> = "STATIC\0".encode_utf16().collect();
+        let hwnd = CreateWindowExW(
+            0,
+            class_name.as_ptr(),
+            std::ptr::null(),
+            0,
+            0,
+            0,
+            0,
+            0,
+            HWND_MESSAGE,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null(),
+        );
+
+        let rid = RAWINPUTDEVICE {
+            usUsagePage: 0x01,
+            usUsage: 0x02,
+            dwFlags: RIDEV_INPUTSINK,
+            hwndTarget: hwnd,
+        };
+
+        if RegisterRawInputDevices(&rid, 1, std::mem::size_of::<RAWINPUTDEVICE>() as u32) == 0 {
+            return;
+        }
+
+        let mut msg: MSG = std::mem::zeroed();
+        while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+            if msg.message == WM_INPUT {
+                let mut dw_size = 0;
+                GetRawInputData(
+                    msg.lParam as isize as HRAWINPUT,
+                    RID_INPUT,
+                    std::ptr::null_mut(),
+                    &mut dw_size,
+                    std::mem::size_of::<RAWINPUTHEADER>() as u32,
+                );
+
+                if dw_size > 0 {
+                    let mut raw_data: Vec<u8> = vec![0; dw_size as usize];
+                    if GetRawInputData(
+                        msg.lParam as isize as HRAWINPUT,
+                        RID_INPUT,
+                        raw_data.as_mut_ptr() as *mut _,
+                        &mut dw_size,
+                        std::mem::size_of::<RAWINPUTHEADER>() as u32,
+                    ) == dw_size
+                    {
+                        let raw = &*(raw_data.as_ptr() as *const RAWINPUT);
+                        if raw.header.dwType == RIM_TYPEMOUSE {
+                            if (raw.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE as u16) == 0 {
+                                MOUSE_DX.fetch_add(raw.data.mouse.lLastX, Ordering::Relaxed);
+                                MOUSE_DY.fetch_add(raw.data.mouse.lLastY, Ordering::Relaxed);
+                            }
+                        }
+                    }
+                }
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    });
+}
+
+#[cfg(target_os = "linux")]
+fn start_mouse_tracker() {
+    use std::fs;
+    use std::os::unix::io::AsRawFd;
+    use std::thread;
+
+    thread::spawn(|| {
+        let mut fds = Vec::new();
+        if let Ok(entries) = fs::read_dir("/dev/input") {
+            for entry in entries.filter_map(Result::ok) {
+                let path = entry.path();
+                if path.to_string_lossy().contains("event") {
+                    if let Ok(file) = fs::File::open(&path) {
+                        fds.push(file);
+                    }
+                }
+            }
+        }
+
+        if fds.is_empty() {
+            return;
+        }
+
+        let mut poll_fds: Vec<libc::pollfd> = fds
+            .iter()
+            .map(|f| libc::pollfd {
+                fd: f.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            })
+            .collect();
+
+        loop {
+            unsafe {
+                libc::poll(poll_fds.as_mut_ptr(), poll_fds.len() as libc::nfds_t, -1);
+
+                for pfd in poll_fds.iter_mut() {
+                    if (pfd.revents & libc::POLLIN) != 0 {
+                        let mut ev: libc::input_event = std::mem::zeroed();
+                        let size = std::mem::size_of::<libc::input_event>();
+                        let n = libc::read(pfd.fd, &mut ev as *mut _ as *mut libc::c_void, size);
+                        if n == size as isize {
+                            if ev.type_ == 2 {
+                                if ev.code == 0 {
+                                    MOUSE_DX.fetch_add(ev.value, Ordering::Relaxed);
+                                } else if ev.code == 1 {
+                                    MOUSE_DY.fetch_add(ev.value, Ordering::Relaxed);
+                                }
+                            }
+                        }
+                    }
+                    pfd.revents = 0;
+                }
+            }
+        }
+    });
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn start_mouse_tracker() {}
+
+#[cfg(windows)]
+fn get_mouse_pos() -> Result<(i32, i32), String> {
     use windows_sys::Win32::Foundation::POINT;
     use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
     unsafe {
@@ -1143,7 +1282,7 @@ fn get_cursor_pos() -> Result<(i32, i32), String> {
 }
 
 #[cfg(target_os = "linux")]
-fn get_cursor_pos() -> Result<(i32, i32), String> {
+fn get_mouse_pos() -> Result<(i32, i32), String> {
     if std::env::var("WAYLAND_DISPLAY").is_ok() {
         if let Ok(output) = std::process::Command::new("hyprctl")
             .arg("cursorpos")
@@ -1247,8 +1386,8 @@ fn check_key_down(key: &str) -> Result<bool, String> {
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]
-fn get_cursor_pos() -> Result<(i32, i32), String> {
-    Err("Cursor position is not supported on this OS".to_string())
+fn get_mouse_pos() -> Result<(i32, i32), String> {
+    Err("Mouse position is not supported on this OS".to_string())
 }
 
 #[cfg(windows)]
@@ -1519,7 +1658,7 @@ fn get_screen_pixel(_x: i32, _y: i32) -> Result<(u8, u8, u8), String> {
 }
 
 #[cfg(windows)]
-fn set_cursor_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
+fn set_mouse_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
     if relative {
         use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
             INPUT, INPUT_MOUSE, MOUSEEVENTF_MOVE, SendInput,
@@ -1546,7 +1685,7 @@ fn set_cursor_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
 }
 
 #[cfg(target_os = "linux")]
-fn set_cursor_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
+fn set_mouse_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
     if relative {
         let fd = get_or_create_uinput()?;
         #[repr(C)]
@@ -1599,7 +1738,7 @@ fn set_cursor_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
         unsafe {
             if libc::geteuid() == 0 {
                 return Err(
-                    "Cannot use set_cursor_pos as root due to XAUTHORITY restrictions.".to_string(),
+                    "Cannot use set_mouse_pos as root due to XAUTHORITY restrictions.".to_string(),
                 );
             }
             let libx11 = dlopen(b"libX11.so.6\0".as_ptr() as *const i8, RTLD_LAZY);
@@ -1660,8 +1799,8 @@ fn set_cursor_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]
-fn set_cursor_pos(_x: i32, _y: i32, _relative: bool) -> Result<(), String> {
-    Err("Setting cursor position is not supported on this OS".to_string())
+fn set_mouse_pos(_x: i32, _y: i32, _relative: bool) -> Result<(), String> {
+    Err("Setting mouse position is not supported on this OS".to_string())
 }
 
 #[cfg(windows)]
@@ -3180,9 +3319,11 @@ impl Interpreter {
                                 }
 
                                 let remaining = target - now;
-                                let sleep_step =
-                                    std::cmp::min(remaining, std::time::Duration::from_millis(10));
-                                std::thread::sleep(sleep_step);
+                                if remaining > std::time::Duration::from_millis(2) {
+                                    std::thread::sleep(std::time::Duration::from_millis(1));
+                                } else {
+                                    std::hint::spin_loop();
+                                }
                             }
                             return Ok(Value::Nil);
                         } else {
@@ -3500,58 +3641,73 @@ impl Interpreter {
                             return Err(format!("Line {}: 'write' expects a string", line));
                         }
                     }
-                    "cursorx" => {
+                    "mousex" => {
                         if eval_args.len() != 0 {
                             return Err(format!(
-                                "Line {}: 'cursorx' expects exactly 0 arguments",
+                                "Line {}: 'mousex' expects exactly 0 arguments",
                                 line
                             ));
                         }
                         let (x, _) =
-                            get_cursor_pos().map_err(|e| format!("Line {}: {}", line, e))?;
+                            get_mouse_pos().map_err(|e| format!("Line {}: {}", line, e))?;
                         return Ok(Value::Number(x as f64));
                     }
-                    "cursory" => {
+                    "mousey" => {
                         if eval_args.len() != 0 {
                             return Err(format!(
-                                "Line {}: 'cursory' expects exactly 0 arguments",
+                                "Line {}: 'mousey' expects exactly 0 arguments",
                                 line
                             ));
                         }
                         let (_, y) =
-                            get_cursor_pos().map_err(|e| format!("Line {}: {}", line, e))?;
+                            get_mouse_pos().map_err(|e| format!("Line {}: {}", line, e))?;
                         return Ok(Value::Number(y as f64));
                     }
-                    "setcursor" => {
+                    "mousedelta" => {
+                        INIT_MOUSE.call_once(start_mouse_tracker);
+                        if eval_args.len() != 0 {
+                            return Err(format!(
+                                "Line {}: 'mousedelta' expects exactly 0 arguments",
+                                line
+                            ));
+                        }
+                        let dx = MOUSE_DX.swap(0, Ordering::Relaxed);
+                        let dy = MOUSE_DY.swap(0, Ordering::Relaxed);
+                        return Ok(Value::List(vec![
+                            Value::Number(dx as f64),
+                            Value::Number(dy as f64),
+                        ]));
+                    }
+                    "setmouse" => {
                         if eval_args.len() < 2 || eval_args.len() > 3 {
                             return Err(format!(
-                                "Line {}: 'setcursor' expects 2 or 3 arguments",
+                                "Line {}: 'setmouse' expects 2 or 3 arguments",
                                 line
                             ));
                         }
                         let x = if let Value::Number(n) = eval_args[0].1 {
                             n as i32
                         } else {
-                            return Err(format!("Line {}: 'setcursor' x must be a number", line));
+                            return Err(format!("Line {}: 'setmouse' x must be a number", line));
                         };
                         let y = if let Value::Number(n) = eval_args[1].1 {
                             n as i32
                         } else {
-                            return Err(format!("Line {}: 'setcursor' y must be a number", line));
+                            return Err(format!("Line {}: 'setmouse' y must be a number", line));
                         };
                         let relative = if eval_args.len() == 3 {
                             if let Value::Bool(b) = eval_args[2].1 {
                                 b
                             } else {
                                 return Err(format!(
-                                    "Line {}: 'setcursor' relative flag must be a boolean",
+                                    "Line {}: 'setmouse' relative flag must be a boolean",
                                     line
                                 ));
                             }
                         } else {
                             false
                         };
-                        set_cursor_pos(x, y, relative)
+                        set_mouse_pos(x, y, relative)
                             .map_err(|e| format!("Line {}: {}", line, e))?;
                         return Ok(Value::Nil);
                     }
@@ -3583,6 +3739,45 @@ impl Interpreter {
                             self.send_output();
                         }
                         return Ok(Value::Nil);
+                    }
+                    "time" => {
+                        static SCRIPT_START: std::sync::OnceLock<std::time::Instant> =
+                            std::sync::OnceLock::new();
+                        if eval_args.len() != 0 {
+                            return Err(format!(
+                                "Line {}: 'time' expects exactly 0 arguments",
+                                line
+                            ));
+                        }
+                        let start = SCRIPT_START.get_or_init(std::time::Instant::now);
+                        let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+                        return Ok(Value::Number(elapsed));
+                    }
+                    "activekeys" => {
+                        if eval_args.len() != 1 {
+                            return Err(format!(
+                                "Line {}: 'activekeys' expects exactly 1 argument",
+                                line
+                            ));
+                        }
+                        let mut active = Vec::new();
+                        if let Value::List(keys) = &eval_args[0].1 {
+                            for k in keys {
+                                let key_str = match variant_to_key_str(k) {
+                                    Ok(s) => s,
+                                    Err(e) => return Err(format!("Line {}: {}", line, e)),
+                                };
+                                if check_key_down(&key_str).unwrap_or(false) {
+                                    active.push(k.clone());
+                                }
+                            }
+                        } else {
+                            return Err(format!(
+                                "Line {}: 'activekeys' expects a list of keys",
+                                line
+                            ));
+                        }
+                        return Ok(Value::List(active));
                     }
                     "setcaret" => {
                         if eval_args.len() != 2 {

@@ -379,9 +379,13 @@ impl Analyzer {
                     } else if matches!(args[0].1, Expr::String(_)) {
                         self.error(*line, format!("'{}' expects a Key", name));
                     }
-                } else if name == "cursorx" || name == "cursory" {
+                } else if name == "mousex" || name == "mousey" || name == "mousedelta" {
                     if args.len() != 0 {
                         self.error(*line, format!("'{}' expects exactly 0 arguments", name));
+                    }
+                } else if name == "activekeys" {
+                    if args.len() != 1 {
+                        self.error(*line, format!("'{}' expects exactly 1 argument", name));
                     }
                 } else if name == "getpixel" {
                     if args.len() != 2 {
@@ -391,7 +395,7 @@ impl Analyzer {
                     if args.len() < 3 || args.len() > 4 {
                         self.error(*line, format!("'{}' expects 3 or 4 arguments", name));
                     }
-                } else if name == "setcursor" {
+                } else if name == "setmouse" {
                     if args.len() < 2 || args.len() > 3 {
                         self.error(*line, format!("'{}' expects 2 or 3 arguments", name));
                     }
@@ -406,6 +410,10 @@ impl Analyzer {
                 } else if name == "clear" {
                     if args.len() > 1 {
                         self.error(*line, format!("'{}' expects 0 or 1 argument", name));
+                    }
+                } else if name == "time" {
+                    if args.len() != 0 {
+                        self.error(*line, format!("'{}' expects exactly 0 arguments", name));
                     }
                 } else if name == "macrodata" {
                     if args.len() > 1 {

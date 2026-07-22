@@ -273,6 +273,7 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 | `print(...)` | `*args` | Prints arguments to the script output panel separated by spaces. |
 | `println(...)`| `*args` | Same as `print`, but appends a newline at the end. |
 | `clear(bool?)` | `send=True` | Clears the output panel buffer. |
+| `time()` | None | Returns the current system time in milliseconds (since UNIX epoch). |
 | `input(prompt?)`| `String` | Pauses execution and prompts the user for text input in the output panel. Returns a `String`. |
 | `sleep(ms)` | `Number` | Pauses the current thread for `ms` milliseconds. Number can be float. |
 | `exit()` | None | Immediately terminates the script execution. |
@@ -293,6 +294,7 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 | `isupfocus(key)`| `Key:Variant` | I think it's self explanatory. |
 | `keydown(key)`| `Key:Variant` | Simulates a hardware key press (pushes the key down). |
 | `keyup(key)` | `Key:Variant` | Simulates a hardware key release. |
+| `activekeys(list)` | `List` | Takes a List of Keys and returns a sub-list of only the ones currently pressed. |
 | `write(text)` | `String` | Simulates typing out a string of text sequentially at the OS level. |
 | `scroll(amount)`| `Number` | Simulates the mouse scroll wheel. Positive = Up, Negative = Down. |
 
@@ -300,9 +302,10 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 
 | Function | Arguments | Description |
 | :--- | :--- | :--- |
-| `cursorx()` | None | Returns the absolute X coordinate of the OS mouse cursor. |
-| `cursory()` | None | Returns the absolute Y coordinate of the OS mouse cursor. |
-| `setcursor(x, y, relative?)` | `Number, Number, Bool` | Moves the mouse cursor. If `relative` is `True`, moves it by an offset rather than to absolute screen coordinates. |
+| `mousex()` | None | Returns the absolute X coordinate of the OS mouse cursor. |
+| `mousey()` | None | Returns the absolute Y coordinate of the OS mouse cursor. |
+| `mousedelta()` | None | Returns a List `[dx, dy]` of raw relative mouse movement since the last call. |
+| `setmouse(x, y, relative?)` | `Number, Number, Bool` | Moves the mouse cursor. If `relative` is `True`, moves it by an offset rather than to absolute screen coordinates. |
 | `getpixel(x, y)` | `Number, Number` | Returns the RGB color of the screen pixel at `(x, y)` as a `Color:Variant`. |
 | `compixel(x, y, color, tol?)` | `Num, Num, Color, Num` | Compares the pixel at `(x, y)` against the provided `Color`. Optional `tol` (0-255) defines the acceptable RGB tolerance. Returns `Bool`. |
 | `setcaret(x, y)` | `Number, Number` | Moves the internal terminal caret to a specific row and column in the output box. |
@@ -435,8 +438,8 @@ loop:
     if isdown(Key:Esc):
         break
 
-    let x = cursorx()
-    let y = cursory()
+    let x = mousex()
+    let y = mousey()
 
     # Check screen at mouse position Allow a color variance/tolerance of 10.
     if compixel((x - 2)::abs(), (y - 2)::abs(), target_color, 10):

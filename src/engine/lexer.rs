@@ -66,6 +66,7 @@ pub struct Lexer<'a> {
     source: &'a str,
     chars: std::iter::Peekable<std::str::CharIndices<'a>>,
     line: usize,
+    nesting_level: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -74,6 +75,7 @@ impl<'a> Lexer<'a> {
             source,
             chars: source.char_indices().peekable(),
             line: 1,
+            nesting_level: 0,
         }
     }
 
@@ -82,6 +84,7 @@ impl<'a> Lexer<'a> {
             source,
             chars: source.char_indices().peekable(),
             line: start_line,
+            nesting_level: 0,
         }
     }
 
@@ -211,13 +214,18 @@ impl<'a> Lexer<'a> {
                 }
                 '\n' => {
                     self.advance();
-                    *is_bol = true;
-                    let tok = Token {
-                        kind: TokenKind::Newline,
-                        line: self.line,
-                    };
+                    let current_line = self.line;
                     self.line += 1;
-                    return tok;
+
+                    if self.nesting_level > 0 {
+                        continue;
+                    }
+
+                    *is_bol = true;
+                    return Token {
+                        kind: TokenKind::Newline,
+                        line: current_line,
+                    };
                 }
                 '+' => {
                     self.advance();
@@ -361,6 +369,7 @@ impl<'a> Lexer<'a> {
                 }
                 '(' => {
                     self.advance();
+                    self.nesting_level += 1;
                     return Token {
                         kind: TokenKind::LParen,
                         line: self.line,
@@ -368,6 +377,7 @@ impl<'a> Lexer<'a> {
                 }
                 ')' => {
                     self.advance();
+                    self.nesting_level = self.nesting_level.saturating_sub(1);
                     return Token {
                         kind: TokenKind::RParen,
                         line: self.line,
@@ -375,6 +385,7 @@ impl<'a> Lexer<'a> {
                 }
                 '[' => {
                     self.advance();
+                    self.nesting_level += 1;
                     return Token {
                         kind: TokenKind::LBracket,
                         line: self.line,
@@ -382,6 +393,7 @@ impl<'a> Lexer<'a> {
                 }
                 ']' => {
                     self.advance();
+                    self.nesting_level = self.nesting_level.saturating_sub(1);
                     return Token {
                         kind: TokenKind::RBracket,
                         line: self.line,
@@ -389,6 +401,7 @@ impl<'a> Lexer<'a> {
                 }
                 '{' => {
                     self.advance();
+                    self.nesting_level += 1;
                     return Token {
                         kind: TokenKind::LBrace,
                         line: self.line,
@@ -396,6 +409,7 @@ impl<'a> Lexer<'a> {
                 }
                 '}' => {
                     self.advance();
+                    self.nesting_level = self.nesting_level.saturating_sub(1);
                     return Token {
                         kind: TokenKind::RBrace,
                         line: self.line,
