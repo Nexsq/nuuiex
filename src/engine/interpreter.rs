@@ -623,17 +623,14 @@ fn check_x11_key_down(key_str: &str) -> Option<bool> {
         }
 
         let xopen_sym = dlsym(libx11, b"XOpenDisplay\0".as_ptr() as *const i8);
-        let xquery_sym = dlsym(libx11, b"XQueryKeymap\0".as_ptr() as *const i8);
         let xclose_sym = dlsym(libx11, b"XCloseDisplay\0".as_ptr() as *const i8);
 
-        if xopen_sym.is_null() || xquery_sym.is_null() || xclose_sym.is_null() {
+        if xopen_sym.is_null() || xclose_sym.is_null() {
             dlclose(libx11);
             return None;
         }
 
         let xopendisplay: extern "C" fn(*const i8) -> *mut c_void = std::mem::transmute(xopen_sym);
-        let xquerykeymap: extern "C" fn(*mut c_void, *mut u8) -> i32 =
-            std::mem::transmute(xquery_sym);
         let xclosedisplay: extern "C" fn(*mut c_void) -> i32 = std::mem::transmute(xclose_sym);
 
         let display = xopendisplay(std::ptr::null());
@@ -642,14 +639,76 @@ fn check_x11_key_down(key_str: &str) -> Option<bool> {
             return None;
         }
 
+        if info.code >= 272 {
+            let xquery_ptr_sym = dlsym(libx11, b"XQueryPointer\0".as_ptr() as *const i8);
+            let xroot_sym = dlsym(libx11, b"XDefaultRootWindow\0".as_ptr() as *const i8);
+            if !xquery_ptr_sym.is_null() && !xroot_sym.is_null() {
+                let xquerypointer: extern "C" fn(
+                    *mut c_void,
+                    libc::c_ulong,
+                    *mut libc::c_ulong,
+                    *mut libc::c_ulong,
+                    *mut i32,
+                    *mut i32,
+                    *mut i32,
+                    *mut i32,
+                    *mut u32,
+                ) -> i32 = std::mem::transmute(xquery_ptr_sym);
+                let xdefaultrootwindow: extern "C" fn(*mut c_void) -> libc::c_ulong =
+                    std::mem::transmute(xroot_sym);
+
+                let root = xdefaultrootwindow(display);
+                let mut root_return = 0;
+                let mut child_return = 0;
+                let mut root_x = 0;
+                let mut root_y = 0;
+                let mut win_x = 0;
+                let mut win_y = 0;
+                let mut mask = 0;
+
+                xquerypointer(
+                    display,
+                    root,
+                    &mut root_return,
+                    &mut child_return,
+                    &mut root_x,
+                    &mut root_y,
+                    &mut win_x,
+                    &mut win_y,
+                    &mut mask,
+                );
+
+                xclosedisplay(display);
+                dlclose(libx11);
+
+                let is_down = match info.code {
+                    272 => (mask & (1 << 8)) != 0,
+                    273 => (mask & (1 << 10)) != 0,
+                    274 => (mask & (1 << 9)) != 0,
+                    _ => false,
+                };
+
+                return Some(is_down);
+            }
+
+            xclosedisplay(display);
+            dlclose(libx11);
+            return None;
+        }
+
+        let xquery_sym = dlsym(libx11, b"XQueryKeymap\0".as_ptr() as *const i8);
+        if xquery_sym.is_null() {
+            xclosedisplay(display);
+            dlclose(libx11);
+            return None;
+        }
+        let xquerykeymap: extern "C" fn(*mut c_void, *mut u8) -> i32 =
+            std::mem::transmute(xquery_sym);
+
         let mut keys = [0u8; 32];
         xquerykeymap(display, keys.as_mut_ptr());
         xclosedisplay(display);
         dlclose(libx11);
-
-        if info.code >= 272 {
-            return None;
-        }
 
         let is_key_pressed = |linux_code: u16| -> bool {
             let x11_code = linux_code + 8;
@@ -906,87 +965,20 @@ fn get_or_create_uinput() -> Result<i32, String> {
 #[cfg(target_os = "linux")]
 fn simulate_key(key: &str, down: bool) -> Result<(), String> {
     let info = parse_linux_key(key)?;
-    let fd = get_or_create_uinput()?;
+    if let Ok(fd) = get_or_create_uinput() {
+        let mut evs: Vec<libc::input_event> = Vec::with_capacity(8);
 
-    let mut evs: Vec<libc::input_event> = Vec::with_capacity(8);
-
-    macro_rules! add_ev {
-        ($code:expr, $val:expr) => {
-            let mut ev: libc::input_event = unsafe { std::mem::zeroed() };
-            ev.type_ = 1;
-            ev.code = $code;
-            ev.value = $val;
-            evs.push(ev);
-        };
-    }
-
-    if down {
-        if info.req_shift {
-            add_ev!(42, 1);
+        macro_rules! add_ev {
+            ($code:expr, $val:expr) => {
+                let mut ev: libc::input_event = unsafe { std::mem::zeroed() };
+                ev.type_ = 1;
+                ev.code = $code;
+                ev.value = $val;
+                evs.push(ev);
+            };
         }
-        if info.req_ctrl {
-            add_ev!(29, 1);
-        }
-        if info.req_alt {
-            add_ev!(56, 1);
-        }
-    }
 
-    add_ev!(info.code, if down { 1 } else { 0 });
-
-    if !down {
-        if info.req_alt {
-            add_ev!(56, 0);
-        }
-        if info.req_ctrl {
-            add_ev!(29, 0);
-        }
-        if info.req_shift {
-            add_ev!(42, 0);
-        }
-    }
-
-    let mut syn: libc::input_event = unsafe { std::mem::zeroed() };
-    syn.type_ = 0;
-    syn.code = 0;
-    syn.value = 0;
-    evs.push(syn);
-
-    unsafe {
-        libc::write(
-            fd,
-            evs.as_ptr() as *const libc::c_void,
-            evs.len() * std::mem::size_of::<libc::input_event>(),
-        );
-    }
-
-    Ok(())
-}
-
-#[cfg(target_os = "linux")]
-fn simulate_write(text: &str) -> Result<(), String> {
-    let fd = get_or_create_uinput()?;
-
-    for c in text.chars() {
-        let key_str = match c {
-            '\n' => "enter".to_string(),
-            '\t' => "tab".to_string(),
-            _ => c.to_string(),
-        };
-
-        if let Ok(info) = parse_linux_key(&key_str) {
-            let mut evs: Vec<libc::input_event> = Vec::with_capacity(8);
-
-            macro_rules! add_ev {
-                ($code:expr, $val:expr) => {
-                    let mut ev: libc::input_event = unsafe { std::mem::zeroed() };
-                    ev.type_ = 1;
-                    ev.code = $code;
-                    ev.value = $val;
-                    evs.push(ev);
-                };
-            }
-
+        if down {
             if info.req_shift {
                 add_ev!(42, 1);
             }
@@ -996,28 +988,11 @@ fn simulate_write(text: &str) -> Result<(), String> {
             if info.req_alt {
                 add_ev!(56, 1);
             }
+        }
 
-            add_ev!(info.code, 1);
+        add_ev!(info.code, if down { 1 } else { 0 });
 
-            let mut syn: libc::input_event = unsafe { std::mem::zeroed() };
-            syn.type_ = 0;
-            syn.code = 0;
-            syn.value = 0;
-            evs.push(syn);
-
-            unsafe {
-                libc::write(
-                    fd,
-                    evs.as_ptr() as *const libc::c_void,
-                    evs.len() * std::mem::size_of::<libc::input_event>(),
-                );
-            }
-
-            std::thread::sleep(std::time::Duration::from_millis(2));
-
-            evs.clear();
-            add_ev!(info.code, 0);
-
+        if !down {
             if info.req_alt {
                 add_ev!(56, 0);
             }
@@ -1027,21 +1002,139 @@ fn simulate_write(text: &str) -> Result<(), String> {
             if info.req_shift {
                 add_ev!(42, 0);
             }
-
-            evs.push(syn);
-
-            unsafe {
-                libc::write(
-                    fd,
-                    evs.as_ptr() as *const libc::c_void,
-                    evs.len() * std::mem::size_of::<libc::input_event>(),
-                );
-            }
         }
-        std::thread::sleep(std::time::Duration::from_millis(5));
+
+        let mut syn: libc::input_event = unsafe { std::mem::zeroed() };
+        syn.type_ = 0;
+        syn.code = 0;
+        syn.value = 0;
+        evs.push(syn);
+
+        unsafe {
+            libc::write(
+                fd,
+                evs.as_ptr() as *const libc::c_void,
+                evs.len() * std::mem::size_of::<libc::input_event>(),
+            );
+        }
+        return Ok(());
     }
 
-    Ok(())
+    let action = if down { "keydown" } else { "keyup" };
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        Err("uinput failed. Run with sudo for keyboard simulation on Wayland.".into())
+    } else {
+        if std::process::Command::new("xdotool")
+            .args([action, key])
+            .output()
+            .is_ok()
+        {
+            Ok(())
+        } else {
+            Err("Failed to simulate key. Run with sudo or install xdotool.".into())
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn simulate_write(text: &str) -> Result<(), String> {
+    if let Ok(fd) = get_or_create_uinput() {
+        for c in text.chars() {
+            let key_str = match c {
+                '\n' => "enter".to_string(),
+                '\t' => "tab".to_string(),
+                _ => c.to_string(),
+            };
+
+            if let Ok(info) = parse_linux_key(&key_str) {
+                let mut evs: Vec<libc::input_event> = Vec::with_capacity(8);
+
+                macro_rules! add_ev {
+                    ($code:expr, $val:expr) => {
+                        let mut ev: libc::input_event = unsafe { std::mem::zeroed() };
+                        ev.type_ = 1;
+                        ev.code = $code;
+                        ev.value = $val;
+                        evs.push(ev);
+                    };
+                }
+
+                if info.req_shift {
+                    add_ev!(42, 1);
+                }
+                if info.req_ctrl {
+                    add_ev!(29, 1);
+                }
+                if info.req_alt {
+                    add_ev!(56, 1);
+                }
+
+                add_ev!(info.code, 1);
+
+                let mut syn: libc::input_event = unsafe { std::mem::zeroed() };
+                syn.type_ = 0;
+                syn.code = 0;
+                syn.value = 0;
+                evs.push(syn);
+
+                unsafe {
+                    libc::write(
+                        fd,
+                        evs.as_ptr() as *const libc::c_void,
+                        evs.len() * std::mem::size_of::<libc::input_event>(),
+                    );
+                }
+
+                std::thread::sleep(std::time::Duration::from_millis(2));
+
+                evs.clear();
+                add_ev!(info.code, 0);
+
+                if info.req_alt {
+                    add_ev!(56, 0);
+                }
+                if info.req_ctrl {
+                    add_ev!(29, 0);
+                }
+                if info.req_shift {
+                    add_ev!(42, 0);
+                }
+
+                evs.push(syn);
+
+                unsafe {
+                    libc::write(
+                        fd,
+                        evs.as_ptr() as *const libc::c_void,
+                        evs.len() * std::mem::size_of::<libc::input_event>(),
+                    );
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        return Ok(());
+    }
+
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        if std::process::Command::new("ydotool")
+            .args(["type", text])
+            .output()
+            .is_ok()
+        {
+            return Ok(());
+        }
+        Err("uinput failed. Run with sudo for write simulation on Wayland.".into())
+    } else {
+        if std::process::Command::new("xdotool")
+            .args(["type", "--delay", "5", text])
+            .output()
+            .is_ok()
+        {
+            Ok(())
+        } else {
+            Err("Failed to simulate write. Run with sudo or install xdotool.".into())
+        }
+    }
 }
 
 fn variant_to_key_str(v: &Value) -> Result<String, String> {
@@ -1192,74 +1285,55 @@ fn start_mouse_tracker() {
 
 #[cfg(target_os = "linux")]
 fn start_mouse_tracker() {
-    use std::fs;
-    use std::os::unix::io::AsRawFd;
+    use std::fs::File;
+    use std::io::Read;
     use std::thread;
 
     thread::spawn(|| {
-        let mut fds = Vec::new();
-        if let Ok(entries) = fs::read_dir("/dev/input") {
-            for entry in entries.filter_map(Result::ok) {
-                let path = entry.path();
-                if path.to_string_lossy().contains("event") {
-                    if let Ok(file) = fs::File::open(&path) {
-                        unsafe {
-                            let fd = file.as_raw_fd();
-                            let flags = libc::fcntl(fd, libc::F_GETFL, 0);
-                            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-                        }
-                        fds.push(file);
+        if let Ok(mut file) = File::open("/dev/input/mice") {
+            let mut buf = [0u8; 3];
+            loop {
+                if file.read_exact(&mut buf).is_ok() {
+                    let x_sign = (buf[0] & 0x10) != 0;
+                    let y_sign = (buf[0] & 0x20) != 0;
+
+                    let mut dx = buf[1] as i32;
+                    if x_sign && dx != 0 {
+                        dx -= 256;
+                    } else if x_sign && dx == 0 {
+                        dx = -256;
                     }
+
+                    let mut dy = buf[2] as i32;
+                    if y_sign && dy != 0 {
+                        dy -= 256;
+                    } else if y_sign && dy == 0 {
+                        dy = -256;
+                    }
+
+                    dy = -dy;
+
+                    MOUSE_DX.fetch_add(dx, Ordering::Relaxed);
+                    MOUSE_DY.fetch_add(dy, Ordering::Relaxed);
+                } else {
+                    break;
                 }
             }
         }
 
-        if fds.is_empty() {
-            MOUSE_TRACKER_FAILED.store(true, Ordering::Relaxed);
-            return;
-        }
-
-        let mut poll_fds: Vec<libc::pollfd> = fds
-            .iter()
-            .map(|f| libc::pollfd {
-                fd: f.as_raw_fd(),
-                events: libc::POLLIN,
-                revents: 0,
-            })
-            .collect();
-
+        let mut last_pos = get_mouse_pos().unwrap_or((0, 0));
         loop {
-            unsafe {
-                let ret = libc::poll(poll_fds.as_mut_ptr(), poll_fds.len() as libc::nfds_t, -1);
-                if ret < 0 {
-                    continue;
+            thread::sleep(std::time::Duration::from_millis(5));
+            if let Ok(pos) = get_mouse_pos() {
+                let dx = pos.0 - last_pos.0;
+                let dy = pos.1 - last_pos.1;
+                if dx != 0 {
+                    MOUSE_DX.fetch_add(dx, Ordering::Relaxed);
                 }
-
-                for pfd in poll_fds.iter_mut() {
-                    if (pfd.revents & libc::POLLIN) != 0 {
-                        loop {
-                            let mut ev: libc::input_event = std::mem::zeroed();
-                            let size = std::mem::size_of::<libc::input_event>();
-                            let n =
-                                libc::read(pfd.fd, &mut ev as *mut _ as *mut libc::c_void, size);
-                            if n == size as isize {
-                                if ev.type_ == 2 {
-                                    if ev.code == 0 {
-                                        MOUSE_DX.fetch_add(ev.value, Ordering::Relaxed);
-                                    } else if ev.code == 1 {
-                                        MOUSE_DY.fetch_add(ev.value, Ordering::Relaxed);
-                                    }
-                                }
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-                    if (pfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL)) != 0 {
-                        pfd.fd = -1;
-                    }
-                    pfd.revents = 0;
+                if dy != 0 {
+                    MOUSE_DY.fetch_add(dy, Ordering::Relaxed);
                 }
+                last_pos = pos;
             }
         }
     });
@@ -1468,34 +1542,6 @@ struct XImage {
 }
 
 #[cfg(target_os = "linux")]
-#[repr(C)]
-struct XWindowAttributes {
-    pub x: i32,
-    pub y: i32,
-    pub width: i32,
-    pub height: i32,
-    pub border_width: i32,
-    pub depth: i32,
-    pub visual: *mut libc::c_void,
-    pub root: libc::c_ulong,
-    pub class: i32,
-    pub bit_gravity: i32,
-    pub win_gravity: i32,
-    pub backing_store: i32,
-    pub backing_planes: libc::c_ulong,
-    pub backing_pixel: libc::c_ulong,
-    pub save_under: i32,
-    pub colormap: libc::c_ulong,
-    pub map_installed: i32,
-    pub map_state: i32,
-    pub all_event_masks: libc::c_long,
-    pub your_event_mask: libc::c_long,
-    pub do_not_propagate_mask: libc::c_long,
-    pub override_redirect: i32,
-    pub screen: *mut libc::c_void,
-}
-
-#[cfg(target_os = "linux")]
 struct X11PixelContext {
     lib: *mut libc::c_void,
     display: *mut libc::c_void,
@@ -1683,32 +1729,55 @@ fn set_mouse_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
 #[cfg(target_os = "linux")]
 fn set_mouse_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
     if relative {
-        let fd = get_or_create_uinput()?;
-        let mut evs: Vec<libc::input_event> = Vec::with_capacity(3);
-        macro_rules! add_ev {
-            ($type:expr, $code:expr, $val:expr) => {
-                let mut ev: libc::input_event = unsafe { std::mem::zeroed() };
-                ev.type_ = $type;
-                ev.code = $code;
-                ev.value = $val;
-                evs.push(ev);
-            };
+        if let Ok(fd) = get_or_create_uinput() {
+            let mut evs: Vec<libc::input_event> = Vec::with_capacity(3);
+            macro_rules! add_ev {
+                ($type:expr, $code:expr, $val:expr) => {
+                    let mut ev: libc::input_event = unsafe { std::mem::zeroed() };
+                    ev.type_ = $type;
+                    ev.code = $code;
+                    ev.value = $val;
+                    evs.push(ev);
+                };
+            }
+            if x != 0 {
+                add_ev!(2, 0, x);
+            }
+            if y != 0 {
+                add_ev!(2, 1, y);
+            }
+            add_ev!(0, 0, 0);
+            unsafe {
+                libc::write(
+                    fd,
+                    evs.as_ptr() as *const libc::c_void,
+                    evs.len() * std::mem::size_of::<libc::input_event>(),
+                );
+            }
+            return Ok(());
         }
-        if x != 0 {
-            add_ev!(2, 0, x);
+
+        if std::env::var("WAYLAND_DISPLAY").is_ok() {
+            if let Ok(output) = std::process::Command::new("ydotool")
+                .args(["mousemove", "-x", &x.to_string(), "-y", &y.to_string()])
+                .output()
+            {
+                if output.status.success() {
+                    return Ok(());
+                }
+            }
+            Err("Failed to set relative mouse pos. Run with sudo or install ydotool.".to_string())
+        } else {
+            if let Ok(output) = std::process::Command::new("xdotool")
+                .args(["mousemove_relative", "--", &x.to_string(), &y.to_string()])
+                .output()
+            {
+                if output.status.success() {
+                    return Ok(());
+                }
+            }
+            Err("Failed to set relative mouse pos. Run with sudo or install xdotool.".to_string())
         }
-        if y != 0 {
-            add_ev!(2, 1, y);
-        }
-        add_ev!(0, 0, 0);
-        unsafe {
-            libc::write(
-                fd,
-                evs.as_ptr() as *const libc::c_void,
-                evs.len() * std::mem::size_of::<libc::input_event>(),
-            );
-        }
-        Ok(())
     } else {
         if std::env::var("WAYLAND_DISPLAY").is_ok() {
             if let Ok(output) = std::process::Command::new("ydotool")
