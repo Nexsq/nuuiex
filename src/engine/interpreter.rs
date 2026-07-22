@@ -246,46 +246,82 @@ fn simulate_key(key: &str, down: bool) -> Result<(), String> {
             inputs[count].Anonymous.mi.mouseData = info.mouse_data;
             count += 1;
         } else {
+            let scan = MapVirtualKeyW(info.vk as u32, MAPVK_VK_TO_VSC) as u16;
+            let use_scan = scan != 0;
+
+            let mut base_flags = if use_scan { KEYEVENTF_SCANCODE } else { 0 };
+
+            match info.vk {
+                VK_UP | VK_DOWN | VK_LEFT | VK_RIGHT | VK_PRIOR | VK_NEXT | VK_END | VK_HOME
+                | VK_INSERT | VK_DELETE | VK_DIVIDE | VK_RMENU | VK_RCONTROL => {
+                    base_flags |= KEYEVENTF_EXTENDEDKEY;
+                }
+                _ => {}
+            }
+
             if down {
                 if info.req_shift {
+                    let s_scan = MapVirtualKeyW(VK_SHIFT as u32, MAPVK_VK_TO_VSC) as u16;
                     inputs[count].r#type = INPUT_KEYBOARD;
                     inputs[count].Anonymous.ki.wVk = VK_SHIFT;
+                    inputs[count].Anonymous.ki.wScan = s_scan;
+                    inputs[count].Anonymous.ki.dwFlags =
+                        if s_scan != 0 { KEYEVENTF_SCANCODE } else { 0 };
                     count += 1;
                 }
                 if info.req_ctrl {
+                    let c_scan = MapVirtualKeyW(VK_CONTROL as u32, MAPVK_VK_TO_VSC) as u16;
                     inputs[count].r#type = INPUT_KEYBOARD;
                     inputs[count].Anonymous.ki.wVk = VK_CONTROL;
+                    inputs[count].Anonymous.ki.wScan = c_scan;
+                    inputs[count].Anonymous.ki.dwFlags =
+                        if c_scan != 0 { KEYEVENTF_SCANCODE } else { 0 };
                     count += 1;
                 }
                 if info.req_alt {
+                    let a_scan = MapVirtualKeyW(VK_MENU as u32, MAPVK_VK_TO_VSC) as u16;
                     inputs[count].r#type = INPUT_KEYBOARD;
                     inputs[count].Anonymous.ki.wVk = VK_MENU;
+                    inputs[count].Anonymous.ki.wScan = a_scan;
+                    inputs[count].Anonymous.ki.dwFlags =
+                        if a_scan != 0 { KEYEVENTF_SCANCODE } else { 0 };
                     count += 1;
                 }
             }
 
             inputs[count].r#type = INPUT_KEYBOARD;
             inputs[count].Anonymous.ki.wVk = info.vk;
-            inputs[count].Anonymous.ki.dwFlags = if down { 0 } else { KEYEVENTF_KEYUP };
+            inputs[count].Anonymous.ki.wScan = scan;
+            inputs[count].Anonymous.ki.dwFlags =
+                base_flags | if down { 0 } else { KEYEVENTF_KEYUP };
             count += 1;
 
             if !down {
                 if info.req_alt {
+                    let a_scan = MapVirtualKeyW(VK_MENU as u32, MAPVK_VK_TO_VSC) as u16;
                     inputs[count].r#type = INPUT_KEYBOARD;
                     inputs[count].Anonymous.ki.wVk = VK_MENU;
-                    inputs[count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                    inputs[count].Anonymous.ki.wScan = a_scan;
+                    inputs[count].Anonymous.ki.dwFlags =
+                        (if a_scan != 0 { KEYEVENTF_SCANCODE } else { 0 }) | KEYEVENTF_KEYUP;
                     count += 1;
                 }
                 if info.req_ctrl {
+                    let c_scan = MapVirtualKeyW(VK_CONTROL as u32, MAPVK_VK_TO_VSC) as u16;
                     inputs[count].r#type = INPUT_KEYBOARD;
                     inputs[count].Anonymous.ki.wVk = VK_CONTROL;
-                    inputs[count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                    inputs[count].Anonymous.ki.wScan = c_scan;
+                    inputs[count].Anonymous.ki.dwFlags =
+                        (if c_scan != 0 { KEYEVENTF_SCANCODE } else { 0 }) | KEYEVENTF_KEYUP;
                     count += 1;
                 }
                 if info.req_shift {
+                    let s_scan = MapVirtualKeyW(VK_SHIFT as u32, MAPVK_VK_TO_VSC) as u16;
                     inputs[count].r#type = INPUT_KEYBOARD;
                     inputs[count].Anonymous.ki.wVk = VK_SHIFT;
-                    inputs[count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                    inputs[count].Anonymous.ki.wScan = s_scan;
+                    inputs[count].Anonymous.ki.dwFlags =
+                        (if s_scan != 0 { KEYEVENTF_SCANCODE } else { 0 }) | KEYEVENTF_KEYUP;
                     count += 1;
                 }
             }
@@ -312,27 +348,53 @@ fn simulate_write(text: &str) -> Result<(), String> {
 
         if let Ok(info) = parse_win_key(&key_str) {
             unsafe {
+                let scan = MapVirtualKeyW(info.vk as u32, MAPVK_VK_TO_VSC) as u16;
+                let use_scan = scan != 0;
+                let mut base_flags = if use_scan { KEYEVENTF_SCANCODE } else { 0 };
+
+                match info.vk {
+                    VK_UP | VK_DOWN | VK_LEFT | VK_RIGHT | VK_PRIOR | VK_NEXT | VK_END
+                    | VK_HOME | VK_INSERT | VK_DELETE | VK_DIVIDE | VK_RMENU | VK_RCONTROL => {
+                        base_flags |= KEYEVENTF_EXTENDEDKEY;
+                    }
+                    _ => {}
+                }
+
                 let mut inputs_down: [INPUT; 4] = std::mem::zeroed();
                 let mut down_count = 0;
 
                 if info.req_shift {
+                    let s_scan = MapVirtualKeyW(VK_SHIFT as u32, MAPVK_VK_TO_VSC) as u16;
                     inputs_down[down_count].r#type = INPUT_KEYBOARD;
                     inputs_down[down_count].Anonymous.ki.wVk = VK_SHIFT;
+                    inputs_down[down_count].Anonymous.ki.wScan = s_scan;
+                    inputs_down[down_count].Anonymous.ki.dwFlags =
+                        if s_scan != 0 { KEYEVENTF_SCANCODE } else { 0 };
                     down_count += 1;
                 }
                 if info.req_ctrl {
+                    let c_scan = MapVirtualKeyW(VK_CONTROL as u32, MAPVK_VK_TO_VSC) as u16;
                     inputs_down[down_count].r#type = INPUT_KEYBOARD;
                     inputs_down[down_count].Anonymous.ki.wVk = VK_CONTROL;
+                    inputs_down[down_count].Anonymous.ki.wScan = c_scan;
+                    inputs_down[down_count].Anonymous.ki.dwFlags =
+                        if c_scan != 0 { KEYEVENTF_SCANCODE } else { 0 };
                     down_count += 1;
                 }
                 if info.req_alt {
+                    let a_scan = MapVirtualKeyW(VK_MENU as u32, MAPVK_VK_TO_VSC) as u16;
                     inputs_down[down_count].r#type = INPUT_KEYBOARD;
                     inputs_down[down_count].Anonymous.ki.wVk = VK_MENU;
+                    inputs_down[down_count].Anonymous.ki.wScan = a_scan;
+                    inputs_down[down_count].Anonymous.ki.dwFlags =
+                        if a_scan != 0 { KEYEVENTF_SCANCODE } else { 0 };
                     down_count += 1;
                 }
 
                 inputs_down[down_count].r#type = INPUT_KEYBOARD;
                 inputs_down[down_count].Anonymous.ki.wVk = info.vk;
+                inputs_down[down_count].Anonymous.ki.wScan = scan;
+                inputs_down[down_count].Anonymous.ki.dwFlags = base_flags;
                 down_count += 1;
 
                 SendInput(
@@ -348,25 +410,35 @@ fn simulate_write(text: &str) -> Result<(), String> {
 
                 inputs_up[up_count].r#type = INPUT_KEYBOARD;
                 inputs_up[up_count].Anonymous.ki.wVk = info.vk;
-                inputs_up[up_count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                inputs_up[up_count].Anonymous.ki.wScan = scan;
+                inputs_up[up_count].Anonymous.ki.dwFlags = base_flags | KEYEVENTF_KEYUP;
                 up_count += 1;
 
                 if info.req_alt {
+                    let a_scan = MapVirtualKeyW(VK_MENU as u32, MAPVK_VK_TO_VSC) as u16;
                     inputs_up[up_count].r#type = INPUT_KEYBOARD;
                     inputs_up[up_count].Anonymous.ki.wVk = VK_MENU;
-                    inputs_up[up_count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                    inputs_up[up_count].Anonymous.ki.wScan = a_scan;
+                    inputs_up[up_count].Anonymous.ki.dwFlags =
+                        (if a_scan != 0 { KEYEVENTF_SCANCODE } else { 0 }) | KEYEVENTF_KEYUP;
                     up_count += 1;
                 }
                 if info.req_ctrl {
+                    let c_scan = MapVirtualKeyW(VK_CONTROL as u32, MAPVK_VK_TO_VSC) as u16;
                     inputs_up[up_count].r#type = INPUT_KEYBOARD;
                     inputs_up[up_count].Anonymous.ki.wVk = VK_CONTROL;
-                    inputs_up[up_count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                    inputs_up[up_count].Anonymous.ki.wScan = c_scan;
+                    inputs_up[up_count].Anonymous.ki.dwFlags =
+                        (if c_scan != 0 { KEYEVENTF_SCANCODE } else { 0 }) | KEYEVENTF_KEYUP;
                     up_count += 1;
                 }
                 if info.req_shift {
+                    let s_scan = MapVirtualKeyW(VK_SHIFT as u32, MAPVK_VK_TO_VSC) as u16;
                     inputs_up[up_count].r#type = INPUT_KEYBOARD;
                     inputs_up[up_count].Anonymous.ki.wVk = VK_SHIFT;
-                    inputs_up[up_count].Anonymous.ki.dwFlags = KEYEVENTF_KEYUP;
+                    inputs_up[up_count].Anonymous.ki.wScan = s_scan;
+                    inputs_up[up_count].Anonymous.ki.dwFlags =
+                        (if s_scan != 0 { KEYEVENTF_SCANCODE } else { 0 }) | KEYEVENTF_KEYUP;
                     up_count += 1;
                 }
 
