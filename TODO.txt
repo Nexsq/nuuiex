@@ -1,2 +1,1 @@
-Grengorio bug hunting & feedback:
-- a new deck widget exclusive for nuui macro editing
+Publish the new release

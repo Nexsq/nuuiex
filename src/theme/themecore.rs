@@ -71,6 +71,10 @@ pub struct Theme {
 
     pub clock_time_color: Gradient,
     pub clock_date_color: Gradient,
+
+    pub macrostats_key: Gradient,
+    pub macrostats_val: Gradient,
+    pub macrostats_err: Gradient,
 }
 
 impl Theme {
@@ -127,6 +131,10 @@ impl Theme {
 
             clock_time_color: Gradient::default(),
             clock_date_color: Gradient::default(),
+
+            macrostats_key: Gradient::default(),
+            macrostats_val: Gradient::default(),
+            macrostats_err: Gradient::default(),
         }
     }
 }
@@ -443,6 +451,10 @@ fn apply_theme_value(theme: &mut Theme, key: &str, val: &str) -> Result<(), Stri
 
         "clock_time_color" => theme.clock_time_color = parse_gradient(val)?,
         "clock_date_color" => theme.clock_date_color = parse_gradient(val)?,
+
+        "macrostats_key" => theme.macrostats_key = parse_gradient(val)?,
+        "macrostats_val" => theme.macrostats_val = parse_gradient(val)?,
+        "macrostats_err" => theme.macrostats_err = parse_gradient(val)?,
         _ => {}
     }
     Ok(())

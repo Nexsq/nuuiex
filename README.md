@@ -87,6 +87,7 @@ A modal code editor, complete with an AST-based real-time syntax checker.
 The "Deck" is a customizable widget area.
 * **Keyvis:** A physics-based, gravity-simulated key visualizer.
 * **System Monitor:** Real-time hardware graphs.
+* **Macrostats:** Displays metadata, code info, errors, and running times of macros.
 * **Clock:** A highly customizable digital clock.
 
 ---
@@ -246,12 +247,12 @@ Represents keyboard and mouse inputs for automation functions (`isdown`, `keydow
 * **Shortcuts/Combos:** `ShiftUp`, `ShiftDown`, `ShiftLeft`, `ShiftRight`, `CtrlUp`, `CtrlDown`, `CtrlLeft`, `CtrlRight`, `CtrlShiftUp`, `CtrlShiftDown`, `CtrlShiftLeft`, `CtrlShiftRight`, `CtrlDelete`, `CtrlBackspace`
 * **System:** `PrtScr`
 
-### 2. Color Enum
-Used for terminal styling and pixel color comparisons.
+### 2. Color & Background Enums
+Used for terminal styling and pixel color comparisons. The `Background` enum shares the exact same variants and is used to apply background colors.
 
 * **Standard Colors:** `None`, `Black`, `Red`, `Green`, `Yellow`, `Blue`, `Magenta`, `Cyan`, `White`, `DarkGray`
 * **Bright Colors:** `BrightRed`, `BrightGreen`, `BrightYellow`, `BrightBlue`, `BrightMagenta`, `BrightCyan`, `BrightWhite`
-* **Custom Hex Colors:** You can use exact hex codes, e.g., `Color:ff0055` or `Color:00ff00`.
+* **Custom Hex Colors:** You can use exact hex codes, e.g., `Color:ff0055` or `Background:00ff00`.
 
 *(You can call `Color:Red::tostring()` to get its string representation).*
 
@@ -361,6 +362,7 @@ editor_ins = Magenta
 editor_cmd = Blue
 editor_vis = Cyan
 editor_fnd = BrightCyan
+editor_lne = BrightCyan
 
 editor_fnd_bg = White
 editor_keywords = Magenta
@@ -389,6 +391,10 @@ monitor_bar_bounds = DarkGray
 
 clock_time_color = Green
 clock_date_color = Cyan
+
+macrostats_key = Blue
+macrostats_val = Magenta
+macrostats_err = Green Yellow Red
 ```
 
 ### 2. Config (`config.conf`)

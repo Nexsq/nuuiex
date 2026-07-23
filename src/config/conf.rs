@@ -24,6 +24,21 @@ pub struct Config {
     pub monitor_bar_width: usize,
     pub monitor_icons: bool,
 
+    pub macrostats_edit_name: bool,
+    pub macrostats_edit_err: String,
+    pub macrostats_edit_created: bool,
+    pub macrostats_edit_lines: bool,
+    pub macrostats_edit_code: bool,
+    pub macrostats_run_name: bool,
+    pub macrostats_run_elapsed: bool,
+    pub macrostats_run_cpu: bool,
+    pub macrostats_lib_name: bool,
+    pub macrostats_lib_created: bool,
+    pub macrostats_lib_size: bool,
+    pub macrostats_lib_status: bool,
+    pub macrostats_err_chart_len: usize,
+    pub macrostats_err_chart_num: bool,
+
     pub clock_date: String,
     pub clock_mode: String,
     pub clock_position: String,
@@ -82,7 +97,7 @@ impl Default for Config {
             theme: String::new(),
             lib_sorting: String::new(),
             tabs_num: 0,
-            lib_width: 24,
+            lib_width: 0,
             deck_mode: String::new(),
             deck_widget: String::new(),
             show_caret: false,
@@ -96,11 +111,26 @@ impl Default for Config {
             monitor_bar_width: 0,
             monitor_icons: false,
 
+            macrostats_edit_name: false,
+            macrostats_edit_err: String::new(),
+            macrostats_edit_created: false,
+            macrostats_edit_lines: false,
+            macrostats_edit_code: false,
+            macrostats_run_name: false,
+            macrostats_run_elapsed: false,
+            macrostats_run_cpu: false,
+            macrostats_lib_name: false,
+            macrostats_lib_created: false,
+            macrostats_lib_size: false,
+            macrostats_lib_status: false,
+            macrostats_err_chart_len: 0,
+            macrostats_err_chart_num: false,
+
             clock_date: String::new(),
             clock_mode: String::new(),
             clock_position: String::new(),
             clock_format: String::new(),
-            clock_seconds: true,
+            clock_seconds: false,
 
             keyvis_width: 0,
             keyvis_height: 0,
@@ -198,6 +228,56 @@ impl Config {
                     }
                     "monitor_icons" => {
                         self.monitor_icons = val.parse().unwrap_or(self.monitor_icons)
+                    }
+
+                    "macrostats_edit_name" => {
+                        self.macrostats_edit_name = val.parse().unwrap_or(self.macrostats_edit_name)
+                    }
+                    "macrostats_edit_err" => self.macrostats_edit_err = val.to_string(),
+                    "macrostats_edit_created" => {
+                        self.macrostats_edit_created =
+                            val.parse().unwrap_or(self.macrostats_edit_created)
+                    }
+                    "macrostats_edit_lines" => {
+                        self.macrostats_edit_lines =
+                            val.parse().unwrap_or(self.macrostats_edit_lines)
+                    }
+                    "macrostats_edit_code" => {
+                        self.macrostats_edit_code = val.parse().unwrap_or(self.macrostats_edit_code)
+                    }
+                    "macrostats_run_name" => {
+                        self.macrostats_run_name = val.parse().unwrap_or(self.macrostats_run_name)
+                    }
+                    "macrostats_run_elapsed" => {
+                        self.macrostats_run_elapsed =
+                            val.parse().unwrap_or(self.macrostats_run_elapsed)
+                    }
+                    "macrostats_run_cpu" => {
+                        self.macrostats_run_cpu = val.parse().unwrap_or(self.macrostats_run_cpu)
+                    }
+                    "macrostats_lib_name" => {
+                        self.macrostats_lib_name = val.parse().unwrap_or(self.macrostats_lib_name)
+                    }
+                    "macrostats_lib_created" => {
+                        self.macrostats_lib_created =
+                            val.parse().unwrap_or(self.macrostats_lib_created)
+                    }
+                    "macrostats_lib_size" => {
+                        self.macrostats_lib_size = val.parse().unwrap_or(self.macrostats_lib_size)
+                    }
+                    "macrostats_lib_status" => {
+                        self.macrostats_lib_status =
+                            val.parse().unwrap_or(self.macrostats_lib_status)
+                    }
+                    "macrostats_err_chart_len" => {
+                        self.macrostats_err_chart_len = val
+                            .parse()
+                            .unwrap_or(self.macrostats_err_chart_len)
+                            .clamp(4, 16)
+                    }
+                    "macrostats_err_chart_num" => {
+                        self.macrostats_err_chart_num =
+                            val.parse().unwrap_or(self.macrostats_err_chart_num)
                     }
 
                     "clock_date" => self.clock_date = val.to_string(),
@@ -460,6 +540,20 @@ impl Config {
         self.monitor_bar_mode = default.monitor_bar_mode;
         self.monitor_bar_width = default.monitor_bar_width;
         self.monitor_icons = default.monitor_icons;
+        self.macrostats_edit_name = default.macrostats_edit_name;
+        self.macrostats_edit_err = default.macrostats_edit_err;
+        self.macrostats_edit_created = default.macrostats_edit_created;
+        self.macrostats_edit_lines = default.macrostats_edit_lines;
+        self.macrostats_edit_code = default.macrostats_edit_code;
+        self.macrostats_run_name = default.macrostats_run_name;
+        self.macrostats_run_elapsed = default.macrostats_run_elapsed;
+        self.macrostats_run_cpu = default.macrostats_run_cpu;
+        self.macrostats_lib_name = default.macrostats_lib_name;
+        self.macrostats_lib_created = default.macrostats_lib_created;
+        self.macrostats_lib_size = default.macrostats_lib_size;
+        self.macrostats_lib_status = default.macrostats_lib_status;
+        self.macrostats_err_chart_len = default.macrostats_err_chart_len;
+        self.macrostats_err_chart_num = default.macrostats_err_chart_num;
         self.clock_date = default.clock_date;
         self.clock_mode = default.clock_mode;
         self.clock_position = default.clock_position;
@@ -620,6 +714,91 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.monitor_icons, comment
+                    )
+                    .unwrap(),
+
+                    "macrostats_edit_name" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_edit_name, comment
+                    )
+                    .unwrap(),
+                    "macrostats_edit_err" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_edit_err, comment
+                    )
+                    .unwrap(),
+                    "macrostats_edit_created" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_edit_created, comment
+                    )
+                    .unwrap(),
+                    "macrostats_edit_lines" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_edit_lines, comment
+                    )
+                    .unwrap(),
+                    "macrostats_edit_code" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_edit_code, comment
+                    )
+                    .unwrap(),
+                    "macrostats_run_name" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_run_name, comment
+                    )
+                    .unwrap(),
+                    "macrostats_run_elapsed" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_run_elapsed, comment
+                    )
+                    .unwrap(),
+                    "macrostats_run_cpu" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_run_cpu, comment
+                    )
+                    .unwrap(),
+                    "macrostats_lib_name" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_lib_name, comment
+                    )
+                    .unwrap(),
+                    "macrostats_lib_created" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_lib_created, comment
+                    )
+                    .unwrap(),
+                    "macrostats_lib_size" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_lib_size, comment
+                    )
+                    .unwrap(),
+                    "macrostats_lib_status" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_lib_status, comment
+                    )
+                    .unwrap(),
+                    "macrostats_err_chart_len" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_err_chart_len, comment
+                    )
+                    .unwrap(),
+                    "macrostats_err_chart_num" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_err_chart_num, comment
                     )
                     .unwrap(),
 

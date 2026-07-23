@@ -180,10 +180,12 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                                 "keyvis".to_string(),
                                 "monitor".to_string(),
                                 "clock".to_string(),
+                                "macrostats".to_string(),
                             ],
                             match config.deck_widget.as_str() {
                                 "monitor" => 1,
                                 "clock" => 2,
+                                "macrostats" => 3,
                                 _ => 0,
                             },
                         ),
@@ -389,6 +391,108 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                                 if config.keyvis_base { 0 } else { 1 },
                             ),
                         });
+                    } else if config.deck_widget == "macrostats" {
+                        macro_rules! add_bool {
+                            ($name:expr, $key:expr, $val:expr) => {
+                                s.push(Setting {
+                                    name: $name,
+                                    key: $key,
+                                    kind: SettingType::Choice(
+                                        vec!["true".to_string(), "false".to_string()],
+                                        if $val { 0 } else { 1 },
+                                    ),
+                                });
+                            };
+                        }
+
+                        add_bool!(
+                            "Edit Show Name",
+                            "macrostats_edit_name",
+                            config.macrostats_edit_name
+                        );
+                        s.push(Setting {
+                            name: "Edit Errors",
+                            key: "macrostats_edit_err",
+                            kind: SettingType::Choice(
+                                vec![
+                                    "off".to_string(),
+                                    "text".to_string(),
+                                    "chart".to_string(),
+                                    "both".to_string(),
+                                ],
+                                match config.macrostats_edit_err.as_str() {
+                                    "text" => 1,
+                                    "chart" => 2,
+                                    "both" => 3,
+                                    _ => 0,
+                                },
+                            ),
+                        });
+                        add_bool!(
+                            "Edit Show Created",
+                            "macrostats_edit_created",
+                            config.macrostats_edit_created
+                        );
+                        add_bool!(
+                            "Edit Show Lines",
+                            "macrostats_edit_lines",
+                            config.macrostats_edit_lines
+                        );
+                        add_bool!(
+                            "Edit Show Code",
+                            "macrostats_edit_code",
+                            config.macrostats_edit_code
+                        );
+                        add_bool!(
+                            "Run Show Name",
+                            "macrostats_run_name",
+                            config.macrostats_run_name
+                        );
+                        add_bool!(
+                            "Run Show Elapsed",
+                            "macrostats_run_elapsed",
+                            config.macrostats_run_elapsed
+                        );
+                        add_bool!(
+                            "Run Show CPU",
+                            "macrostats_run_cpu",
+                            config.macrostats_run_cpu
+                        );
+                        add_bool!(
+                            "Lib Show Name",
+                            "macrostats_lib_name",
+                            config.macrostats_lib_name
+                        );
+                        add_bool!(
+                            "Lib Show Created",
+                            "macrostats_lib_created",
+                            config.macrostats_lib_created
+                        );
+                        add_bool!(
+                            "Lib Show Size",
+                            "macrostats_lib_size",
+                            config.macrostats_lib_size
+                        );
+                        add_bool!(
+                            "Lib Show Status",
+                            "macrostats_lib_status",
+                            config.macrostats_lib_status
+                        );
+
+                        s.push(Setting {
+                            name: "Err Chart Length",
+                            key: "macrostats_err_chart_len",
+                            kind: SettingType::Custom {
+                                value: config.macrostats_err_chart_len.to_string(),
+                                default: def.macrostats_err_chart_len.to_string(),
+                                validation: CustomType::Int,
+                            },
+                        });
+                        add_bool!(
+                            "Err Chart Numbers",
+                            "macrostats_err_chart_num",
+                            config.macrostats_err_chart_num
+                        );
                     } else if config.deck_widget == "clock" {
                         s.push(Setting {
                             name: "Date",
@@ -928,6 +1032,21 @@ pub fn settings_modal(
                 apply_setting!(config, set, parse_clamp "monitor_bar_width", monitor_bar_width, 4, 16);
                 apply_setting!(config, set, bool "monitor_icons", monitor_icons);
 
+                apply_setting!(config, set, bool "macrostats_edit_name", macrostats_edit_name);
+                apply_setting!(config, set, choice "macrostats_edit_err", macrostats_edit_err);
+                apply_setting!(config, set, bool "macrostats_edit_created", macrostats_edit_created);
+                apply_setting!(config, set, bool "macrostats_edit_lines", macrostats_edit_lines);
+                apply_setting!(config, set, bool "macrostats_edit_code", macrostats_edit_code);
+                apply_setting!(config, set, bool "macrostats_run_name", macrostats_run_name);
+                apply_setting!(config, set, bool "macrostats_run_elapsed", macrostats_run_elapsed);
+                apply_setting!(config, set, bool "macrostats_run_cpu", macrostats_run_cpu);
+                apply_setting!(config, set, bool "macrostats_lib_name", macrostats_lib_name);
+                apply_setting!(config, set, bool "macrostats_lib_created", macrostats_lib_created);
+                apply_setting!(config, set, bool "macrostats_lib_size", macrostats_lib_size);
+                apply_setting!(config, set, bool "macrostats_lib_status", macrostats_lib_status);
+                apply_setting!(config, set, parse_clamp "macrostats_err_chart_len", macrostats_err_chart_len, 4, 16);
+                apply_setting!(config, set, bool "macrostats_err_chart_num", macrostats_err_chart_num);
+
                 apply_setting!(config, set, bool "edit_tab_backspace", edit_tab_backspace);
                 apply_setting!(config, set, bool "edit_auto_indent", edit_auto_indent);
                 apply_setting!(config, set, choice "edit_error_highlight", edit_error_highlight);
@@ -988,6 +1107,13 @@ pub fn settings_modal(
                 }
             } else if config.deck_widget == "clock" {
                 if main_view.clock.tick(current_w, current_h, config) {
+                    main_view.refresh_static_boxes(config);
+                    bg_dirty = true;
+                }
+            } else if config.deck_widget == "macrostats" {
+                let _ = main_view.monitor.tick(current_w, current_h);
+                let info = main_view.get_macrostats_info();
+                if main_view.macrostats.tick(&info) {
                     main_view.refresh_static_boxes(config);
                     bg_dirty = true;
                 }
@@ -1595,6 +1721,7 @@ pub fn settings_modal(
                                                             vec![String::new()];
                                                         main_view.editors[i].process_rx = None;
                                                         main_view.running_macros[i] = None;
+                                                        main_view.macro_start_times[i] = None;
                                                         main_view.editors[i].error_count = 0;
                                                         main_view.editors[i].error_lines.clear();
                                                     }
@@ -1683,6 +1810,7 @@ pub fn settings_modal(
                         }
                         main_view.editors[i].process_rx = None;
                         main_view.running_macros[i] = None;
+                        main_view.macro_start_times[i] = None;
                         main_view.editors[i].file_path = None;
                         main_view.editors[i].rel_path.clear();
                         main_view.editors[i].state.lines = vec![String::new()];

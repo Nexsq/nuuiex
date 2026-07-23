@@ -151,6 +151,8 @@ pub fn refresh_deck(
     keyvis: &crate::panels::widgets::keyvis::KeyvisState,
     monitor: &crate::panels::widgets::monitor::MonitorState,
     clock: &crate::panels::widgets::clock::ClockState,
+    macrostats: &crate::panels::widgets::macrostats::MacrostatsState,
+    macro_info: &crate::panels::widgets::macrostats::MacroInfo,
 ) -> Box {
     if config.deck_mode != "widget" {
         return Box::new(
@@ -191,6 +193,14 @@ pub fn refresh_deck(
         );
     } else if config.deck_widget == "clock" {
         crate::panels::widgets::clock::draw(clock, &mut deck_box, config, theme);
+    } else if config.deck_widget == "macrostats" {
+        crate::panels::widgets::macrostats::draw(
+            macrostats,
+            macro_info,
+            &mut deck_box,
+            config,
+            theme,
+        );
     } else {
         crate::panels::widgets::keyvis::draw(keyvis, &mut deck_box, config, theme);
     }

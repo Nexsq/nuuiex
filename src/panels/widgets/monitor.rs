@@ -7,6 +7,7 @@ use crate::{Box, Color, Gradient, Modifier, Style, conf::Config, theme::themecor
 
 pub struct MonitorState {
     pub cpu: Arc<AtomicU8>,
+    pub process_cpu: Arc<AtomicU8>,
     pub gpu: Arc<AtomicU8>,
     pub mem_used: Arc<AtomicU32>,
     pub mem_total: Arc<AtomicU32>,
@@ -28,6 +29,7 @@ pub struct MonitorState {
 impl MonitorState {
     pub fn new() -> Self {
         let cpu = Arc::new(AtomicU8::new(0));
+        let process_cpu = Arc::new(AtomicU8::new(0));
         let gpu = Arc::new(AtomicU8::new(0));
         let mem_used = Arc::new(AtomicU32::new(0));
         let mem_total = Arc::new(AtomicU32::new(0));
@@ -39,6 +41,7 @@ impl MonitorState {
         let is_running = Arc::new(AtomicBool::new(true));
 
         let c_cpu = cpu.clone();
+        let c_process_cpu = process_cpu.clone();
         let c_gpu = gpu.clone();
         let c_mem_used = mem_used.clone();
         let c_mem_total = mem_total.clone();
@@ -51,10 +54,16 @@ impl MonitorState {
 
         let thread_handle = thread::spawn(move || {
             #[cfg(target_os = "linux")]
-            let (mut prev_idle, mut prev_non_idle) = (0u64, 0u64);
+            let (mut prev_idle, mut prev_non_idle, mut prev_proc_time) = (0u64, 0u64, 0u64);
 
             #[cfg(target_os = "windows")]
-            let (mut prev_idle, mut prev_kernel, mut prev_user) = (0u64, 0u64, 0u64);
+            let (
+                mut prev_idle,
+                mut prev_kernel,
+                mut prev_user,
+                mut prev_proc_kernel,
+                mut prev_proc_user,
+            ) = (0u64, 0u64, 0u64, 0u64, 0u64);
 
             let gpu_rx = start_gpu_monitor();
             let mut last_gpu_val = 0;
@@ -66,14 +75,20 @@ impl MonitorState {
                 }
 
                 #[cfg(target_os = "linux")]
-                let (cpu_val, mem_u, mem_t) = get_linux_metrics(&mut prev_idle, &mut prev_non_idle);
+                let (cpu_val, mem_u, mem_t, proc_cpu_val) =
+                    get_linux_metrics(&mut prev_idle, &mut prev_non_idle, &mut prev_proc_time);
 
                 #[cfg(target_os = "windows")]
-                let (cpu_val, mem_u, mem_t) =
-                    get_windows_metrics(&mut prev_idle, &mut prev_kernel, &mut prev_user);
+                let (cpu_val, mem_u, mem_t, proc_cpu_val) = get_windows_metrics(
+                    &mut prev_idle,
+                    &mut prev_kernel,
+                    &mut prev_user,
+                    &mut prev_proc_kernel,
+                    &mut prev_proc_user,
+                );
 
                 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-                let (cpu_val, mem_u, mem_t) = (0, 0, 0);
+                let (cpu_val, mem_u, mem_t, proc_cpu_val) = (0, 0, 0, 0);
 
                 while let Ok(gpu_val) = gpu_rx.try_recv() {
                     last_gpu_val = gpu_val;
@@ -81,6 +96,7 @@ impl MonitorState {
                 let gpu_val = last_gpu_val;
 
                 c_cpu.store(cpu_val, Ordering::Relaxed);
+                c_process_cpu.store(proc_cpu_val, Ordering::Relaxed);
                 c_gpu.store(gpu_val, Ordering::Relaxed);
                 c_mem_used.store(mem_u, Ordering::Relaxed);
                 c_mem_total.store(mem_t, Ordering::Relaxed);
@@ -125,6 +141,7 @@ impl MonitorState {
 
         Self {
             cpu,
+            process_cpu,
             gpu,
             mem_used,
             mem_total,
@@ -184,8 +201,13 @@ impl Drop for MonitorState {
 }
 
 #[cfg(target_os = "linux")]
-fn get_linux_metrics(prev_idle: &mut u64, prev_non_idle: &mut u64) -> (u8, u32, u32) {
+fn get_linux_metrics(
+    prev_idle: &mut u64,
+    prev_non_idle: &mut u64,
+    prev_proc: &mut u64,
+) -> (u8, u32, u32, u8) {
     let mut cpu_usage = 0;
+    let mut proc_cpu_usage = 0;
     if let Ok(stat) = std::fs::read_to_string("/proc/stat") {
         if let Some(line) = stat.lines().next() {
             let parts: Vec<&str> = line.split_whitespace().collect();
@@ -208,6 +230,19 @@ fn get_linux_metrics(prev_idle: &mut u64, prev_non_idle: &mut u64) -> (u8, u32, 
 
                 if total_d > 0 {
                     cpu_usage = ((total_d - idle_d) * 100 / total_d) as u8;
+
+                    let mut proc_time = 0;
+                    if let Ok(pstat) = std::fs::read_to_string("/proc/self/stat") {
+                        let pparts: Vec<&str> = pstat.split_whitespace().collect();
+                        if pparts.len() > 14 {
+                            let utime: u64 = pparts[13].parse().unwrap_or(0);
+                            let stime: u64 = pparts[14].parse().unwrap_or(0);
+                            proc_time = utime + stime;
+                        }
+                    }
+                    let proc_d = proc_time.saturating_sub(*prev_proc);
+                    proc_cpu_usage = ((proc_d * 100) / total_d).min(100) as u8;
+                    *prev_proc = proc_time;
                 }
 
                 *prev_idle = idle_time;
@@ -241,7 +276,7 @@ fn get_linux_metrics(prev_idle: &mut u64, prev_non_idle: &mut u64) -> (u8, u32, 
     }
     let mem_used = mem_total.saturating_sub(mem_avail);
 
-    (cpu_usage, mem_used, mem_total)
+    (cpu_usage, mem_used, mem_total, proc_cpu_usage)
 }
 
 #[cfg(target_os = "windows")]
@@ -249,11 +284,16 @@ fn get_windows_metrics(
     prev_idle: &mut u64,
     prev_kernel: &mut u64,
     prev_user: &mut u64,
-) -> (u8, u32, u32) {
+    prev_proc_kernel: &mut u64,
+    prev_proc_user: &mut u64,
+) -> (u8, u32, u32, u8) {
     use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
-    use windows_sys::Win32::System::Threading::GetSystemTimes;
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentProcess, GetProcessTimes, GetSystemTimes,
+    };
 
     let mut cpu_usage = 0;
+    let mut proc_cpu_usage = 0;
     unsafe {
         let mut idle = std::mem::zeroed();
         let mut kernel = std::mem::zeroed();
@@ -268,6 +308,31 @@ fn get_windows_metrics(
 
             if sys_diff > 0 {
                 cpu_usage = ((sys_diff.saturating_sub(idle_diff)) * 100 / sys_diff) as u8;
+
+                let mut c_time = std::mem::zeroed();
+                let mut e_time = std::mem::zeroed();
+                let mut k_time = std::mem::zeroed();
+                let mut u_time = std::mem::zeroed();
+                if GetProcessTimes(
+                    GetCurrentProcess(),
+                    &mut c_time,
+                    &mut e_time,
+                    &mut k_time,
+                    &mut u_time,
+                ) != 0
+                {
+                    let proc_k =
+                        (k_time.dwHighDateTime as u64) << 32 | (k_time.dwLowDateTime as u64);
+                    let proc_u =
+                        (u_time.dwHighDateTime as u64) << 32 | (u_time.dwLowDateTime as u64);
+
+                    let proc_diff =
+                        (proc_k + proc_u).saturating_sub(*prev_proc_kernel + *prev_proc_user);
+                    proc_cpu_usage = ((proc_diff * 100) / sys_diff).min(100) as u8;
+
+                    *prev_proc_kernel = proc_k;
+                    *prev_proc_user = proc_u;
+                }
             }
 
             *prev_idle = idle_time;
@@ -288,7 +353,7 @@ fn get_windows_metrics(
         }
     }
 
-    (cpu_usage, mem_used, mem_total)
+    (cpu_usage, mem_used, mem_total, proc_cpu_usage)
 }
 
 #[cfg(target_os = "windows")]

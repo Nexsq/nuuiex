@@ -195,53 +195,7 @@ impl Analyzer {
                 self.analyze_expr(left);
                 if let Expr::Ident(name, _) = &**left {
                     if name == "Key" {
-                        let valid_variants = [
-                            "Up",
-                            "Down",
-                            "Left",
-                            "Right",
-                            "ShiftUp",
-                            "ShiftDown",
-                            "ShiftLeft",
-                            "ShiftRight",
-                            "CtrlUp",
-                            "CtrlDown",
-                            "CtrlLeft",
-                            "CtrlRight",
-                            "CtrlShiftUp",
-                            "CtrlShiftDown",
-                            "CtrlShiftLeft",
-                            "CtrlShiftRight",
-                            "Delete",
-                            "CtrlDelete",
-                            "Char",
-                            "Shift",
-                            "Ctrl",
-                            "Alt",
-                            "Esc",
-                            "Enter",
-                            "Tab",
-                            "Backspace",
-                            "CtrlBackspace",
-                            "None",
-                            "F",
-                            "Space",
-                            "CapsLock",
-                            "PgUp",
-                            "PgDn",
-                            "Home",
-                            "End",
-                            "PrtScr",
-                            "Insert",
-                            "LMeta",
-                            "RMeta",
-                            "LMB",
-                            "RMB",
-                            "MMB",
-                            "SB1",
-                            "SB2",
-                        ];
-                        if !valid_variants.contains(&prop.as_str()) {
+                        if !crate::engine::core::is_valid_key_variant(&prop) {
                             self.error(*line, format!("Invalid variant '{}' for enum 'Key'", prop));
                         }
                     } else if name == "Color" || name == "Background" {
@@ -249,16 +203,7 @@ impl Analyzer {
                             self.error(*line, format!("Invalid color variant '{}'", prop));
                         }
                     } else if name == "Modifier" {
-                        let valid_variants = [
-                            "None",
-                            "Bold",
-                            "Dim",
-                            "Italic",
-                            "Underline",
-                            "Reverse",
-                            "Strikethrough",
-                        ];
-                        if !valid_variants.contains(&prop.as_str()) {
+                        if !crate::engine::core::is_valid_modifier_variant(&prop) {
                             self.error(
                                 *line,
                                 format!("Invalid variant '{}' for enum 'Modifier'", prop),
@@ -274,53 +219,7 @@ impl Analyzer {
                 }
                 if let Expr::Ident(name, _) = &**left {
                     if name == "Key" {
-                        let valid_variants = [
-                            "Up",
-                            "Down",
-                            "Left",
-                            "Right",
-                            "ShiftUp",
-                            "ShiftDown",
-                            "ShiftLeft",
-                            "ShiftRight",
-                            "CtrlUp",
-                            "CtrlDown",
-                            "CtrlLeft",
-                            "CtrlRight",
-                            "CtrlShiftUp",
-                            "CtrlShiftDown",
-                            "CtrlShiftLeft",
-                            "CtrlShiftRight",
-                            "Delete",
-                            "CtrlDelete",
-                            "Char",
-                            "Shift",
-                            "Ctrl",
-                            "Alt",
-                            "Esc",
-                            "Enter",
-                            "Tab",
-                            "Backspace",
-                            "CtrlBackspace",
-                            "None",
-                            "F",
-                            "Space",
-                            "CapsLock",
-                            "PgUp",
-                            "PgDn",
-                            "Home",
-                            "End",
-                            "PrtScr",
-                            "Insert",
-                            "LMeta",
-                            "RMeta",
-                            "LMB",
-                            "RMB",
-                            "MMB",
-                            "SB1",
-                            "SB2",
-                        ];
-                        if !valid_variants.contains(&method.as_str()) {
+                        if !crate::engine::core::is_valid_key_variant(&method) {
                             self.error(
                                 *line,
                                 format!("Invalid variant '{}' for enum 'Key'", method),
@@ -334,16 +233,7 @@ impl Analyzer {
                             self.error(*line, format!("{} variant does not take arguments", name));
                         }
                     } else if name == "Modifier" {
-                        let valid_variants = [
-                            "None",
-                            "Bold",
-                            "Dim",
-                            "Italic",
-                            "Underline",
-                            "Reverse",
-                            "Strikethrough",
-                        ];
-                        if !valid_variants.contains(&method.as_str()) {
+                        if !crate::engine::core::is_valid_modifier_variant(&method) {
                             self.error(
                                 *line,
                                 format!("Invalid variant '{}' for enum 'Modifier'", method),

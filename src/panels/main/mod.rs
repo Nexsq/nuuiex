@@ -39,6 +39,7 @@ pub struct MainView {
     pub running_macros: [Option<PathBuf>; 6],
     pub cancellation_tokens: [Option<Arc<AtomicBool>>; 6],
     pub macro_focus_tokens: [Option<Arc<AtomicBool>>; 6],
+    pub macro_start_times: [Option<std::time::Instant>; 6],
     pub main_box: Box,
     pub main_x: i16,
     pub main_y: i16,
@@ -65,6 +66,7 @@ pub struct MainView {
     pub keyvis: crate::panels::widgets::keyvis::KeyvisState,
     pub monitor: crate::panels::widgets::monitor::MonitorState,
     pub clock: crate::panels::widgets::clock::ClockState,
+    pub macrostats: crate::panels::widgets::macrostats::MacrostatsState,
 
     pub theme: Theme,
     pub list_input: ListInputMode,
@@ -96,6 +98,7 @@ impl MainView {
         let running_macros = std::array::from_fn(|_| None);
         let cancellation_tokens = std::array::from_fn(|_| None);
         let macro_focus_tokens = std::array::from_fn(|_| None);
+        let macro_start_times = std::array::from_fn(|_| None);
 
         let mut view = Self {
             term_w,
@@ -113,6 +116,7 @@ impl MainView {
             running_macros,
             cancellation_tokens,
             macro_focus_tokens,
+            macro_start_times,
             main_box: dummy(),
             main_x: 0,
             main_y: 0,
@@ -131,6 +135,7 @@ impl MainView {
             keyvis: crate::panels::widgets::keyvis::KeyvisState::new(),
             monitor: crate::panels::widgets::monitor::MonitorState::new(),
             clock: crate::panels::widgets::clock::ClockState::new(),
+            macrostats: crate::panels::widgets::macrostats::MacrostatsState::new(),
             theme,
             list_input: ListInputMode::None,
         };
@@ -146,7 +151,7 @@ impl MainView {
         let deck_h = if config.deck_mode == "widget" {
             match config.deck_widget.as_str() {
                 "keyvis" => config.keyvis_height as u16,
-                "monitor" | "clock" => 3,
+                "monitor" | "clock" | "macrostats" => 3,
                 _ => header_h,
             }
         } else if config.deck_mode == "none" {
@@ -230,6 +235,7 @@ impl MainView {
                     token.store(true, Ordering::SeqCst);
                 }
                 self.macro_focus_tokens[i] = None;
+                self.macro_start_times[i] = None;
                 self.editors[i].file_path = None;
                 self.editors[i].last_file_path = None;
                 self.editors[i].saved_state = None;
@@ -425,11 +431,79 @@ impl MainView {
         );
     }
 
+    pub fn get_macrostats_info(&self) -> crate::panels::widgets::macrostats::MacroInfo {
+        use crate::panels::widgets::macrostats::MacroInfo;
+        if self.active == ActivePanel::List {
+            if let Some(node) = self.get_selected_node() {
+                if let MacroNode::Script { name, path } = node {
+                    let is_running = self
+                        .running_macros
+                        .iter()
+                        .any(|m| m.as_deref() == Some(path.as_path()));
+                    return MacroInfo::Library {
+                        name: name.clone(),
+                        path: path.clone(),
+                        is_running,
+                    };
+                }
+            }
+            MacroInfo::None
+        } else {
+            let tab = self.current_tab;
+            if let Some(path) = &self.running_macros[tab] {
+                let name = path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let start_time =
+                    self.macro_start_times[tab].unwrap_or_else(std::time::Instant::now);
+                MacroInfo::Running {
+                    name,
+                    start_time,
+                    cpu_usage: self
+                        .monitor
+                        .process_cpu
+                        .load(std::sync::atomic::Ordering::Relaxed)
+                        .min(100),
+                }
+            } else if self.editors[tab].is_editing {
+                let editor = &self.editors[tab];
+                let name = editor
+                    .file_path
+                    .as_ref()
+                    .and_then(|p| p.file_stem())
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "Unsaved".to_string());
+                let lines = editor.state.lines.len();
+                let loc = editor
+                    .state
+                    .lines
+                    .iter()
+                    .filter(|l| !l.trim().is_empty())
+                    .count();
+                let errors = editor.error_count;
+                MacroInfo::Editing {
+                    name,
+                    path: editor.file_path.clone(),
+                    lines,
+                    loc,
+                    errors,
+                }
+            } else {
+                MacroInfo::None
+            }
+        }
+    }
+
     pub fn refresh_static_boxes(&mut self, config: &Config) {
         let (_, deck_h) = self.get_layout_heights(config);
 
-        self.monitor
-            .set_active(config.deck_mode == "widget" && config.deck_widget == "monitor");
+        self.monitor.set_active(
+            config.deck_mode == "widget"
+                && (config.deck_widget == "monitor" || config.deck_widget == "macrostats"),
+        );
+
+        let macro_info = self.get_macrostats_info();
 
         self.tabs_box =
             r#static::refresh_tabs(&self.theme, config, self.current_tab, &self.running_macros);
@@ -443,6 +517,8 @@ impl MainView {
             &self.keyvis,
             &self.monitor,
             &self.clock,
+            &self.macrostats,
+            &macro_info,
         );
     }
 
@@ -699,6 +775,7 @@ impl MainView {
                 token.store(true, Ordering::SeqCst);
             }
             self.running_macros[self.current_tab] = None;
+            self.macro_start_times[self.current_tab] = None;
             self.editors[self.current_tab].process_rx = None;
             self.editors[self.current_tab].process_input_tx = None;
             self.editors[self.current_tab].is_waiting_for_input = false;
@@ -800,6 +877,7 @@ impl MainView {
 
             self.editors[self.current_tab].file_path = None;
             self.running_macros[self.current_tab] = Some(path);
+            self.macro_start_times[self.current_tab] = Some(std::time::Instant::now());
             self.active = ActivePanel::Main;
             self.editors[self.current_tab].is_editing = false;
             self.editors[self.current_tab].is_output = true;

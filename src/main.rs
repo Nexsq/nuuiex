@@ -158,6 +158,7 @@ fn main() {
                     main_view.editors[i].process_input_tx = None;
                     main_view.editors[i].is_waiting_for_input = false;
                     main_view.running_macros[i] = None;
+                    main_view.macro_start_times[i] = None;
                     main_view.macro_focus_tokens[i] = None;
                     tabs_updated[i] = true;
                 }
@@ -234,6 +235,13 @@ fn main() {
                 }
             } else if config.deck_widget == "clock" {
                 if main_view.clock.tick(term_w, term_h, &config) {
+                    main_view.refresh_static_boxes(&config);
+                    anim_dirty = true;
+                }
+            } else if config.deck_widget == "macrostats" {
+                let _ = main_view.monitor.tick(term_w, term_h);
+                let info = main_view.get_macrostats_info();
+                if main_view.macrostats.tick(&info) {
                     main_view.refresh_static_boxes(&config);
                     anim_dirty = true;
                 }

@@ -3139,53 +3139,7 @@ impl Interpreter {
                 let left_val = self.eval_expr(left)?;
                 if let Value::BuiltinEnum(enum_name) = left_val {
                     if enum_name == "Key" {
-                        let valid_variants = [
-                            "Up",
-                            "Down",
-                            "Left",
-                            "Right",
-                            "ShiftUp",
-                            "ShiftDown",
-                            "ShiftLeft",
-                            "ShiftRight",
-                            "CtrlUp",
-                            "CtrlDown",
-                            "CtrlLeft",
-                            "CtrlRight",
-                            "CtrlShiftUp",
-                            "CtrlShiftDown",
-                            "CtrlShiftLeft",
-                            "CtrlShiftRight",
-                            "Delete",
-                            "CtrlDelete",
-                            "Char",
-                            "Shift",
-                            "Ctrl",
-                            "Alt",
-                            "Esc",
-                            "Enter",
-                            "Tab",
-                            "Backspace",
-                            "CtrlBackspace",
-                            "None",
-                            "F",
-                            "Space",
-                            "CapsLock",
-                            "PgUp",
-                            "PgDn",
-                            "Home",
-                            "End",
-                            "PrtScr",
-                            "Insert",
-                            "LMeta",
-                            "RMeta",
-                            "LMB",
-                            "RMB",
-                            "MMB",
-                            "SB1",
-                            "SB2",
-                        ];
-                        if !valid_variants.contains(&prop.as_str()) {
+                        if !crate::engine::core::is_valid_key_variant(&prop) {
                             return Err(format!(
                                 "Line {}: Invalid variant '{}' for enum 'Key'",
                                 line, prop
@@ -3196,16 +3150,7 @@ impl Interpreter {
                             return Err(format!("Line {}: Invalid color variant '{}'", line, prop));
                         }
                     } else if enum_name == "Modifier" {
-                        let valid_variants = [
-                            "None",
-                            "Bold",
-                            "Dim",
-                            "Italic",
-                            "Underline",
-                            "Reverse",
-                            "Strikethrough",
-                        ];
-                        if !valid_variants.contains(&prop.as_str()) {
+                        if !crate::engine::core::is_valid_modifier_variant(&prop) {
                             return Err(format!(
                                 "Line {}: Invalid variant '{}' for enum 'Modifier'",
                                 line, prop
@@ -3262,53 +3207,7 @@ impl Interpreter {
 
                 if let Value::BuiltinEnum(enum_name) = &left_val {
                     if enum_name == "Key" {
-                        let valid_variants = [
-                            "Up",
-                            "Down",
-                            "Left",
-                            "Right",
-                            "ShiftUp",
-                            "ShiftDown",
-                            "ShiftLeft",
-                            "ShiftRight",
-                            "CtrlUp",
-                            "CtrlDown",
-                            "CtrlLeft",
-                            "CtrlRight",
-                            "CtrlShiftUp",
-                            "CtrlShiftDown",
-                            "CtrlShiftLeft",
-                            "CtrlShiftRight",
-                            "Delete",
-                            "CtrlDelete",
-                            "Char",
-                            "Shift",
-                            "Ctrl",
-                            "Alt",
-                            "Esc",
-                            "Enter",
-                            "Tab",
-                            "Backspace",
-                            "CtrlBackspace",
-                            "None",
-                            "F",
-                            "Space",
-                            "CapsLock",
-                            "PgUp",
-                            "PgDn",
-                            "Home",
-                            "End",
-                            "PrtScr",
-                            "Insert",
-                            "LMeta",
-                            "RMeta",
-                            "LMB",
-                            "RMB",
-                            "MMB",
-                            "SB1",
-                            "SB2",
-                        ];
-                        if !valid_variants.contains(&method.as_str()) {
+                        if !crate::engine::core::is_valid_key_variant(&method) {
                             return Err(format!(
                                 "Line {}: Invalid variant '{}' for enum 'Key'",
                                 line, method
@@ -3340,16 +3239,7 @@ impl Interpreter {
                         }
                         return Ok(Value::EnumVariant(enum_name.clone(), method.clone(), None));
                     } else if enum_name == "Modifier" {
-                        let valid_variants = [
-                            "None",
-                            "Bold",
-                            "Dim",
-                            "Italic",
-                            "Underline",
-                            "Reverse",
-                            "Strikethrough",
-                        ];
-                        if !valid_variants.contains(&method.as_str()) {
+                        if !crate::engine::core::is_valid_modifier_variant(&method) {
                             return Err(format!(
                                 "Line {}: Invalid variant '{}' for enum 'Modifier'",
                                 line, method

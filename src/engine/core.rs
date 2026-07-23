@@ -13,6 +13,64 @@ pub enum EngineMessage {
     InputRequest,
 }
 
+#[inline]
+pub fn is_valid_key_variant(name: &str) -> bool {
+    matches!(
+        name,
+        "Up" | "Down"
+            | "Left"
+            | "Right"
+            | "ShiftUp"
+            | "ShiftDown"
+            | "ShiftLeft"
+            | "ShiftRight"
+            | "CtrlUp"
+            | "CtrlDown"
+            | "CtrlLeft"
+            | "CtrlRight"
+            | "CtrlShiftUp"
+            | "CtrlShiftDown"
+            | "CtrlShiftLeft"
+            | "CtrlShiftRight"
+            | "Delete"
+            | "CtrlDelete"
+            | "Char"
+            | "Shift"
+            | "Ctrl"
+            | "Alt"
+            | "Esc"
+            | "Enter"
+            | "Tab"
+            | "Backspace"
+            | "CtrlBackspace"
+            | "None"
+            | "F"
+            | "Space"
+            | "CapsLock"
+            | "PgUp"
+            | "PgDn"
+            | "Home"
+            | "End"
+            | "PrtScr"
+            | "Insert"
+            | "LMeta"
+            | "RMeta"
+            | "LMB"
+            | "RMB"
+            | "MMB"
+            | "SB1"
+            | "SB2"
+    )
+}
+
+#[inline]
+pub fn is_valid_modifier_variant(name: &str) -> bool {
+    matches!(
+        name,
+        "None" | "Bold" | "Dim" | "Italic" | "Underline" | "Reverse" | "Strikethrough"
+    )
+}
+
 pub const BUILTIN_FUNCS: &[&str] = &[
     "print",
     "println",
