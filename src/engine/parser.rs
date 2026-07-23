@@ -85,7 +85,7 @@ impl Parser {
                 self.consume_statement_end();
                 return Some(Stmt::Break(token.line));
             } else {
-                self.error("Expected newline after break.");
+                self.error("Expected newline after break");
                 return None;
             }
         }
@@ -95,7 +95,7 @@ impl Parser {
                 self.consume_statement_end();
                 return Some(Stmt::Continue(token.line));
             } else {
-                self.error("Expected newline after continue.");
+                self.error("Expected newline after continue");
                 return None;
             }
         }
@@ -128,7 +128,7 @@ impl Parser {
                         return Some(Stmt::AssignOp(expr, bin_op, value, op_token.line));
                     }
                 } else {
-                    self.error("Expected newline after assignment.");
+                    self.error("Expected newline after assignment");
                     return None;
                 }
             } else {
@@ -141,7 +141,7 @@ impl Parser {
             self.consume_statement_end();
             Some(Stmt::Expr(expr))
         } else {
-            self.error("Expected newline after expression.");
+            self.error("Expected newline after expression");
             None
         }
     }
@@ -153,12 +153,12 @@ impl Parser {
             self.advance();
             name_str
         } else {
-            self.error("Expected function name.");
+            self.error("Expected function name");
             return None;
         };
 
         if !self.check(&TokenKind::LParen) {
-            self.error("Expected '(' after function name.");
+            self.error("Expected '(' after function name");
             return None;
         }
         self.advance();
@@ -171,7 +171,7 @@ impl Parser {
                     self.advance();
                     name_str
                 } else {
-                    self.error("Expected parameter name.");
+                    self.error("Expected parameter name");
                     return None;
                 };
 
@@ -197,17 +197,17 @@ impl Parser {
         if self.check(&TokenKind::RParen) {
             self.advance();
         } else {
-            self.error("Expected ')' after parameters.");
+            self.error("Expected ')' after parameters");
             return None;
         }
 
         if !self.check(&TokenKind::Colon) {
-            self.error("Expected ':' after function signature.");
+            self.error("Expected ':' after function signature");
             return None;
         }
         self.advance();
         if !self.check_statement_end() {
-            self.error("Expected newline after ':'.");
+            self.error("Expected newline after ':'");
             return None;
         }
         self.consume_statement_end();
@@ -226,7 +226,7 @@ impl Parser {
             self.consume_statement_end();
             Some(Stmt::Return(value))
         } else {
-            self.error("Expected newline after return value.");
+            self.error("Expected newline after return value");
             None
         }
     }
@@ -237,7 +237,7 @@ impl Parser {
         }
 
         if !self.check(&TokenKind::Indent) {
-            self.error("Expected indentation block.");
+            self.error("Expected indentation block");
             return None;
         }
         self.advance();
@@ -258,7 +258,7 @@ impl Parser {
         if self.check(&TokenKind::Dedent) {
             self.advance();
         } else {
-            self.error("Expected dedent.");
+            self.error("Expected dedent");
         }
         Some(stmts)
     }
@@ -266,12 +266,12 @@ impl Parser {
     fn parse_loop(&mut self) -> Option<Stmt> {
         self.advance();
         if !self.check(&TokenKind::Colon) {
-            self.error("Expected ':' after loop.");
+            self.error("Expected ':' after loop");
             return None;
         }
         self.advance();
         if !self.check_statement_end() {
-            self.error("Expected newline after ':'.");
+            self.error("Expected newline after ':'");
             return None;
         }
         self.consume_statement_end();
@@ -284,12 +284,12 @@ impl Parser {
         self.advance();
         let cond = self.parse_expression()?;
         if !self.check(&TokenKind::Colon) {
-            self.error("Expected ':' after while condition.");
+            self.error("Expected ':' after while condition");
             return None;
         }
         self.advance();
         if !self.check_statement_end() {
-            self.error("Expected newline after ':'.");
+            self.error("Expected newline after ':'");
             return None;
         }
         self.consume_statement_end();
@@ -305,12 +305,12 @@ impl Parser {
             self.advance();
             name_str
         } else {
-            self.error("Expected variable name after 'for'.");
+            self.error("Expected variable name after 'for'");
             return None;
         };
 
         if !self.check(&TokenKind::In) {
-            self.error("Expected 'in' after for loop variable.");
+            self.error("Expected 'in' after for loop variable");
             return None;
         }
         self.advance();
@@ -318,12 +318,12 @@ impl Parser {
         let iterable = self.parse_expression()?;
 
         if !self.check(&TokenKind::Colon) {
-            self.error("Expected ':' after for loop iterable.");
+            self.error("Expected ':' after for loop iterable");
             return None;
         }
         self.advance();
         if !self.check_statement_end() {
-            self.error("Expected newline after ':'.");
+            self.error("Expected newline after ':'");
             return None;
         }
         self.consume_statement_end();
@@ -335,12 +335,12 @@ impl Parser {
     fn parse_async(&mut self) -> Option<Stmt> {
         let token = self.advance().clone();
         if !self.check(&TokenKind::Colon) {
-            self.error("Expected ':' after 'async'.");
+            self.error("Expected ':' after 'async'");
             return None;
         }
         self.advance();
         if !self.check_statement_end() {
-            self.error("Expected newline after ':'.");
+            self.error("Expected newline after ':'");
             return None;
         }
         self.consume_statement_end();
@@ -352,12 +352,12 @@ impl Parser {
         self.advance();
         let cond = self.parse_expression()?;
         if !self.check(&TokenKind::Colon) {
-            self.error("Expected ':' after if condition.");
+            self.error("Expected ':' after if condition");
             return None;
         }
         self.advance();
         if !self.check_statement_end() {
-            self.error("Expected newline after ':'.");
+            self.error("Expected newline after ':'");
             return None;
         }
         self.consume_statement_end();
@@ -369,12 +369,12 @@ impl Parser {
             self.advance();
             let elif_cond = self.parse_expression()?;
             if !self.check(&TokenKind::Colon) {
-                self.error("Expected ':' after elif condition.");
+                self.error("Expected ':' after elif condition");
                 return None;
             }
             self.advance();
             if !self.check_statement_end() {
-                self.error("Expected newline after ':'.");
+                self.error("Expected newline after ':'");
                 return None;
             }
             self.consume_statement_end();
@@ -387,12 +387,12 @@ impl Parser {
         if self.check(&TokenKind::Else) {
             self.advance();
             if !self.check(&TokenKind::Colon) {
-                self.error("Expected ':' after else.");
+                self.error("Expected ':' after else");
                 return None;
             }
             self.advance();
             if !self.check_statement_end() {
-                self.error("Expected newline after ':'.");
+                self.error("Expected newline after ':'");
                 return None;
             }
             self.consume_statement_end();
@@ -411,12 +411,12 @@ impl Parser {
             self.advance();
             name_str
         } else {
-            self.error(&format!("Expected variable name after '{}'.", keyword));
+            self.error(&format!("Expected variable name after '{}'", keyword));
             return None;
         };
 
         if !self.check(&TokenKind::Eq) {
-            self.error("Expected '=' after variable name.");
+            self.error("Expected '=' after variable name");
             return None;
         }
         self.advance();
@@ -431,7 +431,7 @@ impl Parser {
                 Some(Stmt::Let(name, value, token.line))
             }
         } else {
-            self.error("Expected newline after variable declaration.");
+            self.error("Expected newline after variable declaration");
             None
         }
     }
@@ -548,7 +548,7 @@ impl Parser {
                     self.advance();
                     expr = Expr::Index(Box::new(expr), Box::new(index), line);
                 } else {
-                    self.error("Expected ']' after index.");
+                    self.error("Expected ']' after index");
                     return None;
                 }
             } else if !self.in_dict_key
@@ -624,12 +624,12 @@ impl Parser {
                         self.advance();
                         expr = Expr::MethodCall(Box::new(expr), method, args, line);
                     } else {
-                        self.error("Expected ')' after arguments.");
+                        self.error("Expected ')' after arguments");
                         return None;
                     }
                 } else {
                     if is_double {
-                        self.error("Expected '(' after method name.");
+                        self.error("Expected '(' after method name");
                         return None;
                     }
                     expr = Expr::StaticAccess(Box::new(expr), method, line);
@@ -644,7 +644,7 @@ impl Parser {
 
     fn parse_primary(&mut self) -> Option<Expr> {
         if self.is_at_end() {
-            self.error("Unexpected end of input.");
+            self.error("Unexpected end of input");
             return None;
         }
 
@@ -781,7 +781,7 @@ impl Parser {
                         self.advance();
                         Some(Expr::Call(func_name, args, line))
                     } else {
-                        self.error("Expected ')' after arguments.");
+                        self.error("Expected ')' after arguments");
                         None
                     }
                 } else {
@@ -794,7 +794,7 @@ impl Parser {
                     self.advance();
                     Some(expr)
                 } else {
-                    self.error("Expected ')' after expression.");
+                    self.error("Expected ')' after expression");
                     None
                 }
             }
@@ -816,7 +816,7 @@ impl Parser {
                                     return None;
                                 }
                             } else {
-                                self.error("Expected ':' after dictionary key.");
+                                self.error("Expected ':' after dictionary key");
                                 return None;
                             }
                         } else {
@@ -833,7 +833,7 @@ impl Parser {
                     self.advance();
                     Some(Expr::Dict(items))
                 } else {
-                    self.error("Expected '}' after dictionary.");
+                    self.error("Expected '}' after dictionary");
                     None
                 }
             }
@@ -857,7 +857,7 @@ impl Parser {
                     self.advance();
                     Some(Expr::List(items))
                 } else {
-                    self.error("Expected ']' after list items.");
+                    self.error("Expected ']' after list items");
                     None
                 }
             }

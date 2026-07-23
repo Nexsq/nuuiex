@@ -151,17 +151,11 @@ impl<'a> Lexer<'a> {
                 break;
             }
 
-            if !is_bol || (self.peek() != '\n' && self.peek() != '\r' && self.peek() != '#') {
-                let token = self.next_token(&mut is_bol);
-                let is_eof = token.kind == TokenKind::EOF;
-                tokens.push(token);
-                if is_eof {
-                    break;
-                }
-            } else {
-                let token = self.next_token(&mut is_bol);
-                tokens.push(token);
+            let token = self.next_token(&mut is_bol);
+            if token.kind == TokenKind::EOF {
+                break;
             }
+            tokens.push(token);
         }
 
         while indents.len() > 1 {
@@ -349,7 +343,7 @@ impl<'a> Lexer<'a> {
                         };
                     }
                     return Token {
-                        kind: TokenKind::Error("Unexpected character: !".into()),
+                        kind: TokenKind::Not,
                         line: self.line,
                     };
                 }
