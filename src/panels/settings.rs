@@ -72,833 +72,881 @@ pub fn available_themes() -> Vec<String> {
 fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec<Category> {
     let def = Config::default();
 
-    vec![
-        Category {
-            name: "Appearance",
-            settings: vec![
-                Setting {
-                    name: "Theme",
-                    key: "theme",
-                    kind: SettingType::Choice(themes.to_vec(), theme_idx),
-                },
-                Setting {
-                    name: "Border",
-                    key: "border_style",
+    let mut categories = Vec::new();
+
+    categories.push(Category {
+        name: "Appearance",
+        settings: vec![
+            Setting {
+                name: "Theme",
+                key: "theme",
+                kind: SettingType::Choice(themes.to_vec(), theme_idx),
+            },
+            Setting {
+                name: "Border",
+                key: "border_style",
+                kind: SettingType::Choice(
+                    vec![
+                        "round".to_string(),
+                        "squared".to_string(),
+                        "heavy".to_string(),
+                    ],
+                    match config.border_style.as_str() {
+                        "round" => 0,
+                        "heavy" => 2,
+                        _ => 1,
+                    },
+                ),
+            },
+            Setting {
+                name: "Selected Indicator",
+                key: "indicator_style",
+                kind: SettingType::Choice(
+                    vec![
+                        "border".to_string(),
+                        "corner".to_string(),
+                        "corners".to_string(),
+                    ],
+                    match config.indicator_style.as_str() {
+                        "corner" => 1,
+                        "corners" => 2,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "Show Caret",
+                key: "show_caret",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.show_caret { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Tabs",
+                key: "tabs_num",
+                kind: SettingType::Choice(
+                    vec![
+                        "1".to_string(),
+                        "2".to_string(),
+                        "3".to_string(),
+                        "4".to_string(),
+                        "5".to_string(),
+                        "6".to_string(),
+                    ],
+                    config.tabs_num.clamp(1, 6).saturating_sub(1),
+                ),
+            },
+            Setting {
+                name: "Reset Appearance",
+                key: "reset_appearance",
+                kind: SettingType::Action,
+            },
+        ],
+    });
+
+    categories.push(Category {
+        name: "Deck",
+        settings: {
+            let mut s = vec![Setting {
+                name: "Deck Mode",
+                key: "deck_mode",
+                kind: SettingType::Choice(
+                    vec![
+                        "none".to_string(),
+                        "title".to_string(),
+                        "widget".to_string(),
+                    ],
+                    match config.deck_mode.as_str() {
+                        "none" => 0,
+                        "title" => 1,
+                        _ => 2,
+                    },
+                ),
+            }];
+            if config.deck_mode == "widget" {
+                s.push(Setting {
+                    name: "Deck Widget",
+                    key: "deck_widget",
                     kind: SettingType::Choice(
                         vec![
-                            "round".to_string(),
-                            "squared".to_string(),
-                            "heavy".to_string(),
+                            "keyvis".to_string(),
+                            "monitor".to_string(),
+                            "clock".to_string(),
+                            "macrostats".to_string(),
                         ],
-                        match config.border_style.as_str() {
-                            "round" => 0,
-                            "heavy" => 2,
-                            _ => 1,
-                        },
-                    ),
-                },
-                Setting {
-                    name: "Selected Indicator",
-                    key: "indicator_style",
-                    kind: SettingType::Choice(
-                        vec![
-                            "border".to_string(),
-                            "corner".to_string(),
-                            "corners".to_string(),
-                        ],
-                        match config.indicator_style.as_str() {
-                            "corner" => 1,
-                            "corners" => 2,
+                        match config.deck_widget.as_str() {
+                            "monitor" => 1,
+                            "clock" => 2,
+                            "macrostats" => 3,
                             _ => 0,
                         },
                     ),
-                },
-                Setting {
-                    name: "Show Caret",
-                    key: "show_caret",
-                    kind: SettingType::Choice(
-                        vec!["true".to_string(), "false".to_string()],
-                        if config.show_caret { 0 } else { 1 },
-                    ),
-                },
-                Setting {
-                    name: "Tabs",
-                    key: "tabs_num",
-                    kind: SettingType::Choice(
-                        vec![
-                            "1".to_string(),
-                            "2".to_string(),
-                            "3".to_string(),
-                            "4".to_string(),
-                            "5".to_string(),
-                            "6".to_string(),
-                        ],
-                        config.tabs_num.clamp(1, 6).saturating_sub(1),
-                    ),
-                },
-                Setting {
-                    name: "Lib Width",
-                    key: "lib_width",
-                    kind: SettingType::Custom {
-                        value: config.lib_width.to_string(),
-                        default: def.lib_width.to_string(),
-                        validation: CustomType::Int,
-                    },
-                },
-                Setting {
-                    name: "Reset Appearance",
-                    key: "reset_appearance",
-                    kind: SettingType::Action,
-                },
-            ],
+                });
+            }
+            s.push(Setting {
+                name: "Reset Deck",
+                key: "reset_deck",
+                kind: SettingType::Action,
+            });
+            s
         },
-        Category {
-            name: "Deck",
-            settings: {
-                let mut s = vec![Setting {
-                    name: "Deck Mode",
-                    key: "deck_mode",
-                    kind: SettingType::Choice(
-                        vec![
-                            "none".to_string(),
-                            "title".to_string(),
-                            "widget".to_string(),
-                        ],
-                        match config.deck_mode.as_str() {
-                            "none" => 0,
-                            "title" => 1,
-                            _ => 2,
-                        },
-                    ),
-                }];
-                if config.deck_mode == "widget" {
-                    s.push(Setting {
-                        name: "Deck Widget",
-                        key: "deck_widget",
+    });
+
+    if config.deck_mode == "widget" {
+        let mut widget_settings = Vec::new();
+        if config.deck_widget == "monitor" {
+            widget_settings.push(Setting {
+                name: "Monitor CPU",
+                key: "monitor_cpu",
+                kind: SettingType::Choice(
+                    vec![
+                        "off".to_string(),
+                        "pct".to_string(),
+                        "bar".to_string(),
+                        "graph".to_string(),
+                        "pctbar".to_string(),
+                        "pctgraph".to_string(),
+                    ],
+                    match config.monitor_cpu.as_str() {
+                        "pct" => 1,
+                        "bar" => 2,
+                        "graph" => 3,
+                        "pctbar" => 4,
+                        "pctgraph" => 5,
+                        _ => 0,
+                    },
+                ),
+            });
+            widget_settings.push(Setting {
+                name: "Monitor GPU",
+                key: "monitor_gpu",
+                kind: SettingType::Choice(
+                    vec![
+                        "off".to_string(),
+                        "pct".to_string(),
+                        "bar".to_string(),
+                        "graph".to_string(),
+                        "pctbar".to_string(),
+                        "pctgraph".to_string(),
+                    ],
+                    match config.monitor_gpu.as_str() {
+                        "pct" => 1,
+                        "bar" => 2,
+                        "graph" => 3,
+                        "pctbar" => 4,
+                        "pctgraph" => 5,
+                        _ => 0,
+                    },
+                ),
+            });
+            widget_settings.push(Setting {
+                name: "Monitor MEM",
+                key: "monitor_mem",
+                kind: SettingType::Choice(
+                    vec![
+                        "off".to_string(),
+                        "pct".to_string(),
+                        "used".to_string(),
+                        "bar".to_string(),
+                        "graph".to_string(),
+                        "pctbar".to_string(),
+                        "pctgraph".to_string(),
+                    ],
+                    match config.monitor_mem.as_str() {
+                        "pct" => 1,
+                        "used" => 2,
+                        "bar" => 3,
+                        "graph" => 4,
+                        "pctbar" => 5,
+                        "pctgraph" => 6,
+                        _ => 0,
+                    },
+                ),
+            });
+            widget_settings.push(Setting {
+                name: "Monitor TERM",
+                key: "monitor_term",
+                kind: SettingType::Choice(
+                    vec!["off".to_string(), "on".to_string()],
+                    match config.monitor_term.as_str() {
+                        "on" => 1,
+                        _ => 0,
+                    },
+                ),
+            });
+            widget_settings.push(Setting {
+                name: "Monitor Divider",
+                key: "monitor_divider",
+                kind: SettingType::Choice(
+                    vec!["show".to_string(), "hide".to_string()],
+                    match config.monitor_divider.as_str() {
+                        "hide" => 1,
+                        _ => 0,
+                    },
+                ),
+            });
+            widget_settings.push(Setting {
+                name: "Monitor Bar",
+                key: "monitor_bar_mode",
+                kind: SettingType::Choice(
+                    vec![
+                        "background".to_string(),
+                        "caps".to_string(),
+                        "clean".to_string(),
+                    ],
+                    match config.monitor_bar_mode.as_str() {
+                        "caps" => 1,
+                        "clean" => 2,
+                        _ => 0,
+                    },
+                ),
+            });
+            widget_settings.push(Setting {
+                name: "Monitor Bar Width",
+                key: "monitor_bar_width",
+                kind: SettingType::Custom {
+                    value: config.monitor_bar_width.to_string(),
+                    default: def.monitor_bar_width.to_string(),
+                    validation: CustomType::Int,
+                },
+            });
+            widget_settings.push(Setting {
+                name: "Monitor Icons",
+                key: "monitor_icons",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.monitor_icons { 0 } else { 1 },
+                ),
+            });
+        } else if config.deck_widget == "keyvis" {
+            widget_settings.push(Setting {
+                name: "Keyvis Width",
+                key: "keyvis_width",
+                kind: SettingType::Custom {
+                    value: config.keyvis_width.to_string(),
+                    default: def.keyvis_width.to_string(),
+                    validation: CustomType::Int,
+                },
+            });
+            widget_settings.push(Setting {
+                name: "Keyvis Height",
+                key: "keyvis_height",
+                kind: SettingType::Custom {
+                    value: config.keyvis_height.to_string(),
+                    default: def.keyvis_height.to_string(),
+                    validation: CustomType::Int,
+                },
+            });
+            widget_settings.push(Setting {
+                name: "Keyvis Steps",
+                key: "keyvis_steps",
+                kind: SettingType::Choice(
+                    vec![
+                        "1".to_string(),
+                        "2".to_string(),
+                        "3".to_string(),
+                        "4".to_string(),
+                    ],
+                    config.keyvis_steps.clamp(1, 4).saturating_sub(1),
+                ),
+            });
+            widget_settings.push(Setting {
+                name: "Keyvis Spread",
+                key: "keyvis_spread",
+                kind: SettingType::Custom {
+                    value: config.keyvis_spread.to_string(),
+                    default: def.keyvis_spread.to_string(),
+                    validation: CustomType::Int,
+                },
+            });
+            widget_settings.push(Setting {
+                name: "Keyvis Force",
+                key: "keyvis_force",
+                kind: SettingType::Custom {
+                    value: config.keyvis_force.to_string(),
+                    default: def.keyvis_force.to_string(),
+                    validation: CustomType::FloatRange(0.1, 1.0),
+                },
+            });
+            widget_settings.push(Setting {
+                name: "Keyvis Gravity",
+                key: "keyvis_gravity",
+                kind: SettingType::Custom {
+                    value: config.keyvis_gravity.to_string(),
+                    default: def.keyvis_gravity.to_string(),
+                    validation: CustomType::FloatRange(0.1, 1.0),
+                },
+            });
+            widget_settings.push(Setting {
+                name: "Keyvis Tension",
+                key: "keyvis_tension",
+                kind: SettingType::Custom {
+                    value: config.keyvis_tension.to_string(),
+                    default: def.keyvis_tension.to_string(),
+                    validation: CustomType::FloatRange(0.1, 1.0),
+                },
+            });
+            widget_settings.push(Setting {
+                name: "Keyvis Base",
+                key: "keyvis_base",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.keyvis_base { 0 } else { 1 },
+                ),
+            });
+        } else if config.deck_widget == "macrostats" {
+            macro_rules! add_bool {
+                ($name:expr, $key:expr, $val:expr) => {
+                    widget_settings.push(Setting {
+                        name: $name,
+                        key: $key,
                         kind: SettingType::Choice(
-                            vec![
-                                "keyvis".to_string(),
-                                "monitor".to_string(),
-                                "clock".to_string(),
-                                "macrostats".to_string(),
-                            ],
-                            match config.deck_widget.as_str() {
-                                "monitor" => 1,
-                                "clock" => 2,
-                                "macrostats" => 3,
-                                _ => 0,
-                            },
+                            vec!["true".to_string(), "false".to_string()],
+                            if $val { 0 } else { 1 },
                         ),
                     });
+                };
+            }
 
-                    if config.deck_widget == "monitor" {
-                        s.push(Setting {
-                            name: "Monitor CPU",
-                            key: "monitor_cpu",
-                            kind: SettingType::Choice(
-                                vec![
-                                    "off".to_string(),
-                                    "pct".to_string(),
-                                    "bar".to_string(),
-                                    "graph".to_string(),
-                                    "pctbar".to_string(),
-                                    "pctgraph".to_string(),
-                                ],
-                                match config.monitor_cpu.as_str() {
-                                    "pct" => 1,
-                                    "bar" => 2,
-                                    "graph" => 3,
-                                    "pctbar" => 4,
-                                    "pctgraph" => 5,
-                                    _ => 0,
-                                },
-                            ),
-                        });
-                        s.push(Setting {
-                            name: "Monitor GPU",
-                            key: "monitor_gpu",
-                            kind: SettingType::Choice(
-                                vec![
-                                    "off".to_string(),
-                                    "pct".to_string(),
-                                    "bar".to_string(),
-                                    "graph".to_string(),
-                                    "pctbar".to_string(),
-                                    "pctgraph".to_string(),
-                                ],
-                                match config.monitor_gpu.as_str() {
-                                    "pct" => 1,
-                                    "bar" => 2,
-                                    "graph" => 3,
-                                    "pctbar" => 4,
-                                    "pctgraph" => 5,
-                                    _ => 0,
-                                },
-                            ),
-                        });
-                        s.push(Setting {
-                            name: "Monitor MEM",
-                            key: "monitor_mem",
-                            kind: SettingType::Choice(
-                                vec![
-                                    "off".to_string(),
-                                    "pct".to_string(),
-                                    "used".to_string(),
-                                    "bar".to_string(),
-                                    "graph".to_string(),
-                                    "pctbar".to_string(),
-                                    "pctgraph".to_string(),
-                                ],
-                                match config.monitor_mem.as_str() {
-                                    "pct" => 1,
-                                    "used" => 2,
-                                    "bar" => 3,
-                                    "graph" => 4,
-                                    "pctbar" => 5,
-                                    "pctgraph" => 6,
-                                    _ => 0,
-                                },
-                            ),
-                        });
-                        s.push(Setting {
-                            name: "Monitor TERM",
-                            key: "monitor_term",
-                            kind: SettingType::Choice(
-                                vec!["off".to_string(), "on".to_string()],
-                                match config.monitor_term.as_str() {
-                                    "on" => 1,
-                                    _ => 0,
-                                },
-                            ),
-                        });
-                        s.push(Setting {
-                            name: "Monitor Divider",
-                            key: "monitor_divider",
-                            kind: SettingType::Choice(
-                                vec!["show".to_string(), "hide".to_string()],
-                                match config.monitor_divider.as_str() {
-                                    "hide" => 1,
-                                    _ => 0,
-                                },
-                            ),
-                        });
-                        s.push(Setting {
-                            name: "Monitor Bar",
-                            key: "monitor_bar_mode",
-                            kind: SettingType::Choice(
-                                vec![
-                                    "background".to_string(),
-                                    "caps".to_string(),
-                                    "clean".to_string(),
-                                ],
-                                match config.monitor_bar_mode.as_str() {
-                                    "caps" => 1,
-                                    "clean" => 2,
-                                    _ => 0,
-                                },
-                            ),
-                        });
-                        s.push(Setting {
-                            name: "Monitor Bar Width",
-                            key: "monitor_bar_width",
-                            kind: SettingType::Custom {
-                                value: config.monitor_bar_width.to_string(),
-                                default: def.monitor_bar_width.to_string(),
-                                validation: CustomType::Int,
-                            },
-                        });
-                        s.push(Setting {
-                            name: "Monitor Icons",
-                            key: "monitor_icons",
-                            kind: SettingType::Choice(
-                                vec!["true".to_string(), "false".to_string()],
-                                if config.monitor_icons { 0 } else { 1 },
-                            ),
-                        });
-                    } else if config.deck_widget == "keyvis" {
-                        s.push(Setting {
-                            name: "Keyvis Width",
-                            key: "keyvis_width",
-                            kind: SettingType::Custom {
-                                value: config.keyvis_width.to_string(),
-                                default: def.keyvis_width.to_string(),
-                                validation: CustomType::Int,
-                            },
-                        });
-                        s.push(Setting {
-                            name: "Keyvis Height",
-                            key: "keyvis_height",
-                            kind: SettingType::Custom {
-                                value: config.keyvis_height.to_string(),
-                                default: def.keyvis_height.to_string(),
-                                validation: CustomType::Int,
-                            },
-                        });
-                        s.push(Setting {
-                            name: "Keyvis Steps",
-                            key: "keyvis_steps",
-                            kind: SettingType::Choice(
-                                vec![
-                                    "1".to_string(),
-                                    "2".to_string(),
-                                    "3".to_string(),
-                                    "4".to_string(),
-                                ],
-                                config.keyvis_steps.clamp(1, 4).saturating_sub(1),
-                            ),
-                        });
-                        s.push(Setting {
-                            name: "Keyvis Spread",
-                            key: "keyvis_spread",
-                            kind: SettingType::Custom {
-                                value: config.keyvis_spread.to_string(),
-                                default: def.keyvis_spread.to_string(),
-                                validation: CustomType::Int,
-                            },
-                        });
-                        s.push(Setting {
-                            name: "Keyvis Force",
-                            key: "keyvis_force",
-                            kind: SettingType::Custom {
-                                value: config.keyvis_force.to_string(),
-                                default: def.keyvis_force.to_string(),
-                                validation: CustomType::FloatRange(0.1, 1.0),
-                            },
-                        });
-                        s.push(Setting {
-                            name: "Keyvis Gravity",
-                            key: "keyvis_gravity",
-                            kind: SettingType::Custom {
-                                value: config.keyvis_gravity.to_string(),
-                                default: def.keyvis_gravity.to_string(),
-                                validation: CustomType::FloatRange(0.1, 1.0),
-                            },
-                        });
-                        s.push(Setting {
-                            name: "Keyvis Tension",
-                            key: "keyvis_tension",
-                            kind: SettingType::Custom {
-                                value: config.keyvis_tension.to_string(),
-                                default: def.keyvis_tension.to_string(),
-                                validation: CustomType::FloatRange(0.1, 1.0),
-                            },
-                        });
-                        s.push(Setting {
-                            name: "Keyvis Base",
-                            key: "keyvis_base",
-                            kind: SettingType::Choice(
-                                vec!["true".to_string(), "false".to_string()],
-                                if config.keyvis_base { 0 } else { 1 },
-                            ),
-                        });
-                    } else if config.deck_widget == "macrostats" {
-                        macro_rules! add_bool {
-                            ($name:expr, $key:expr, $val:expr) => {
-                                s.push(Setting {
-                                    name: $name,
-                                    key: $key,
-                                    kind: SettingType::Choice(
-                                        vec!["true".to_string(), "false".to_string()],
-                                        if $val { 0 } else { 1 },
-                                    ),
-                                });
-                            };
-                        }
+            add_bool!(
+                "Edit Show Name",
+                "macrostats_edit_name",
+                config.macrostats_edit_name
+            );
+            widget_settings.push(Setting {
+                name: "Edit Errors",
+                key: "macrostats_edit_err",
+                kind: SettingType::Choice(
+                    vec![
+                        "off".to_string(),
+                        "text".to_string(),
+                        "chart".to_string(),
+                        "both".to_string(),
+                    ],
+                    match config.macrostats_edit_err.as_str() {
+                        "text" => 1,
+                        "chart" => 2,
+                        "both" => 3,
+                        _ => 0,
+                    },
+                ),
+            });
+            add_bool!(
+                "Edit Show Created",
+                "macrostats_edit_created",
+                config.macrostats_edit_created
+            );
+            add_bool!(
+                "Edit Show Lines",
+                "macrostats_edit_lines",
+                config.macrostats_edit_lines
+            );
+            add_bool!(
+                "Edit Show Code",
+                "macrostats_edit_code",
+                config.macrostats_edit_code
+            );
+            add_bool!(
+                "Run Show Name",
+                "macrostats_run_name",
+                config.macrostats_run_name
+            );
+            add_bool!(
+                "Run Show Elapsed",
+                "macrostats_run_elapsed",
+                config.macrostats_run_elapsed
+            );
+            add_bool!(
+                "Run Show CPU",
+                "macrostats_run_cpu",
+                config.macrostats_run_cpu
+            );
+            add_bool!(
+                "Lib Show Name",
+                "macrostats_lib_name",
+                config.macrostats_lib_name
+            );
+            add_bool!(
+                "Lib Show Created",
+                "macrostats_lib_created",
+                config.macrostats_lib_created
+            );
+            add_bool!(
+                "Lib Show Size",
+                "macrostats_lib_size",
+                config.macrostats_lib_size
+            );
+            add_bool!(
+                "Lib Show Status",
+                "macrostats_lib_status",
+                config.macrostats_lib_status
+            );
 
-                        add_bool!(
-                            "Edit Show Name",
-                            "macrostats_edit_name",
-                            config.macrostats_edit_name
-                        );
-                        s.push(Setting {
-                            name: "Edit Errors",
-                            key: "macrostats_edit_err",
-                            kind: SettingType::Choice(
-                                vec![
-                                    "off".to_string(),
-                                    "text".to_string(),
-                                    "chart".to_string(),
-                                    "both".to_string(),
-                                ],
-                                match config.macrostats_edit_err.as_str() {
-                                    "text" => 1,
-                                    "chart" => 2,
-                                    "both" => 3,
-                                    _ => 0,
-                                },
-                            ),
-                        });
-                        add_bool!(
-                            "Edit Show Created",
-                            "macrostats_edit_created",
-                            config.macrostats_edit_created
-                        );
-                        add_bool!(
-                            "Edit Show Lines",
-                            "macrostats_edit_lines",
-                            config.macrostats_edit_lines
-                        );
-                        add_bool!(
-                            "Edit Show Code",
-                            "macrostats_edit_code",
-                            config.macrostats_edit_code
-                        );
-                        add_bool!(
-                            "Run Show Name",
-                            "macrostats_run_name",
-                            config.macrostats_run_name
-                        );
-                        add_bool!(
-                            "Run Show Elapsed",
-                            "macrostats_run_elapsed",
-                            config.macrostats_run_elapsed
-                        );
-                        add_bool!(
-                            "Run Show CPU",
-                            "macrostats_run_cpu",
-                            config.macrostats_run_cpu
-                        );
-                        add_bool!(
-                            "Lib Show Name",
-                            "macrostats_lib_name",
-                            config.macrostats_lib_name
-                        );
-                        add_bool!(
-                            "Lib Show Created",
-                            "macrostats_lib_created",
-                            config.macrostats_lib_created
-                        );
-                        add_bool!(
-                            "Lib Show Size",
-                            "macrostats_lib_size",
-                            config.macrostats_lib_size
-                        );
-                        add_bool!(
-                            "Lib Show Status",
-                            "macrostats_lib_status",
-                            config.macrostats_lib_status
-                        );
+            widget_settings.push(Setting {
+                name: "Err Chart Length",
+                key: "macrostats_err_chart_len",
+                kind: SettingType::Custom {
+                    value: config.macrostats_err_chart_len.to_string(),
+                    default: def.macrostats_err_chart_len.to_string(),
+                    validation: CustomType::Int,
+                },
+            });
+            add_bool!(
+                "Err Chart Numbers",
+                "macrostats_err_chart_num",
+                config.macrostats_err_chart_num
+            );
+        } else if config.deck_widget == "clock" {
+            widget_settings.push(Setting {
+                name: "Date",
+                key: "clock_date",
+                kind: SettingType::Choice(
+                    vec![
+                        "off".to_string(),
+                        "eu".to_string(),
+                        "us".to_string(),
+                        "clean".to_string(),
+                        "mon name".to_string(),
+                        "rfc 2822".to_string(),
+                    ],
+                    match config.clock_date.as_str() {
+                        "eu" => 1,
+                        "us" => 2,
+                        "clean" => 3,
+                        "mon name" => 4,
+                        "rfc 2822" => 5,
+                        _ => 0,
+                    },
+                ),
+            });
+            widget_settings.push(Setting {
+                name: "Mode",
+                key: "clock_mode",
+                kind: SettingType::Choice(
+                    vec!["small".to_string(), "big".to_string()],
+                    match config.clock_mode.as_str() {
+                        "big" => 1,
+                        _ => 0,
+                    },
+                ),
+            });
+            widget_settings.push(Setting {
+                name: "Position",
+                key: "clock_position",
+                kind: SettingType::Choice(
+                    vec!["left".to_string(), "mid".to_string(), "right".to_string()],
+                    match config.clock_position.as_str() {
+                        "mid" => 1,
+                        "right" => 2,
+                        _ => 0,
+                    },
+                ),
+            });
+            widget_settings.push(Setting {
+                name: "Format",
+                key: "clock_format",
+                kind: SettingType::Choice(
+                    vec!["12h".to_string(), "24h".to_string()],
+                    match config.clock_format.as_str() {
+                        "12h" => 0,
+                        _ => 1,
+                    },
+                ),
+            });
+            widget_settings.push(Setting {
+                name: "Show Seconds",
+                key: "clock_seconds",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.clock_seconds { 0 } else { 1 },
+                ),
+            });
+        }
+        categories.push(Category {
+            name: "Widget",
+            settings: widget_settings,
+        });
+    }
 
-                        s.push(Setting {
-                            name: "Err Chart Length",
-                            key: "macrostats_err_chart_len",
-                            kind: SettingType::Custom {
-                                value: config.macrostats_err_chart_len.to_string(),
-                                default: def.macrostats_err_chart_len.to_string(),
-                                validation: CustomType::Int,
-                            },
-                        });
-                        add_bool!(
-                            "Err Chart Numbers",
-                            "macrostats_err_chart_num",
-                            config.macrostats_err_chart_num
-                        );
-                    } else if config.deck_widget == "clock" {
-                        s.push(Setting {
-                            name: "Date",
-                            key: "clock_date",
-                            kind: SettingType::Choice(
-                                vec![
-                                    "off".to_string(),
-                                    "eu".to_string(),
-                                    "us".to_string(),
-                                    "clean".to_string(),
-                                    "mon name".to_string(),
-                                    "rfc 2822".to_string(),
-                                ],
-                                match config.clock_date.as_str() {
-                                    "eu" => 1,
-                                    "us" => 2,
-                                    "clean" => 3,
-                                    "mon name" => 4,
-                                    "rfc 2822" => 5,
-                                    _ => 0,
-                                },
-                            ),
-                        });
-                        s.push(Setting {
-                            name: "Mode",
-                            key: "clock_mode",
-                            kind: SettingType::Choice(
-                                vec!["small".to_string(), "big".to_string()],
-                                match config.clock_mode.as_str() {
-                                    "big" => 1,
-                                    _ => 0,
-                                },
-                            ),
-                        });
-                        s.push(Setting {
-                            name: "Position",
-                            key: "clock_position",
-                            kind: SettingType::Choice(
-                                vec!["left".to_string(), "mid".to_string(), "right".to_string()],
-                                match config.clock_position.as_str() {
-                                    "mid" => 1,
-                                    "right" => 2,
-                                    _ => 0,
-                                },
-                            ),
-                        });
-                        s.push(Setting {
-                            name: "Format",
-                            key: "clock_format",
-                            kind: SettingType::Choice(
-                                vec!["12h".to_string(), "24h".to_string()],
-                                match config.clock_format.as_str() {
-                                    "12h" => 0,
-                                    _ => 1,
-                                },
-                            ),
-                        });
-                        s.push(Setting {
-                            name: "Show Seconds",
-                            key: "clock_seconds",
-                            kind: SettingType::Choice(
-                                vec!["true".to_string(), "false".to_string()],
-                                if config.clock_seconds { 0 } else { 1 },
-                            ),
-                        });
-                    }
-                }
-                s.push(Setting {
-                    name: "Reset Deck",
-                    key: "reset_deck",
-                    kind: SettingType::Action,
-                });
-                s
+    categories.push(Category {
+        name: "Library",
+        settings: vec![
+            Setting {
+                name: "Lib Width",
+                key: "lib_width",
+                kind: SettingType::Custom {
+                    value: config.lib_width.to_string(),
+                    default: def.lib_width.to_string(),
+                    validation: CustomType::Int,
+                },
             },
-        },
-        Category {
-            name: "Library",
-            settings: vec![
-                Setting {
-                    name: "Sorting",
-                    key: "lib_sorting",
-                    kind: SettingType::Choice(
-                        vec![
-                            "ascending".to_string(),
-                            "descending".to_string(),
-                            "custom".to_string(),
-                        ],
-                        match config.lib_sorting.as_str() {
-                            "descending" => 1,
-                            "custom" => 2,
-                            _ => 0,
-                        },
-                    ),
-                },
-                Setting {
-                    name: "Reset Order",
-                    key: "reset_order",
-                    kind: SettingType::Action,
-                },
-                Setting {
-                    name: "New File",
-                    key: "bind_lib_new_file",
-                    kind: SettingType::Custom {
-                        value: config.bind_lib_new_file.to_string(),
-                        default: def.bind_lib_new_file.to_string(),
-                        validation: CustomType::Char,
+            Setting {
+                name: "Sorting",
+                key: "lib_sorting",
+                kind: SettingType::Choice(
+                    vec![
+                        "ascending".to_string(),
+                        "descending".to_string(),
+                        "custom".to_string(),
+                    ],
+                    match config.lib_sorting.as_str() {
+                        "descending" => 1,
+                        "custom" => 2,
+                        _ => 0,
                     },
+                ),
+            },
+            Setting {
+                name: "Reset Order",
+                key: "reset_order",
+                kind: SettingType::Action,
+            },
+        ],
+    });
+
+    categories.push(Category {
+        name: "Library Keybinds",
+        settings: vec![
+            Setting {
+                name: "New File",
+                key: "bind_lib_new_file",
+                kind: SettingType::Custom {
+                    value: config.bind_lib_new_file.to_string(),
+                    default: def.bind_lib_new_file.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "New Folder",
-                    key: "bind_lib_new_folder",
-                    kind: SettingType::Custom {
-                        value: config.bind_lib_new_folder.to_string(),
-                        default: def.bind_lib_new_folder.to_string(),
-                        validation: CustomType::Char,
+            },
+            Setting {
+                name: "New Folder",
+                key: "bind_lib_new_folder",
+                kind: SettingType::Custom {
+                    value: config.bind_lib_new_folder.to_string(),
+                    default: def.bind_lib_new_folder.to_string(),
+                    validation: CustomType::Char,
+                },
+            },
+            Setting {
+                name: "Edit/Run",
+                key: "bind_lib_edit",
+                kind: SettingType::Custom {
+                    value: config.bind_lib_edit.to_string(),
+                    default: def.bind_lib_edit.to_string(),
+                    validation: CustomType::Char,
+                },
+            },
+            Setting {
+                name: "Rename",
+                key: "bind_lib_rename",
+                kind: SettingType::Custom {
+                    value: config.bind_lib_rename.to_string(),
+                    default: def.bind_lib_rename.to_string(),
+                    validation: CustomType::Char,
+                },
+            },
+            Setting {
+                name: "Delete",
+                key: "bind_lib_delete",
+                kind: SettingType::Custom {
+                    value: config.bind_lib_delete.to_string(),
+                    default: def.bind_lib_delete.to_string(),
+                    validation: CustomType::Char,
+                },
+            },
+            Setting {
+                name: "Move Up",
+                key: "bind_lib_move_up",
+                kind: SettingType::Custom {
+                    value: config.bind_lib_move_up.to_string(),
+                    default: def.bind_lib_move_up.to_string(),
+                    validation: CustomType::Char,
+                },
+            },
+            Setting {
+                name: "Move Down",
+                key: "bind_lib_move_down",
+                kind: SettingType::Custom {
+                    value: config.bind_lib_move_down.to_string(),
+                    default: def.bind_lib_move_down.to_string(),
+                    validation: CustomType::Char,
+                },
+            },
+            Setting {
+                name: "Reset Library Keybinds",
+                key: "reset_lib_keybinds",
+                kind: SettingType::Action,
+            },
+        ],
+    });
+
+    categories.push(Category {
+        name: "Editor",
+        settings: vec![
+            Setting {
+                name: "Autosave",
+                key: "edit_autosave",
+                kind: SettingType::Custom {
+                    value: config.edit_autosave.to_string(),
+                    default: def.edit_autosave.to_string(),
+                    validation: CustomType::Int,
+                },
+            },
+            Setting {
+                name: "Tab Backspace",
+                key: "edit_tab_backspace",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.edit_tab_backspace { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Auto Indent",
+                key: "edit_auto_indent",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.edit_auto_indent { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Error Highlight",
+                key: "edit_error_highlight",
+                kind: SettingType::Choice(
+                    vec!["background".to_string(), "underline".to_string()],
+                    match config.edit_error_highlight.as_str() {
+                        "underline" => 1,
+                        _ => 0,
                     },
+                ),
+            },
+            Setting {
+                name: "Reset Editor",
+                key: "reset_editor",
+                kind: SettingType::Action,
+            },
+        ],
+    });
+
+    categories.push(Category {
+        name: "Editor Keybinds",
+        settings: vec![
+            Setting {
+                name: "Insert Mode",
+                key: "bind_edit_insert",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_insert.to_string(),
+                    default: def.bind_edit_insert.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Rename",
-                    key: "bind_lib_rename",
-                    kind: SettingType::Custom {
-                        value: config.bind_lib_rename.to_string(),
-                        default: def.bind_lib_rename.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Visual Mode",
+                key: "bind_edit_visual",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_visual.to_string(),
+                    default: def.bind_edit_visual.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Delete",
-                    key: "bind_lib_delete",
-                    kind: SettingType::Custom {
-                        value: config.bind_lib_delete.to_string(),
-                        default: def.bind_lib_delete.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Fold",
+                key: "bind_edit_fold",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_fold.to_string(),
+                    default: def.bind_edit_fold.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Move Up",
-                    key: "bind_lib_move_up",
-                    kind: SettingType::Custom {
-                        value: config.bind_lib_move_up.to_string(),
-                        default: def.bind_lib_move_up.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Move Left",
+                key: "bind_edit_left",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_left.to_string(),
+                    default: def.bind_edit_left.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Move Down",
-                    key: "bind_lib_move_down",
-                    kind: SettingType::Custom {
-                        value: config.bind_lib_move_down.to_string(),
-                        default: def.bind_lib_move_down.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Move Right",
+                key: "bind_edit_right",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_right.to_string(),
+                    default: def.bind_edit_right.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Reset Library Keybinds",
-                    key: "reset_lib_keybinds",
-                    kind: SettingType::Action,
+            },
+            Setting {
+                name: "Move Up",
+                key: "bind_edit_up",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_up.to_string(),
+                    default: def.bind_edit_up.to_string(),
+                    validation: CustomType::Char,
                 },
-            ],
-        },
-        Category {
-            name: "Editor",
-            settings: vec![
-                Setting {
-                    name: "Tab Backspace",
-                    key: "edit_tab_backspace",
-                    kind: SettingType::Choice(
-                        vec!["true".to_string(), "false".to_string()],
-                        if config.edit_tab_backspace { 0 } else { 1 },
-                    ),
+            },
+            Setting {
+                name: "Move Down",
+                key: "bind_edit_down",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_down.to_string(),
+                    default: def.bind_edit_down.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Auto Indent",
-                    key: "edit_auto_indent",
-                    kind: SettingType::Choice(
-                        vec!["true".to_string(), "false".to_string()],
-                        if config.edit_auto_indent { 0 } else { 1 },
-                    ),
+            },
+            Setting {
+                name: "Next Word",
+                key: "bind_edit_word_next",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_word_next.to_string(),
+                    default: def.bind_edit_word_next.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Error Highlight",
-                    key: "edit_error_highlight",
-                    kind: SettingType::Choice(
-                        vec!["background".to_string(), "underline".to_string()],
-                        match config.edit_error_highlight.as_str() {
-                            "underline" => 1,
-                            _ => 0,
-                        },
-                    ),
+            },
+            Setting {
+                name: "Prev Word",
+                key: "bind_edit_word_prev",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_word_prev.to_string(),
+                    default: def.bind_edit_word_prev.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Insert Mode",
-                    key: "bind_edit_insert",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_insert.to_string(),
-                        default: def.bind_edit_insert.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Line Start",
+                key: "bind_edit_line_start",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_line_start.to_string(),
+                    default: def.bind_edit_line_start.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Visual Mode",
-                    key: "bind_edit_visual",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_visual.to_string(),
-                        default: def.bind_edit_visual.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Line End",
+                key: "bind_edit_line_end",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_line_end.to_string(),
+                    default: def.bind_edit_line_end.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Fold",
-                    key: "bind_edit_fold",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_fold.to_string(),
-                        default: def.bind_edit_fold.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Select All",
+                key: "bind_edit_select_all",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_select_all.to_string(),
+                    default: def.bind_edit_select_all.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Move Left",
-                    key: "bind_edit_left",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_left.to_string(),
-                        default: def.bind_edit_left.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "File Bounds",
+                key: "bind_edit_file_bounds",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_file_bounds.to_string(),
+                    default: def.bind_edit_file_bounds.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Move Right",
-                    key: "bind_edit_right",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_right.to_string(),
-                        default: def.bind_edit_right.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Delete",
+                key: "bind_edit_delete",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_delete.to_string(),
+                    default: def.bind_edit_delete.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Move Up",
-                    key: "bind_edit_up",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_up.to_string(),
-                        default: def.bind_edit_up.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Copy",
+                key: "bind_edit_copy",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_copy.to_string(),
+                    default: def.bind_edit_copy.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Move Down",
-                    key: "bind_edit_down",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_down.to_string(),
-                        default: def.bind_edit_down.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Paste",
+                key: "bind_edit_paste",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_paste.to_string(),
+                    default: def.bind_edit_paste.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Next Word",
-                    key: "bind_edit_word_next",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_word_next.to_string(),
-                        default: def.bind_edit_word_next.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Search",
+                key: "bind_edit_search",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_search.to_string(),
+                    default: def.bind_edit_search.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Prev Word",
-                    key: "bind_edit_word_prev",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_word_prev.to_string(),
-                        default: def.bind_edit_word_prev.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Undo",
+                key: "bind_edit_undo",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_undo.to_string(),
+                    default: def.bind_edit_undo.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Line Start",
-                    key: "bind_edit_line_start",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_line_start.to_string(),
-                        default: def.bind_edit_line_start.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Redo",
+                key: "bind_edit_redo",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_redo.to_string(),
+                    default: def.bind_edit_redo.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Line End",
-                    key: "bind_edit_line_end",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_line_end.to_string(),
-                        default: def.bind_edit_line_end.to_string(),
-                        validation: CustomType::Char,
-                    },
+            },
+            Setting {
+                name: "Save",
+                key: "bind_edit_save",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_save.to_string(),
+                    default: def.bind_edit_save.to_string(),
+                    validation: CustomType::Char,
                 },
-                Setting {
-                    name: "Select All",
-                    key: "bind_edit_select_all",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_select_all.to_string(),
-                        default: def.bind_edit_select_all.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "File Bounds",
-                    key: "bind_edit_file_bounds",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_file_bounds.to_string(),
-                        default: def.bind_edit_file_bounds.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Delete",
-                    key: "bind_edit_delete",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_delete.to_string(),
-                        default: def.bind_edit_delete.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Copy",
-                    key: "bind_edit_copy",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_copy.to_string(),
-                        default: def.bind_edit_copy.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Paste",
-                    key: "bind_edit_paste",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_paste.to_string(),
-                        default: def.bind_edit_paste.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Search",
-                    key: "bind_edit_search",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_search.to_string(),
-                        default: def.bind_edit_search.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Undo",
-                    key: "bind_edit_undo",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_undo.to_string(),
-                        default: def.bind_edit_undo.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Redo",
-                    key: "bind_edit_redo",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_redo.to_string(),
-                        default: def.bind_edit_redo.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Save",
-                    key: "bind_edit_save",
-                    kind: SettingType::Custom {
-                        value: config.bind_edit_save.to_string(),
-                        default: def.bind_edit_save.to_string(),
-                        validation: CustomType::Char,
-                    },
-                },
-                Setting {
-                    name: "Reset Editor",
-                    key: "reset_edit_keybinds",
-                    kind: SettingType::Action,
-                },
-            ],
-        },
-        Category {
-            name: "Advanced",
-            settings: vec![
-                Setting {
-                    name: "Double Q Exit",
-                    key: "double_q_exit",
-                    kind: SettingType::Choice(
-                        vec!["true".to_string(), "false".to_string()],
-                        if config.double_q_exit { 0 } else { 1 },
-                    ),
-                },
-                Setting {
-                    name: "Reset Config",
-                    key: "reset_config",
-                    kind: SettingType::Action,
-                },
-                Setting {
-                    name: "Reset Lib",
-                    key: "reset_lib",
-                    kind: SettingType::Action,
-                },
-                Setting {
-                    name: "Reset Macrodata",
-                    key: "reset_macrodata",
-                    kind: SettingType::Action,
-                },
-            ],
-        },
-    ]
+            },
+            Setting {
+                name: "Reset Editor Keybinds",
+                key: "reset_edit_keybinds",
+                kind: SettingType::Action,
+            },
+        ],
+    });
+
+    categories.push(Category {
+        name: "Advanced",
+        settings: vec![
+            Setting {
+                name: "Double Q Exit",
+                key: "double_q_exit",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.double_q_exit { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Reset Config",
+                key: "reset_config",
+                kind: SettingType::Action,
+            },
+            Setting {
+                name: "Reset Lib",
+                key: "reset_lib",
+                kind: SettingType::Action,
+            },
+            Setting {
+                name: "Reset Macrodata",
+                key: "reset_macrodata",
+                kind: SettingType::Action,
+            },
+        ],
+    });
+
+    categories
 }
 
 pub fn settings_modal(
@@ -1022,6 +1070,7 @@ pub fn settings_modal(
                 apply_setting!(config, set, bool "keyvis_base", keyvis_base);
 
                 apply_setting!(config, set, bool "double_q_exit", double_q_exit);
+                apply_setting!(config, set, parse_clamp "edit_autosave", edit_autosave, 0, 60);
 
                 apply_setting!(config, set, choice "monitor_cpu", monitor_cpu);
                 apply_setting!(config, set, choice "monitor_gpu", monitor_gpu);
@@ -1477,7 +1526,11 @@ pub fn settings_modal(
                         let current_theme_idx =
                             themes.iter().position(|t| t == &config.theme).unwrap_or(0);
                         categories = build_categories(config, &themes, current_theme_idx);
-
+                        if cat_selected >= categories.len() {
+                            cat_selected = categories.len().saturating_sub(1);
+                        }
+                        det_selected.resize(categories.len(), 0);
+                        det_scroll.resize(categories.len(), 0);
                         needs_ui_refresh = true;
                     }
                     dirty = true;
@@ -1575,6 +1628,11 @@ pub fn settings_modal(
                                 let current_theme_idx =
                                     themes.iter().position(|t| t == &config.theme).unwrap_or(0);
                                 categories = build_categories(config, &themes, current_theme_idx);
+                                if cat_selected >= categories.len() {
+                                    cat_selected = categories.len().saturating_sub(1);
+                                }
+                                det_selected.resize(categories.len(), 0);
+                                det_scroll.resize(categories.len(), 0);
                                 needs_ui_refresh = true;
                             }
                         }
@@ -1593,6 +1651,11 @@ pub fn settings_modal(
                                 let current_theme_idx =
                                     themes.iter().position(|t| t == &config.theme).unwrap_or(0);
                                 categories = build_categories(config, &themes, current_theme_idx);
+                                if cat_selected >= categories.len() {
+                                    cat_selected = categories.len().saturating_sub(1);
+                                }
+                                det_selected.resize(categories.len(), 0);
+                                det_scroll.resize(categories.len(), 0);
                                 needs_ui_refresh = true;
                             }
                         }
@@ -1658,6 +1721,9 @@ pub fn settings_modal(
                                         "reset_macrodata" => {
                                             ("Delete all saved macro data\n\nAre you sure?", 7)
                                         }
+                                        "reset_editor" => {
+                                            ("Reset editor settings to default\n\nAre you sure?", 8)
+                                        }
                                         _ => ("", 99),
                                     };
 
@@ -1694,6 +1760,8 @@ pub fn settings_modal(
                                             config.reset_deck();
                                         } else if action_type == 7 {
                                             crate::lib::reset_macrodata();
+                                        } else if action_type == 8 {
+                                            config.reset_editor();
                                         }
                                         config.save();
 
@@ -1736,6 +1804,11 @@ pub fn settings_modal(
                                             .unwrap_or(0);
                                         categories =
                                             build_categories(config, &themes, current_theme_idx);
+                                        if cat_selected >= categories.len() {
+                                            cat_selected = categories.len().saturating_sub(1);
+                                        }
+                                        det_selected.resize(categories.len(), 0);
+                                        det_scroll.resize(categories.len(), 0);
                                         needs_ui_refresh = true;
                                     }
                                 }
@@ -1835,6 +1908,12 @@ pub fn settings_modal(
                 main_view.resize(term_w, term_h, config);
                 prev_deck_mode = config.deck_mode.clone();
                 prev_deck_widget = config.deck_widget.clone();
+
+                if cat_selected >= categories.len() {
+                    cat_selected = categories.len().saturating_sub(1);
+                }
+                det_selected.resize(categories.len(), 0);
+                det_scroll.resize(categories.len(), 0);
             } else {
                 main_view.update_min_sizes(config);
                 let (term_w, term_h) = Terminal::size();

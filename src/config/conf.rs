@@ -56,6 +56,7 @@ pub struct Config {
 
     pub double_q_exit: bool,
 
+    pub edit_autosave: usize,
     pub edit_tab_backspace: bool,
     pub edit_auto_indent: bool,
     pub edit_error_highlight: String,
@@ -143,6 +144,7 @@ impl Default for Config {
 
             double_q_exit: false,
 
+            edit_autosave: 0,
             edit_tab_backspace: true,
             edit_auto_indent: true,
             edit_error_highlight: String::new(),
@@ -313,6 +315,10 @@ impl Config {
 
                     "double_q_exit" => {
                         self.double_q_exit = val.parse().unwrap_or(self.double_q_exit)
+                    }
+
+                    "edit_autosave" => {
+                        self.edit_autosave = val.parse().unwrap_or(self.edit_autosave).clamp(0, 60)
                     }
 
                     "edit_tab_backspace" => {
@@ -569,11 +575,16 @@ impl Config {
         self.keyvis_base = default.keyvis_base;
     }
 
-    pub fn reset_edit_keybinds(&mut self) {
+    pub fn reset_editor(&mut self) {
         let default = Config::default();
+        self.edit_autosave = default.edit_autosave;
         self.edit_tab_backspace = default.edit_tab_backspace;
         self.edit_auto_indent = default.edit_auto_indent;
         self.edit_error_highlight = default.edit_error_highlight;
+    }
+
+    pub fn reset_edit_keybinds(&mut self) {
+        let default = Config::default();
         self.bind_edit_insert = default.bind_edit_insert;
         self.bind_edit_visual = default.bind_edit_visual;
         self.bind_edit_fold = default.bind_edit_fold;
@@ -880,6 +891,13 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.double_q_exit, comment
+                    )
+                    .unwrap(),
+
+                    "edit_autosave" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.edit_autosave, comment
                     )
                     .unwrap(),
 

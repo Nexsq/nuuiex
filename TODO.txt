@@ -1,9 +1,7 @@
 Publish the new release
 
 Grengorio bug hunting & feedback:
-- add timer to double Q exit
 - add a keypress function with 2 arguments, one optional
-- add autosave
 - add function for checking focused window
 - add function for screen resolution
 - add function for beep
