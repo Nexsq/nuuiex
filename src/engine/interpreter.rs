@@ -1616,6 +1616,98 @@ fn get_screen_size() -> Result<(i32, i32), String> {
 }
 
 #[cfg(windows)]
+fn get_focused_window() -> Result<String, String> {
+    use windows_sys::Win32::Foundation::{CloseHandle, MAX_PATH};
+    use windows_sys::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowThreadProcessId,
+    };
+
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_null() {
+            return Ok(String::new());
+        }
+        let mut pid = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == 0 {
+            return Ok(String::new());
+        }
+
+        let h_process = OpenProcess(0x1000, 0, pid);
+        if h_process.is_null() {
+            return Ok(String::new());
+        }
+
+        let mut buf = [0u16; MAX_PATH as usize];
+        let mut size = MAX_PATH;
+        let res = QueryFullProcessImageNameW(h_process, 0, buf.as_mut_ptr(), &mut size);
+        CloseHandle(h_process);
+
+        if res != 0 {
+            let full_path = String::from_utf16_lossy(&buf[..size as usize]);
+            let file_name = std::path::Path::new(&full_path)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            return Ok(file_name);
+        }
+        Ok(String::new())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn get_focused_window() -> Result<String, String> {
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        if let Ok(output) = std::process::Command::new("hyprctl")
+            .arg("activewindow")
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("class:") || trimmed.starts_with("initialClass:") {
+                    if let Some((_, val)) = trimmed.split_once(':') {
+                        return Ok(val.trim().to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    if let Ok(output) = std::process::Command::new("xdotool")
+        .args(["getwindowfocus", "getwindowpid"])
+        .output()
+    {
+        if output.status.success() {
+            let pid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if let Ok(pid) = pid_str.parse::<u32>() {
+                if let Ok(comm) = std::fs::read_to_string(format!("/proc/{}/comm", pid)) {
+                    return Ok(comm.trim().to_string());
+                }
+            }
+        }
+    }
+
+    if let Ok(output) = std::process::Command::new("xdotool")
+        .args(["getwindowfocus", "getwindowname"])
+        .output()
+    {
+        if output.status.success() {
+            return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
+        }
+    }
+
+    Ok(String::new())
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn get_focused_window() -> Result<String, String> {
+    Err("Focused window detection is not supported on this OS".to_string())
+}
+
+#[cfg(windows)]
 fn get_screen_pixel(x: i32, y: i32) -> Result<(u8, u8, u8), String> {
     #[link(name = "user32")]
     unsafe extern "system" {
@@ -4315,6 +4407,17 @@ impl Interpreter {
                         let (_, y) =
                             get_screen_size().map_err(|e| format!("Line {}: {}", line, e))?;
                         return Ok(Value::Number(y as f64));
+                    }
+                    "focused" => {
+                        if eval_args.len() != 0 {
+                            return Err(format!(
+                                "Line {}: 'focused' expects exactly 0 arguments",
+                                line
+                            ));
+                        }
+                        let window_name =
+                            get_focused_window().map_err(|e| format!("Line {}: {}", line, e))?;
+                        return Ok(Value::String(window_name));
                     }
                     _ => {}
                 }

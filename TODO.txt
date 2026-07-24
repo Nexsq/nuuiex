@@ -1,4 +1,1 @@
 Publish the new release
-
-Grengorio bug hunting & feedback:
-- add function for checking focused window

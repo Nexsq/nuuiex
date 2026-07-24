@@ -326,6 +326,7 @@ impl Analyzer {
                     || name == "carety"
                     || name == "screenx"
                     || name == "screeny"
+                    || name == "focused"
                 {
                     if args.len() != 0 {
                         self.error(*line, format!("'{}' expects exactly 0 arguments", name));

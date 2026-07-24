@@ -284,6 +284,7 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 | `onwindows()` | None | Returns `True` if the OS is Windows, `False` otherwise. |
 | `macrodata(dict?)`| `Dict` | If passed a dict, saves it to a persistent `.nuuidata` file linked to the script. If called with no arguments, reads and returns the dict from disk. |
 | `beep(freq?, dur?)`| `Number, Number` | Plays a system beep. Optional arguments: frequency (Hz) and duration (ms). |
+| `focused()` | None | Returns the executable name of the currently focused/active window (e.g. `"Discord.exe"` or `"firefox"`). Returns an empty string if it cannot be determined. |
 
 ### 2. Mouse & Keyboard Automation
 
