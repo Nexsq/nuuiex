@@ -1978,6 +1978,74 @@ fn simulate_scroll(_num: i32) -> Result<(), String> {
     Err("Scrolling is not supported on this OS".to_string())
 }
 
+#[cfg(windows)]
+fn system_beep(freq: u32, duration: u32) {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn Beep(dwFreq: u32, dwDuration: u32) -> i32;
+    }
+    unsafe {
+        Beep(freq, duration);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn system_beep(freq: u32, duration: u32) {
+    let dur_sec = duration as f32 / 1000.0;
+
+    if std::process::Command::new("play")
+        .args([
+            "-n",
+            "-c1",
+            "synth",
+            &dur_sec.to_string(),
+            "sine",
+            &freq.to_string(),
+        ])
+        .stderr(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+    {
+        return;
+    }
+
+    let lavfi = format!("sine=frequency={}:duration={}", freq, dur_sec);
+    if std::process::Command::new("ffplay")
+        .args(["-f", "lavfi", "-i", &lavfi, "-autoexit", "-nodisp"])
+        .stderr(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+    {
+        return;
+    }
+
+    if std::process::Command::new("beep")
+        .args(["-f", &freq.to_string(), "-l", &duration.to_string()])
+        .stderr(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+    {
+        return;
+    }
+
+    print!("\x07");
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+    std::thread::sleep(std::time::Duration::from_millis(duration as u64));
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn system_beep(_freq: u32, duration: u32) {
+    print!("\x07");
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+    std::thread::sleep(std::time::Duration::from_millis(duration as u64));
+}
+
 pub struct Environment {
     pub scopes: Vec<std::sync::Arc<std::sync::Mutex<HashMap<String, Value>>>>,
     pub constants: Vec<std::sync::Arc<std::sync::Mutex<HashSet<String>>>>,
@@ -4023,6 +4091,125 @@ impl Interpreter {
                             }
                             Err(e) => return Err(format!("Line {}: {}", line, e)),
                         }
+                    }
+                    "keypress" => {
+                        if eval_args.len() < 1 || eval_args.len() > 2 {
+                            return Err(format!(
+                                "Line {}: 'keypress' expects 1 or 2 arguments",
+                                line
+                            ));
+                        }
+
+                        let key_str = match variant_to_key_str(&eval_args[0].1) {
+                            Ok(s) => s,
+                            Err(e) => return Err(format!("Line {}: {}", line, e)),
+                        };
+
+                        let ms = if eval_args.len() == 2 {
+                            if let Value::Number(n) = eval_args[1].1 {
+                                if n < 0.0 {
+                                    return Err(format!(
+                                        "Line {}: 'keypress' duration cannot be negative",
+                                        line
+                                    ));
+                                }
+                                n
+                            } else {
+                                return Err(format!(
+                                    "Line {}: 'keypress' duration must be a number",
+                                    line
+                                ));
+                            }
+                        } else {
+                            50.0
+                        };
+
+                        if let Err(e) = simulate_key(&key_str, true) {
+                            return Err(format!("Line {}: {}", line, e));
+                        }
+
+                        let dur = std::time::Duration::from_secs_f64(ms / 1000.0);
+                        let target = std::time::Instant::now() + dur;
+
+                        loop {
+                            if self.cancel_token.load(Ordering::Relaxed) {
+                                self.should_exit = true;
+                                let _ = simulate_key(&key_str, false);
+                                return Ok(Value::Nil);
+                            }
+
+                            let now = std::time::Instant::now();
+                            if now >= target {
+                                break;
+                            }
+
+                            let remaining = target - now;
+                            let chunk = remaining.min(std::time::Duration::from_millis(10));
+                            std::thread::sleep(chunk);
+                        }
+
+                        if let Err(e) = simulate_key(&key_str, false) {
+                            return Err(format!("Line {}: {}", line, e));
+                        }
+
+                        return Ok(Value::Nil);
+                    }
+                    "beep" => {
+                        if eval_args.len() > 2 {
+                            return Err(format!(
+                                "Line {}: 'beep' expects 0, 1, or 2 arguments",
+                                line
+                            ));
+                        }
+
+                        let freq = if eval_args.len() >= 1 {
+                            if let Value::Number(n) = eval_args[0].1 {
+                                n.max(37.0).min(32767.0) as u32
+                            } else {
+                                return Err(format!(
+                                    "Line {}: 'beep' frequency must be a number",
+                                    line
+                                ));
+                            }
+                        } else {
+                            440
+                        };
+
+                        let dur = if eval_args.len() == 2 {
+                            if let Value::Number(n) = eval_args[1].1 {
+                                n.max(0.0) as u32
+                            } else {
+                                return Err(format!(
+                                    "Line {}: 'beep' duration must be a number",
+                                    line
+                                ));
+                            }
+                        } else {
+                            200
+                        };
+
+                        system_beep(freq, dur);
+                        return Ok(Value::Nil);
+                    }
+                    "caretx" => {
+                        if eval_args.len() != 0 {
+                            return Err(format!(
+                                "Line {}: 'caretx' expects exactly 0 arguments",
+                                line
+                            ));
+                        }
+                        let caret = self.caret.lock().unwrap();
+                        return Ok(Value::Number(caret.0 as f64));
+                    }
+                    "carety" => {
+                        if eval_args.len() != 0 {
+                            return Err(format!(
+                                "Line {}: 'carety' expects exactly 0 arguments",
+                                line
+                            ));
+                        }
+                        let caret = self.caret.lock().unwrap();
+                        return Ok(Value::Number(caret.1 as f64));
                     }
                     _ => {}
                 }

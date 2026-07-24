@@ -283,6 +283,7 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 | `onlinux()` | None | Returns `True` if the OS is Linux, `False` otherwise. |
 | `onwindows()` | None | Returns `True` if the OS is Windows, `False` otherwise. |
 | `macrodata(dict?)`| `Dict` | If passed a dict, saves it to a persistent `.nuuidata` file linked to the script. If called with no arguments, reads and returns the dict from disk. |
+| `beep(freq?, dur?)`| `Number, Number` | Plays a system beep. Optional arguments: frequency (Hz) and duration (ms). |
 
 ### 2. Mouse & Keyboard Automation
 
@@ -296,6 +297,7 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 | `isupfocus(key)`| `Key:Variant` | I think it's self explanatory. |
 | `keydown(key)`| `Key:Variant` | Simulates a hardware key press (pushes the key down). |
 | `keyup(key)` | `Key:Variant` | Simulates a hardware key release. |
+| `keypress(key, ms?)`| `Key:Variant, Number` | Simulates pressing a key down, waiting `ms` milliseconds (default 50), and then releasing it. |
 | `activekeys(list)` | `List` | Takes a List of Keys and returns a sub-list of only the ones currently pressed. |
 | `write(text)` | `String` | Simulates typing out a string of text sequentially at the OS level. |
 | `scroll(amount)`| `Number` | Simulates the mouse scroll wheel. Positive = Up, Negative = Down. |
@@ -311,6 +313,8 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 | `getpixel(x, y)` | `Number, Number` | Returns the RGB color of the screen pixel at `(x, y)` as a `Color:Variant`. |
 | `compixel(x, y, color, tol?)` | `Num, Num, Color, Num` | Compares the pixel at `(x, y)` against the provided `Color`. Optional `tol` (0-255) defines the acceptable RGB tolerance. Returns `Bool`. |
 | `setcaret(x, y)` | `Number, Number` | Moves the internal terminal caret to a specific row and column in the output box. |
+| `caretx()` | None | Returns the current X (column) position of the terminal output caret. |
+| `carety()` | None | Returns the current Y (row) position of the terminal output caret. |
 
 ### 4. Math & Utilities
 

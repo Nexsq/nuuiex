@@ -105,6 +105,10 @@ pub const BUILTIN_FUNCS: &[&str] = &[
     "getpixel",
     "compixel",
     "macrodata",
+    "keypress",
+    "beep",
+    "caretx",
+    "carety",
 ];
 
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {

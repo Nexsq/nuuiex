@@ -314,6 +314,18 @@ impl Analyzer {
                     if args.len() > 1 {
                         self.error(*line, format!("'{}' expects 0 or 1 argument", name));
                     }
+                } else if name == "keypress" {
+                    if args.len() < 1 || args.len() > 2 {
+                        self.error(*line, format!("'{}' expects 1 or 2 arguments", name));
+                    }
+                } else if name == "beep" {
+                    if args.len() > 2 {
+                        self.error(*line, format!("'{}' expects 0, 1, or 2 arguments", name));
+                    }
+                } else if name == "caretx" || name == "carety" {
+                    if args.len() != 0 {
+                        self.error(*line, format!("'{}' expects exactly 0 arguments", name));
+                    }
                 }
                 for (_, arg) in args {
                     self.analyze_expr(arg);
