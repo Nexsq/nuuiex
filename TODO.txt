@@ -1,7 +1,4 @@
 Publish the new release
 
 Grengorio bug hunting & feedback:
-- add a keypress function with 2 arguments, one optional
 - add function for checking focused window
-- add function for screen resolution
-- add function for beep

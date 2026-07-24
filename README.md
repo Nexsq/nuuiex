@@ -310,6 +310,8 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 | `mousey()` | None | Returns the absolute Y coordinate of the OS mouse cursor. |
 | `mousedelta()` | None | Returns a List `[dx, dy]` of raw relative mouse movement since the last call. |
 | `setmouse(x, y, relative?)` | `Number, Number, Bool` | Moves the mouse cursor. If `relative` is `True`, moves it by an offset rather than to absolute screen coordinates. |
+| `screenx()` | None | Returns the absolute screen resolution width (X) of the primary monitor. |
+| `screeny()` | None | Returns the absolute screen resolution height (Y) of the primary monitor. |
 | `getpixel(x, y)` | `Number, Number` | Returns the RGB color of the screen pixel at `(x, y)` as a `Color:Variant`. |
 | `compixel(x, y, color, tol?)` | `Num, Num, Color, Num` | Compares the pixel at `(x, y)` against the provided `Color`. Optional `tol` (0-255) defines the acceptable RGB tolerance. Returns `Bool`. |
 | `setcaret(x, y)` | `Number, Number` | Moves the internal terminal caret to a specific row and column in the output box. |

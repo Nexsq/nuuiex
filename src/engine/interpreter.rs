@@ -1533,6 +1533,89 @@ fn get_mouse_pos() -> Result<(i32, i32), String> {
 }
 
 #[cfg(windows)]
+fn get_screen_size() -> Result<(i32, i32), String> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
+    unsafe {
+        let w = GetSystemMetrics(SM_CXSCREEN);
+        let h = GetSystemMetrics(SM_CYSCREEN);
+        if w > 0 && h > 0 {
+            Ok((w, h))
+        } else {
+            Err("Failed to get screen size".to_string())
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn get_screen_size() -> Result<(i32, i32), String> {
+    if let Ok(output) = std::process::Command::new("xdotool")
+        .arg("getdisplaygeometry")
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let parts: Vec<&str> = stdout.trim().split_whitespace().collect();
+            if parts.len() >= 2 {
+                if let (Ok(w), Ok(h)) = (parts[0].parse(), parts[1].parse()) {
+                    return Ok((w, h));
+                }
+            }
+        }
+    }
+
+    if let Ok(output) = std::process::Command::new("xrandr").output() {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if line.contains('*') {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if let Some(res) = parts.first() {
+                        let dims: Vec<&str> = res.split('x').collect();
+                        if dims.len() == 2 {
+                            if let (Ok(w), Ok(h)) = (dims[0].parse(), dims[1].parse()) {
+                                return Ok((w, h));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        if let Ok(output) = std::process::Command::new("hyprctl")
+            .arg("monitors")
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    let trimmed = line.trim();
+                    if let Some(x_idx) = trimmed.find('x') {
+                        if let Some(at_idx) = trimmed.find('@') {
+                            if x_idx < at_idx {
+                                let w_str = &trimmed[..x_idx];
+                                let h_str = &trimmed[x_idx + 1..at_idx];
+                                if let (Ok(w), Ok(h)) = (w_str.parse(), h_str.parse()) {
+                                    return Ok((w, h));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err("Failed to get screen size. Is xdotool or xrandr installed?".to_string())
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn get_screen_size() -> Result<(i32, i32), String> {
+    Err("Screen size is not supported on this OS".to_string())
+}
+
+#[cfg(windows)]
 fn get_screen_pixel(x: i32, y: i32) -> Result<(u8, u8, u8), String> {
     #[link(name = "user32")]
     unsafe extern "system" {
@@ -4210,6 +4293,28 @@ impl Interpreter {
                         }
                         let caret = self.caret.lock().unwrap();
                         return Ok(Value::Number(caret.1 as f64));
+                    }
+                    "screenx" => {
+                        if eval_args.len() != 0 {
+                            return Err(format!(
+                                "Line {}: 'screenx' expects exactly 0 arguments",
+                                line
+                            ));
+                        }
+                        let (x, _) =
+                            get_screen_size().map_err(|e| format!("Line {}: {}", line, e))?;
+                        return Ok(Value::Number(x as f64));
+                    }
+                    "screeny" => {
+                        if eval_args.len() != 0 {
+                            return Err(format!(
+                                "Line {}: 'screeny' expects exactly 0 arguments",
+                                line
+                            ));
+                        }
+                        let (_, y) =
+                            get_screen_size().map_err(|e| format!("Line {}: {}", line, e))?;
+                        return Ok(Value::Number(y as f64));
                     }
                     _ => {}
                 }

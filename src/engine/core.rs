@@ -109,6 +109,8 @@ pub const BUILTIN_FUNCS: &[&str] = &[
     "beep",
     "caretx",
     "carety",
+    "screenx",
+    "screeny",
 ];
 
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {

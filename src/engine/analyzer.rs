@@ -322,7 +322,11 @@ impl Analyzer {
                     if args.len() > 2 {
                         self.error(*line, format!("'{}' expects 0, 1, or 2 arguments", name));
                     }
-                } else if name == "caretx" || name == "carety" {
+                } else if name == "caretx"
+                    || name == "carety"
+                    || name == "screenx"
+                    || name == "screeny"
+                {
                     if args.len() != 0 {
                         self.error(*line, format!("'{}' expects exactly 0 arguments", name));
                     }
