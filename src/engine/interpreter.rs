@@ -2463,6 +2463,9 @@ impl Interpreter {
 
         let mut res = out_lock.clone();
 
+        let mut cx = caret.0;
+        let mut cy = caret.1;
+
         if !err_lock.is_empty() {
             if res.last().map(|s| s.is_empty()).unwrap_or(false) {
                 res.pop();
@@ -2470,11 +2473,12 @@ impl Interpreter {
 
             res.push("Runtime Errors:".to_string());
             res.extend(err_lock.clone());
+
+            cx = 0;
+            cy = res.len().saturating_sub(1);
         }
 
         let send_res = res.clone();
-        let cx = caret.0;
-        let cy = caret.1;
         drop(caret);
         drop(out_lock);
         drop(err_lock);
@@ -2485,6 +2489,7 @@ impl Interpreter {
             .is_err()
         {
             self.should_exit = true;
+            self.cancel_token.store(true, Ordering::Relaxed);
         }
     }
 
@@ -2519,6 +2524,7 @@ impl Interpreter {
                 Err(err) => {
                     self.errors.lock().unwrap().push(err);
                     self.should_exit = true;
+                    self.cancel_token.store(true, Ordering::Relaxed);
                     res = Ok(Signal::Empty);
                     break;
                 }
@@ -2542,6 +2548,9 @@ impl Interpreter {
                     if let Value::Number(n) = index_val {
                         if n < 0.0 {
                             return Err(format!("Line {}: List index cannot be negative", line));
+                        }
+                        if n.fract() != 0.0 {
+                            return Err(format!("Line {}: List index must be an integer", line));
                         }
                         let idx = n as usize;
                         if idx < vec.len() {
@@ -2578,6 +2587,9 @@ impl Interpreter {
                         if n < 0.0 {
                             return Err(format!("Line {}: List index cannot be negative", line));
                         }
+                        if n.fract() != 0.0 {
+                            return Err(format!("Line {}: List index must be an integer", line));
+                        }
                         let idx = n as usize;
                         if idx < vec.len() {
                             vec[idx] = value;
@@ -2606,28 +2618,28 @@ impl Interpreter {
         method: &str,
         args: Vec<Value>,
         line: usize,
-    ) -> Result<Value, String> {
+    ) -> Result<(Value, bool), String> {
         if let Value::List(vec) = val {
             match method {
                 "len" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'len' expects 0 arguments", line));
                     }
-                    Ok(Value::Number(vec.len() as f64))
+                    Ok((Value::Number(vec.len() as f64), false))
                 }
                 "append" => {
                     if args.len() != 1 {
                         return Err(format!("Line {}: 'append' expects 1 argument", line));
                     }
                     vec.push(args[0].clone());
-                    Ok(Value::List(vec.clone()))
+                    Ok((Value::List(vec.clone()), true))
                 }
                 "clear" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'clear' expects 0 arguments", line));
                     }
                     vec.clear();
-                    Ok(Value::List(vec.clone()))
+                    Ok((Value::List(vec.clone()), true))
                 }
                 "count" => {
                     if args.len() != 1 {
@@ -2635,7 +2647,7 @@ impl Interpreter {
                     }
                     let target = &args[0];
                     let count = vec.iter().filter(|&x| x == target).count();
-                    Ok(Value::Number(count as f64))
+                    Ok((Value::Number(count as f64), false))
                 }
                 "extend" => {
                     if args.len() != 1 {
@@ -2643,7 +2655,7 @@ impl Interpreter {
                     }
                     if let Value::List(other) = &args[0] {
                         vec.extend(other.clone());
-                        Ok(Value::List(vec.clone()))
+                        Ok((Value::List(vec.clone()), true))
                     } else {
                         Err(format!("Line {}: 'extend' expects a list", line))
                     }
@@ -2653,9 +2665,9 @@ impl Interpreter {
                         return Err(format!("Line {}: 'index' expects 1 argument", line));
                     }
                     if let Some(pos) = vec.iter().position(|x| x == &args[0]) {
-                        Ok(Value::Number(pos as f64))
+                        Ok((Value::Number(pos as f64), false))
                     } else {
-                        Ok(Value::Nil)
+                        Ok((Value::Nil, false))
                     }
                 }
                 "insert" => {
@@ -2667,10 +2679,13 @@ impl Interpreter {
                         if pos < 0.0 {
                             return Err(format!("Line {}: Position cannot be negative", line));
                         }
+                        if pos.fract() != 0.0 {
+                            return Err(format!("Line {}: Position must be an integer", line));
+                        }
                         let idx = pos as usize;
                         if idx <= vec.len() {
                             vec.insert(idx, element);
-                            Ok(Value::List(vec.clone()))
+                            Ok((Value::List(vec.clone()), true))
                         } else {
                             Err(format!("Line {}: Index out of bounds", line))
                         }
@@ -2681,7 +2696,7 @@ impl Interpreter {
                 "pop" => {
                     if args.len() == 0 {
                         if let Some(popped) = vec.pop() {
-                            Ok(popped)
+                            Ok((popped, true))
                         } else {
                             Err(format!("Line {}: pop from empty list", line))
                         }
@@ -2690,9 +2705,12 @@ impl Interpreter {
                             if pos < 0.0 {
                                 return Err(format!("Line {}: Position cannot be negative", line));
                             }
+                            if pos.fract() != 0.0 {
+                                return Err(format!("Line {}: Position must be an integer", line));
+                            }
                             let idx = pos as usize;
                             if idx < vec.len() {
-                                Ok(vec.remove(idx))
+                                Ok((vec.remove(idx), true))
                             } else {
                                 Err(format!("Line {}: Index out of bounds", line))
                             }
@@ -2710,7 +2728,7 @@ impl Interpreter {
                     if let Some(pos) = vec.iter().position(|x| x == &args[0]) {
                         vec.remove(pos);
                     }
-                    Ok(Value::List(vec.clone()))
+                    Ok((Value::List(vec.clone()), true))
                 }
                 _ => Err(format!("Line {}: Undefined list method '{}'", line, method)),
             }
@@ -2720,25 +2738,25 @@ impl Interpreter {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'len' expects 0 arguments", line));
                     }
-                    Ok(Value::Number(map.len() as f64))
+                    Ok((Value::Number(map.len() as f64), false))
                 }
                 "clear" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'clear' expects 0 arguments", line));
                     }
                     map.clear();
-                    Ok(Value::Dict(map.clone()))
+                    Ok((Value::Dict(map.clone()), true))
                 }
                 "get" => {
                     if args.len() != 1 && args.len() != 2 {
                         return Err(format!("Line {}: 'get' expects 1 or 2 arguments", line));
                     }
                     if let Some(v) = map.get(&args[0]) {
-                        Ok(v.clone())
+                        Ok((v.clone(), false))
                     } else if args.len() == 2 {
-                        Ok(args[1].clone())
+                        Ok((args[1].clone(), false))
                     } else {
-                        Ok(Value::Nil)
+                        Ok((Value::Nil, false))
                     }
                 }
                 "keys" => {
@@ -2746,27 +2764,27 @@ impl Interpreter {
                         return Err(format!("Line {}: 'keys' expects 0 arguments", line));
                     }
                     let keys: Vec<Value> = map.keys().cloned().collect();
-                    Ok(Value::List(keys))
+                    Ok((Value::List(keys), false))
                 }
                 "values" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'values' expects 0 arguments", line));
                     }
                     let vals: Vec<Value> = map.values().cloned().collect();
-                    Ok(Value::List(vals))
+                    Ok((Value::List(vals), false))
                 }
                 "pop" => {
                     if args.len() == 0 {
                         let key = map.keys().next().cloned();
                         if let Some(k) = key {
                             let v = map.remove(&k).unwrap();
-                            Ok(Value::List(vec![k, v]))
+                            Ok((Value::List(vec![k, v]), true))
                         } else {
                             Err(format!("Line {}: pop from empty dict", line))
                         }
                     } else if args.len() == 1 {
                         if let Some(v) = map.remove(&args[0]) {
-                            Ok(v)
+                            Ok((v, true))
                         } else {
                             Err(format!("Line {}: KeyError", line))
                         }
@@ -2782,7 +2800,7 @@ impl Interpreter {
                         for (k, v) in other {
                             map.insert(k.clone(), v.clone());
                         }
-                        Ok(Value::Dict(map.clone()))
+                        Ok((Value::Dict(map.clone()), true))
                     } else {
                         Err(format!("Line {}: 'update' expects a dict", line))
                     }
@@ -2792,7 +2810,7 @@ impl Interpreter {
                         return Err(format!("Line {}: 'set' expects 2 arguments", line));
                     }
                     map.insert(args[0].clone(), args[1].clone());
-                    Ok(Value::Dict(map.clone()))
+                    Ok((Value::Dict(map.clone()), true))
                 }
                 _ => Err(format!("Line {}: Undefined dict method '{}'", line, method)),
             }
@@ -2802,7 +2820,7 @@ impl Interpreter {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'len' expects 0 arguments", line));
                     }
-                    Ok(Value::Number(s.chars().count() as f64))
+                    Ok((Value::Number(s.chars().count() as f64), false))
                 }
                 "capitalize" => {
                     if args.len() != 0 {
@@ -2813,19 +2831,19 @@ impl Interpreter {
                     } else {
                         String::new()
                     };
-                    Ok(Value::String(res))
+                    Ok((Value::String(res), false))
                 }
                 "lower" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'lower' expects 0 arguments", line));
                     }
-                    Ok(Value::String(s.to_lowercase()))
+                    Ok((Value::String(s.to_lowercase()), false))
                 }
                 "upper" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'upper' expects 0 arguments", line));
                     }
-                    Ok(Value::String(s.to_uppercase()))
+                    Ok((Value::String(s.to_uppercase()), false))
                 }
                 "swapcase" => {
                     if args.len() != 0 {
@@ -2841,14 +2859,14 @@ impl Interpreter {
                             }
                         })
                         .collect();
-                    Ok(Value::String(res))
+                    Ok((Value::String(res), false))
                 }
                 "count" => {
                     if args.len() != 1 {
                         return Err(format!("Line {}: 'count' expects 1 argument", line));
                     }
                     if let Value::String(sub) = &args[0] {
-                        Ok(Value::Number(s.matches(sub).count() as f64))
+                        Ok((Value::Number(s.matches(sub).count() as f64), false))
                     } else {
                         Err(format!("Line {}: 'count' expects a string", line))
                     }
@@ -2860,9 +2878,9 @@ impl Interpreter {
                     if let Value::String(sub) = &args[0] {
                         if let Some(idx) = s.find(sub) {
                             let char_idx = s[..idx].chars().count();
-                            Ok(Value::Number(char_idx as f64))
+                            Ok((Value::Number(char_idx as f64), false))
                         } else {
-                            Ok(Value::Nil)
+                            Ok((Value::Nil, false))
                         }
                     } else {
                         Err(format!("Line {}: 'index' expects a string", line))
@@ -2872,7 +2890,7 @@ impl Interpreter {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'trim' expects 0 arguments", line));
                     }
-                    Ok(Value::String(s.trim().to_string()))
+                    Ok((Value::String(s.trim().to_string()), false))
                 }
                 "join" => {
                     if args.len() != 1 {
@@ -2880,7 +2898,7 @@ impl Interpreter {
                     }
                     if let Value::List(l) = &args[0] {
                         let strings: Vec<String> = l.iter().map(|v| v.to_string()).collect();
-                        Ok(Value::String(strings.join(s)))
+                        Ok((Value::String(strings.join(s)), false))
                     } else {
                         Err(format!("Line {}: 'join' expects a list", line))
                     }
@@ -2891,12 +2909,12 @@ impl Interpreter {
                             .split_whitespace()
                             .map(|p| Value::String(p.to_string()))
                             .collect();
-                        Ok(Value::List(parts))
+                        Ok((Value::List(parts), false))
                     } else if args.len() == 1 {
                         if let Value::String(sep) = &args[0] {
                             let parts: Vec<Value> =
                                 s.split(sep).map(|p| Value::String(p.to_string())).collect();
-                            Ok(Value::List(parts))
+                            Ok((Value::List(parts), false))
                         } else {
                             Err(format!("Line {}: 'split' expects a string separator", line))
                         }
@@ -2909,7 +2927,7 @@ impl Interpreter {
                         return Err(format!("Line {}: 'replace' expects 2 arguments", line));
                     }
                     if let (Value::String(old), Value::String(new)) = (&args[0], &args[1]) {
-                        Ok(Value::String(s.replace(old, new)))
+                        Ok((Value::String(s.replace(old, new)), false))
                     } else {
                         Err(format!("Line {}: 'replace' expects string arguments", line))
                     }
@@ -2919,7 +2937,7 @@ impl Interpreter {
                         return Err(format!("Line {}: 'startswith' expects 1 argument", line));
                     }
                     if let Value::String(sub) = &args[0] {
-                        Ok(Value::Bool(s.starts_with(sub)))
+                        Ok((Value::Bool(s.starts_with(sub)), false))
                     } else {
                         Err(format!("Line {}: 'startswith' expects a string", line))
                     }
@@ -2929,7 +2947,7 @@ impl Interpreter {
                         return Err(format!("Line {}: 'endswith' expects 1 argument", line));
                     }
                     if let Value::String(sub) = &args[0] {
-                        Ok(Value::Bool(s.ends_with(sub)))
+                        Ok((Value::Bool(s.ends_with(sub)), false))
                     } else {
                         Err(format!("Line {}: 'endswith' expects a string", line))
                     }
@@ -2939,8 +2957,8 @@ impl Interpreter {
                         return Err(format!("Line {}: 'asnum' expects 0 arguments", line));
                     }
                     match s.trim().parse::<f64>() {
-                        Ok(num) => Ok(Value::Number(num)),
-                        Err(_) => Ok(Value::Nil),
+                        Ok(num) => Ok((Value::Number(num), false)),
+                        Err(_) => Ok((Value::Nil, false)),
                     }
                 }
                 _ => Err(format!(
@@ -2955,55 +2973,55 @@ impl Interpreter {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'abs' expects 0 arguments", line));
                     }
-                    Ok(Value::Number(n.abs()))
+                    Ok((Value::Number(n.abs()), false))
                 }
                 "neg" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'neg' expects 0 arguments", line));
                     }
-                    Ok(Value::Number(-n))
+                    Ok((Value::Number(-n), false))
                 }
                 "floor" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'floor' expects 0 arguments", line));
                     }
-                    Ok(Value::Number(n.floor()))
+                    Ok((Value::Number(n.floor()), false))
                 }
                 "trunc" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'trunc' expects 0 arguments", line));
                     }
-                    Ok(Value::Number(n.trunc()))
+                    Ok((Value::Number(n.trunc()), false))
                 }
                 "ceil" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'ceil' expects 0 arguments", line));
                     }
-                    Ok(Value::Number(n.ceil()))
+                    Ok((Value::Number(n.ceil()), false))
                 }
                 "fract" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'fract' expects 0 arguments", line));
                     }
-                    Ok(Value::Number(n.fract()))
+                    Ok((Value::Number(n.fract()), false))
                 }
                 "clamp" => {
                     if args.len() != 2 {
                         return Err(format!("Line {}: 'clamp' expects 2 arguments", line));
                     }
                     if let (Value::Number(min), Value::Number(max)) = (&args[0], &args[1]) {
-                        Ok(Value::Number(n.clamp(*min, *max)))
+                        Ok((Value::Number(n.clamp(*min, *max)), false))
                     } else {
                         Err(format!("Line {}: 'clamp' expects numbers", line))
                     }
                 }
                 "round" => {
                     if args.len() == 0 {
-                        Ok(Value::Number(n.round()))
+                        Ok((Value::Number(n.round()), false))
                     } else if args.len() == 1 {
                         if let Value::Number(places) = &args[0] {
                             let factor = 10.0_f64.powf(*places);
-                            Ok(Value::Number((n * factor).round() / factor))
+                            Ok((Value::Number((n * factor).round() / factor), false))
                         } else {
                             Err(format!("Line {}: 'round' expects a number", line))
                         }
@@ -3016,7 +3034,7 @@ impl Interpreter {
                         return Err(format!("Line {}: 'pow' expects 1 argument", line));
                     }
                     if let Value::Number(exp) = &args[0] {
-                        Ok(Value::Number(n.powf(*exp)))
+                        Ok((Value::Number(n.powf(*exp)), false))
                     } else {
                         Err(format!("Line {}: 'pow' expects a number", line))
                     }
@@ -3025,7 +3043,7 @@ impl Interpreter {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'sqrt' expects 0 arguments", line));
                     }
-                    Ok(Value::Number(n.sqrt()))
+                    Ok((Value::Number(n.sqrt()), false))
                 }
                 _ => Err(format!(
                     "Line {}: Undefined number method '{}'",
@@ -3041,7 +3059,7 @@ impl Interpreter {
                 if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) {
                     s = s.to_lowercase();
                 }
-                return Ok(Value::String(s));
+                return Ok((Value::String(s), false));
             } else {
                 return Err(format!(
                     "Line {}: Undefined method '{}' for enum variant",
@@ -3049,10 +3067,7 @@ impl Interpreter {
                 ));
             }
         } else {
-            Err(format!(
-                "Line {}: Methods can only be called on lists, dicts, strings, numbers, and enums",
-                line
-            ))
+            Err(format!("Line {}: Method call on an invalid value", line))
         }
     }
 
@@ -3416,6 +3431,9 @@ impl Interpreter {
                         if n < 0.0 {
                             return Err(format!("Line {}: List index cannot be negative", line));
                         }
+                        if n.fract() != 0.0 {
+                            return Err(format!("Line {}: List index must be an integer", line));
+                        }
                         let idx = n as usize;
                         if idx < vec.len() {
                             Ok(vec[idx].clone())
@@ -3498,8 +3516,11 @@ impl Interpreter {
                     }
                 }
 
-                let res = self.apply_method(&mut left_val, method, eval_args, *line)?;
-                self.try_assign_expr(left, left_val)?;
+                let (res, is_mutated) =
+                    self.apply_method(&mut left_val, method, eval_args, *line)?;
+                if is_mutated {
+                    self.try_assign_expr(left, left_val)?;
+                }
                 Ok(res)
             }
             Expr::Not(expr, _) => {
@@ -3606,6 +3627,7 @@ impl Interpreter {
                             return Err(format!("Line {}: 'exit' expects 0 arguments", line));
                         }
                         self.should_exit = true;
+                        self.cancel_token.store(true, Ordering::Relaxed);
                         return Ok(Value::Nil);
                     }
                     "range" => {
@@ -3659,6 +3681,7 @@ impl Interpreter {
 
                         if self.tx.send(crate::EngineMessage::InputRequest).is_err() {
                             self.should_exit = true;
+                            self.cancel_token.store(true, Ordering::Relaxed);
                             return Ok(Value::Nil);
                         }
 

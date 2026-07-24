@@ -214,7 +214,13 @@ impl Analyzer {
             }
             Expr::MethodCall(left, method, args, line) => {
                 self.analyze_expr(left);
-                for (_, arg) in args {
+                for (kw_opt, arg) in args {
+                    if kw_opt.is_some() {
+                        self.error(
+                            *line,
+                            "Keyword arguments not supported in method calls".to_string(),
+                        );
+                    }
                     self.analyze_expr(arg);
                 }
                 if let Expr::Ident(name, _) = &**left {
