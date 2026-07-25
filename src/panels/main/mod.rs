@@ -4,7 +4,7 @@ pub mod r#static;
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use crate::{
     Border, Box, Canvas, Color, Gradient, Key, Modifier, conf::Config, editor::Editor,
@@ -39,6 +39,7 @@ pub struct MainView {
     pub running_macros: [Option<PathBuf>; 6],
     pub cancellation_tokens: [Option<Arc<AtomicBool>>; 6],
     pub macro_focus_tokens: [Option<Arc<AtomicBool>>; 6],
+    pub display_sizes: [Option<Arc<AtomicU32>>; 6],
     pub macro_start_times: [Option<std::time::Instant>; 6],
     pub main_box: Box,
     pub main_x: i16,
@@ -98,6 +99,7 @@ impl MainView {
         let running_macros = std::array::from_fn(|_| None);
         let cancellation_tokens = std::array::from_fn(|_| None);
         let macro_focus_tokens = std::array::from_fn(|_| None);
+        let display_sizes = std::array::from_fn(|_| None);
         let macro_start_times = std::array::from_fn(|_| None);
 
         let mut view = Self {
@@ -116,6 +118,7 @@ impl MainView {
             running_macros,
             cancellation_tokens,
             macro_focus_tokens,
+            display_sizes,
             macro_start_times,
             main_box: dummy(),
             main_x: 0,
@@ -235,6 +238,7 @@ impl MainView {
                     token.store(true, Ordering::SeqCst);
                 }
                 self.macro_focus_tokens[i] = None;
+                self.display_sizes[i] = None;
                 self.macro_start_times[i] = None;
                 self.editors[i].file_path = None;
                 self.editors[i].last_file_path = None;
@@ -385,6 +389,18 @@ impl MainView {
         self.title_y = title_pos.1;
         self.deck_x = deck_pos.0;
         self.deck_y = deck_pos.1;
+
+        let main_w = term_w.saturating_sub(layout::TABS_W + config.lib_width as u16 - 1);
+        let main_h = term_h.saturating_sub(self.main_y as u16);
+        let inner_w = main_w.saturating_sub(2) as u32;
+        let inner_h = main_h.saturating_sub(2) as u32;
+        let size_val = (inner_w << 16) | inner_h;
+
+        for i in 0..6 {
+            if let Some(size_arc) = &self.display_sizes[i] {
+                size_arc.store(size_val, Ordering::Relaxed);
+            }
+        }
 
         self.refresh_all(config);
     }
@@ -812,8 +828,18 @@ impl MainView {
 
                 let cancel_token = Arc::new(AtomicBool::new(false));
                 let focus_token = Arc::new(AtomicBool::new(true));
+
+                let main_w = self
+                    .term_w
+                    .saturating_sub(layout::TABS_W + config.lib_width as u16 - 1);
+                let main_h = self.term_h.saturating_sub(self.main_y as u16);
+                let inner_w = main_w.saturating_sub(2) as u32;
+                let inner_h = main_h.saturating_sub(2) as u32;
+                let display_size = Arc::new(AtomicU32::new((inner_w << 16) | inner_h));
+
                 let thread_cancel_token = Arc::clone(&cancel_token);
                 let thread_focus_token = Arc::clone(&focus_token);
+                let thread_display_size = Arc::clone(&display_size);
                 let rp = path
                     .strip_prefix(&self.library_root)
                     .unwrap_or(path.as_path())
@@ -828,6 +854,7 @@ impl MainView {
                         input_rx,
                         thread_cancel_token,
                         thread_focus_token,
+                        thread_display_size,
                         macro_rel_path,
                     );
                 });
@@ -850,6 +877,7 @@ impl MainView {
                 editor.state.lines = vec![String::new()];
                 self.cancellation_tokens[self.current_tab] = Some(cancel_token);
                 self.macro_focus_tokens[self.current_tab] = Some(focus_token);
+                self.display_sizes[self.current_tab] = Some(display_size);
             } else {
                 let editor = &mut self.editors[self.current_tab];
                 if !editor.is_output {

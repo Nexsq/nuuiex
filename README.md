@@ -318,6 +318,8 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 | `setcaret(x, y)` | `Number, Number` | Moves the internal terminal caret to a specific row and column in the output box. |
 | `caretx()` | None | Returns the current X (column) position of the terminal output caret. |
 | `carety()` | None | Returns the current Y (row) position of the terminal output caret. |
+| `displayx()` | None | Returns the character width of the current macro output box (inner width). |
+| `displayy()` | None | Returns the character height of the current macro output box (inner height). |
 
 ### 4. Math & Utilities
 

@@ -74,6 +74,8 @@ pub fn is_valid_modifier_variant(name: &str) -> bool {
 pub const BUILTIN_FUNCS: &[&str] = &[
     "print",
     "println",
+    "displayx",
+    "displayy",
     "sleep",
     "sleepaccurate",
     "exit",
@@ -172,6 +174,7 @@ pub fn run_in_thread(
     input_rx: Receiver<String>,
     cancel_token: Arc<AtomicBool>,
     focus_token: Arc<AtomicBool>,
+    display_size: Arc<std::sync::atomic::AtomicU32>,
     macro_rel_path: String,
 ) {
     let mut lexer = lexer::Lexer::new(source);
@@ -197,7 +200,13 @@ pub fn run_in_thread(
         return;
     }
 
-    let mut interpreter =
-        interpreter::Interpreter::new(tx, input_rx, cancel_token, focus_token, macro_rel_path);
+    let mut interpreter = interpreter::Interpreter::new(
+        tx,
+        input_rx,
+        cancel_token,
+        focus_token,
+        display_size,
+        macro_rel_path,
+    );
     interpreter.exec(&ast);
 }

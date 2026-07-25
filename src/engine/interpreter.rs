@@ -2,7 +2,7 @@ use super::ast::{BinaryOp, Expr, FunctionDef, Stmt, StringPart};
 use super::value::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender};
 
 #[cfg(windows)]
@@ -2325,6 +2325,7 @@ pub struct Interpreter {
     pub env: Environment,
     cancel_token: Arc<AtomicBool>,
     focus_token: Arc<AtomicBool>,
+    display_size: Arc<AtomicU32>,
     rng_state: u64,
     macro_rel_path: String,
 }
@@ -2343,6 +2344,7 @@ impl Interpreter {
         input_rx: Receiver<String>,
         cancel_token: Arc<AtomicBool>,
         focus_token: Arc<AtomicBool>,
+        display_size: Arc<AtomicU32>,
         macro_rel_path: String,
     ) -> Self {
         let now = std::time::SystemTime::now()
@@ -2360,6 +2362,7 @@ impl Interpreter {
             env: Environment::new(),
             cancel_token,
             focus_token,
+            display_size,
             rng_state,
             macro_rel_path,
         }
@@ -3194,6 +3197,7 @@ impl Interpreter {
                 let tx_clone = self.tx.clone();
                 let cancel_token_clone = Arc::clone(&self.cancel_token);
                 let focus_token_clone = Arc::clone(&self.focus_token);
+                let display_size_clone = Arc::clone(&self.display_size);
                 let body_clone = body.clone();
 
                 let output_clone = Arc::clone(&self.output);
@@ -3214,6 +3218,7 @@ impl Interpreter {
                         env: async_env,
                         cancel_token: cancel_token_clone,
                         focus_token: focus_token_clone,
+                        display_size: display_size_clone,
                         rng_state: next_rng_state,
                         macro_rel_path: macro_rel_path_clone,
                     };
@@ -4390,6 +4395,28 @@ impl Interpreter {
                         }
                         let caret = self.caret.lock().unwrap();
                         return Ok(Value::Number(caret.1 as f64));
+                    }
+                    "displayx" => {
+                        if eval_args.len() != 0 {
+                            return Err(format!(
+                                "Line {}: 'displayx' expects exactly 0 arguments",
+                                line
+                            ));
+                        }
+                        let size = self.display_size.load(Ordering::Relaxed);
+                        let w = (size >> 16) as usize;
+                        return Ok(Value::Number(w as f64));
+                    }
+                    "displayy" => {
+                        if eval_args.len() != 0 {
+                            return Err(format!(
+                                "Line {}: 'displayy' expects exactly 0 arguments",
+                                line
+                            ));
+                        }
+                        let size = self.display_size.load(Ordering::Relaxed);
+                        let h = (size & 0xFFFF) as usize;
+                        return Ok(Value::Number(h as f64));
                     }
                     "screenx" => {
                         if eval_args.len() != 0 {

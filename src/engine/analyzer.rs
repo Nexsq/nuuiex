@@ -552,7 +552,7 @@ impl Analyzer {
                             }
                         }
                         "mousex" | "mousey" | "mousedelta" | "time" | "caretx" | "carety"
-                        | "screenx" | "screeny" | "focused" => {
+                        | "screenx" | "screeny" | "focused" | "displayx" | "displayy" => {
                             if args.len() != 0 {
                                 self.error(
                                     *line,
