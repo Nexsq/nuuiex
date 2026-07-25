@@ -188,6 +188,9 @@ impl Parser {
 
                 if self.check(&TokenKind::Comma) {
                     self.advance();
+                    if self.check(&TokenKind::RParen) {
+                        break;
+                    }
                 } else {
                     break;
                 }
@@ -615,6 +618,9 @@ impl Parser {
                             }
                             if self.check(&TokenKind::Comma) {
                                 self.advance();
+                                if self.check(&TokenKind::RParen) {
+                                    break;
+                                }
                             } else {
                                 break;
                             }
@@ -772,6 +778,9 @@ impl Parser {
                             }
                             if self.check(&TokenKind::Comma) {
                                 self.advance();
+                                if self.check(&TokenKind::RParen) {
+                                    break;
+                                }
                             } else {
                                 break;
                             }
@@ -824,6 +833,9 @@ impl Parser {
                         }
                         if self.check(&TokenKind::Comma) {
                             self.advance();
+                            if self.check(&TokenKind::RBrace) {
+                                break;
+                            }
                         } else {
                             break;
                         }
@@ -848,6 +860,9 @@ impl Parser {
                         }
                         if self.check(&TokenKind::Comma) {
                             self.advance();
+                            if self.check(&TokenKind::RBracket) {
+                                break;
+                            }
                         } else {
                             break;
                         }

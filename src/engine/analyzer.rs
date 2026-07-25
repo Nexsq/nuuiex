@@ -269,14 +269,29 @@ impl Analyzer {
                         "isdown" | "isup" | "isdownfocus" | "isupfocus" | "keydown" | "keyup" => {
                             if args.len() != 1 {
                                 self.error(*line, format!("'{}' expects exactly 1 argument", name));
-                            } else if matches!(args[0].1, Expr::String(_) | Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                            } else if matches!(
+                                args[0].1,
+                                Expr::String(_)
+                                    | Expr::Number(_)
+                                    | Expr::Bool(_)
+                                    | Expr::List(_)
+                                    | Expr::Dict(_)
+                                    | Expr::FormatString(_)
+                            ) {
                                 self.error(*line, format!("'{}' expects a Key", name));
                             }
                         }
                         "sleep" | "sleepaccurate" | "scroll" => {
                             if args.len() != 1 {
                                 self.error(*line, format!("'{}' expects exactly 1 argument", name));
-                            } else if matches!(args[0].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                            } else if matches!(
+                                args[0].1,
+                                Expr::String(_)
+                                    | Expr::Bool(_)
+                                    | Expr::List(_)
+                                    | Expr::Dict(_)
+                                    | Expr::FormatString(_)
+                            ) {
                                 self.error(*line, format!("'{}' expects a Number", name));
                             }
                         }
@@ -285,7 +300,14 @@ impl Analyzer {
                                 self.error(*line, format!("'{}' expects 1 to 3 arguments", name));
                             } else {
                                 for i in 0..args.len() {
-                                    if matches!(args[i].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                    if matches!(
+                                        args[i].1,
+                                        Expr::String(_)
+                                            | Expr::Bool(_)
+                                            | Expr::List(_)
+                                            | Expr::Dict(_)
+                                            | Expr::FormatString(_)
+                                    ) {
                                         self.error(*line, format!("'{}' expects Numbers", name));
                                     }
                                 }
@@ -294,7 +316,10 @@ impl Analyzer {
                         "exec" | "write" => {
                             if args.len() != 1 {
                                 self.error(*line, format!("'{}' expects exactly 1 argument", name));
-                            } else if matches!(args[0].1, Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_)) {
+                            } else if matches!(
+                                args[0].1,
+                                Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_)
+                            ) {
                                 self.error(*line, format!("'{}' expects a String", name));
                             }
                         }
@@ -302,7 +327,10 @@ impl Analyzer {
                             if args.len() > 1 {
                                 self.error(*line, format!("'{}' expects 0 or 1 argument", name));
                             } else if args.len() == 1 {
-                                if matches!(args[0].1, Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_)) {
+                                if matches!(
+                                    args[0].1,
+                                    Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_)
+                                ) {
                                     self.error(*line, format!("'{}' expects a String", name));
                                 }
                             }
@@ -311,25 +339,68 @@ impl Analyzer {
                             if args.len() < 2 || args.len() > 3 {
                                 self.error(*line, format!("'{}' expects 2 or 3 arguments", name));
                             } else {
-                                if matches!(args[0].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                if matches!(
+                                    args[0].1,
+                                    Expr::String(_)
+                                        | Expr::Bool(_)
+                                        | Expr::List(_)
+                                        | Expr::Dict(_)
+                                        | Expr::FormatString(_)
+                                ) {
                                     self.error(*line, format!("'{}' x must be a number", name));
                                 }
-                                if matches!(args[1].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                if matches!(
+                                    args[1].1,
+                                    Expr::String(_)
+                                        | Expr::Bool(_)
+                                        | Expr::List(_)
+                                        | Expr::Dict(_)
+                                        | Expr::FormatString(_)
+                                ) {
                                     self.error(*line, format!("'{}' y must be a number", name));
                                 }
-                                if args.len() == 3 && matches!(args[2].1, Expr::String(_) | Expr::Number(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
-                                    self.error(*line, format!("'{}' relative flag must be a boolean", name));
+                                if args.len() == 3
+                                    && matches!(
+                                        args[2].1,
+                                        Expr::String(_)
+                                            | Expr::Number(_)
+                                            | Expr::List(_)
+                                            | Expr::Dict(_)
+                                            | Expr::FormatString(_)
+                                    )
+                                {
+                                    self.error(
+                                        *line,
+                                        format!("'{}' relative flag must be a boolean", name),
+                                    );
                                 }
                             }
                         }
                         "getpixel" | "setcaret" => {
                             if args.len() != 2 {
-                                self.error(*line, format!("'{}' expects exactly 2 arguments", name));
+                                self.error(
+                                    *line,
+                                    format!("'{}' expects exactly 2 arguments", name),
+                                );
                             } else {
-                                if matches!(args[0].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                if matches!(
+                                    args[0].1,
+                                    Expr::String(_)
+                                        | Expr::Bool(_)
+                                        | Expr::List(_)
+                                        | Expr::Dict(_)
+                                        | Expr::FormatString(_)
+                                ) {
                                     self.error(*line, format!("'{}' x must be a number", name));
                                 }
-                                if matches!(args[1].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                if matches!(
+                                    args[1].1,
+                                    Expr::String(_)
+                                        | Expr::Bool(_)
+                                        | Expr::List(_)
+                                        | Expr::Dict(_)
+                                        | Expr::FormatString(_)
+                                ) {
                                     self.error(*line, format!("'{}' y must be a number", name));
                                 }
                             }
@@ -339,13 +410,41 @@ impl Analyzer {
                                 self.error(*line, format!("'{}' expects 2 or 3 arguments", name));
                             } else {
                                 for i in 0..2 {
-                                    if matches!(args[i].1, Expr::String(_) | Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
-                                        self.error(*line, format!("'{}' expects a Color enum for argument {}", name, i + 1));
+                                    if matches!(
+                                        args[i].1,
+                                        Expr::String(_)
+                                            | Expr::Number(_)
+                                            | Expr::Bool(_)
+                                            | Expr::List(_)
+                                            | Expr::Dict(_)
+                                            | Expr::FormatString(_)
+                                    ) {
+                                        self.error(
+                                            *line,
+                                            format!(
+                                                "'{}' expects a Color enum for argument {}",
+                                                name,
+                                                i + 1
+                                            ),
+                                        );
                                     }
                                 }
                                 if args.len() == 3 {
-                                    if matches!(args[2].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
-                                        self.error(*line, format!("'{}' expects a Number for the tolerance argument", name));
+                                    if matches!(
+                                        args[2].1,
+                                        Expr::String(_)
+                                            | Expr::Bool(_)
+                                            | Expr::List(_)
+                                            | Expr::Dict(_)
+                                            | Expr::FormatString(_)
+                                    ) {
+                                        self.error(
+                                            *line,
+                                            format!(
+                                                "'{}' expects a Number for the tolerance argument",
+                                                name
+                                            ),
+                                        );
                                     }
                                 }
                             }
@@ -353,7 +452,14 @@ impl Analyzer {
                         "activekeys" => {
                             if args.len() != 1 {
                                 self.error(*line, format!("'{}' expects exactly 1 argument", name));
-                            } else if matches!(args[0].1, Expr::String(_) | Expr::Number(_) | Expr::Bool(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                            } else if matches!(
+                                args[0].1,
+                                Expr::String(_)
+                                    | Expr::Number(_)
+                                    | Expr::Bool(_)
+                                    | Expr::Dict(_)
+                                    | Expr::FormatString(_)
+                            ) {
                                 self.error(*line, format!("'{}' expects a List", name));
                             }
                         }
@@ -361,7 +467,14 @@ impl Analyzer {
                             if args.len() > 1 {
                                 self.error(*line, format!("'{}' expects 0 or 1 argument", name));
                             } else if args.len() == 1 {
-                                if matches!(args[0].1, Expr::String(_) | Expr::Number(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                if matches!(
+                                    args[0].1,
+                                    Expr::String(_)
+                                        | Expr::Number(_)
+                                        | Expr::List(_)
+                                        | Expr::Dict(_)
+                                        | Expr::FormatString(_)
+                                ) {
                                     self.error(*line, format!("'{}' expects a Boolean", name));
                                 }
                             }
@@ -370,7 +483,14 @@ impl Analyzer {
                             if args.len() > 1 {
                                 self.error(*line, format!("'{}' expects 0 or 1 argument", name));
                             } else if args.len() == 1 {
-                                if matches!(args[0].1, Expr::String(_) | Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::FormatString(_)) {
+                                if matches!(
+                                    args[0].1,
+                                    Expr::String(_)
+                                        | Expr::Number(_)
+                                        | Expr::Bool(_)
+                                        | Expr::List(_)
+                                        | Expr::FormatString(_)
+                                ) {
                                     self.error(*line, format!("'{}' expects a Dictionary", name));
                                 }
                             }
@@ -379,42 +499,88 @@ impl Analyzer {
                             if args.len() < 1 || args.len() > 2 {
                                 self.error(*line, format!("'{}' expects 1 or 2 arguments", name));
                             } else {
-                                if matches!(args[0].1, Expr::String(_) | Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
-                                    self.error(*line, format!("'{}' expects a Key for argument 1", name));
+                                if matches!(
+                                    args[0].1,
+                                    Expr::String(_)
+                                        | Expr::Number(_)
+                                        | Expr::Bool(_)
+                                        | Expr::List(_)
+                                        | Expr::Dict(_)
+                                        | Expr::FormatString(_)
+                                ) {
+                                    self.error(
+                                        *line,
+                                        format!("'{}' expects a Key for argument 1", name),
+                                    );
                                 }
-                                if args.len() == 2 && matches!(args[1].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
-                                    self.error(*line, format!("'{}' expects a Number for argument 2", name));
+                                if args.len() == 2
+                                    && matches!(
+                                        args[1].1,
+                                        Expr::String(_)
+                                            | Expr::Bool(_)
+                                            | Expr::List(_)
+                                            | Expr::Dict(_)
+                                            | Expr::FormatString(_)
+                                    )
+                                {
+                                    self.error(
+                                        *line,
+                                        format!("'{}' expects a Number for argument 2", name),
+                                    );
                                 }
                             }
                         }
                         "beep" => {
                             if args.len() > 2 {
-                                self.error(*line, format!("'{}' expects 0, 1, or 2 arguments", name));
+                                self.error(
+                                    *line,
+                                    format!("'{}' expects 0, 1, or 2 arguments", name),
+                                );
                             } else {
                                 for i in 0..args.len() {
-                                    if matches!(args[i].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                    if matches!(
+                                        args[i].1,
+                                        Expr::String(_)
+                                            | Expr::Bool(_)
+                                            | Expr::List(_)
+                                            | Expr::Dict(_)
+                                            | Expr::FormatString(_)
+                                    ) {
                                         self.error(*line, format!("'{}' expects Numbers", name));
                                     }
                                 }
                             }
                         }
-                        "mousex" | "mousey" | "mousedelta" | "time" | "caretx" | "carety" | "screenx" | "screeny" | "focused" => {
+                        "mousex" | "mousey" | "mousedelta" | "time" | "caretx" | "carety"
+                        | "screenx" | "screeny" | "focused" => {
                             if args.len() != 0 {
-                                self.error(*line, format!("'{}' expects exactly 0 arguments", name));
+                                self.error(
+                                    *line,
+                                    format!("'{}' expects exactly 0 arguments", name),
+                                );
                             }
                         }
                         "len" => {
                             if args.len() != 1 {
                                 self.error(*line, format!("'{}' expects exactly 1 argument", name));
                             } else if matches!(args[0].1, Expr::Number(_) | Expr::Bool(_)) {
-                                self.error(*line, format!("'{}' expects a String, List, or Dictionary", name));
+                                self.error(
+                                    *line,
+                                    format!("'{}' expects a String, List, or Dictionary", name),
+                                );
                             }
                         }
                         "max" | "min" => {
                             if args.is_empty() {
-                                self.error(*line, format!("'{}' expects at least 1 argument", name));
+                                self.error(
+                                    *line,
+                                    format!("'{}' expects at least 1 argument", name),
+                                );
                             } else if args.len() == 1 {
-                                if matches!(args[0].1, Expr::Bool(_) | Expr::Dict(_) | Expr::Number(_)) {
+                                if matches!(
+                                    args[0].1,
+                                    Expr::Bool(_) | Expr::Dict(_) | Expr::Number(_)
+                                ) {
                                     self.error(*line, format!("'{}' single argument must be an iterable (String, List)", name));
                                 }
                             }
