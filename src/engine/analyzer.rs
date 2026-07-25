@@ -264,78 +264,162 @@ impl Analyzer {
             Expr::Call(name, args, line) => {
                 if !self.is_defined(name) && !super::core::BUILTIN_FUNCS.contains(&name.as_str()) {
                     self.error(*line, format!("Undefined function '{}'", name));
-                } else if name == "isdown"
-                    || name == "isup"
-                    || name == "isdownfocus"
-                    || name == "isupfocus"
-                    || name == "keydown"
-                    || name == "keyup"
-                {
-                    if args.len() != 1 {
-                        self.error(*line, format!("'{}' expects exactly 1 argument", name));
-                    } else if matches!(args[0].1, Expr::String(_)) {
-                        self.error(*line, format!("'{}' expects a Key", name));
-                    }
-                } else if name == "sleep" || name == "sleepaccurate" {
-                    if args.len() != 1 {
-                        self.error(*line, format!("'{}' expects exactly 1 argument", name));
-                    }
-                } else if name == "mousex" || name == "mousey" || name == "mousedelta" {
-                    if args.len() != 0 {
-                        self.error(*line, format!("'{}' expects exactly 0 arguments", name));
-                    }
-                } else if name == "activekeys" {
-                    if args.len() != 1 {
-                        self.error(*line, format!("'{}' expects exactly 1 argument", name));
-                    }
-                } else if name == "getpixel" {
-                    if args.len() != 2 {
-                        self.error(*line, format!("'{}' expects exactly 2 arguments", name));
-                    }
-                } else if name == "compixel" {
-                    if args.len() < 2 || args.len() > 3 {
-                        self.error(*line, format!("'{}' expects 2 or 3 arguments", name));
-                    }
-                } else if name == "setmouse" {
-                    if args.len() < 2 || args.len() > 3 {
-                        self.error(*line, format!("'{}' expects 2 or 3 arguments", name));
-                    }
-                } else if name == "setcaret" {
-                    if args.len() != 2 {
-                        self.error(*line, format!("'{}' expects exactly 2 arguments", name));
-                    }
-                } else if name == "scroll" {
-                    if args.len() != 1 {
-                        self.error(*line, format!("'{}' expects exactly 1 argument", name));
-                    }
-                } else if name == "clear" {
-                    if args.len() > 1 {
-                        self.error(*line, format!("'{}' expects 0 or 1 argument", name));
-                    }
-                } else if name == "time" {
-                    if args.len() != 0 {
-                        self.error(*line, format!("'{}' expects exactly 0 arguments", name));
-                    }
-                } else if name == "macrodata" {
-                    if args.len() > 1 {
-                        self.error(*line, format!("'{}' expects 0 or 1 argument", name));
-                    }
-                } else if name == "keypress" {
-                    if args.len() < 1 || args.len() > 2 {
-                        self.error(*line, format!("'{}' expects 1 or 2 arguments", name));
-                    }
-                } else if name == "beep" {
-                    if args.len() > 2 {
-                        self.error(*line, format!("'{}' expects 0, 1, or 2 arguments", name));
-                    }
-                } else if name == "caretx"
-                    || name == "carety"
-                    || name == "screenx"
-                    || name == "screeny"
-                    || name == "focused"
-                {
-                    if args.len() != 0 {
-                        self.error(*line, format!("'{}' expects exactly 0 arguments", name));
+                } else if !self.is_defined(name) {
+                    match name.as_str() {
+                        "isdown" | "isup" | "isdownfocus" | "isupfocus" | "keydown" | "keyup" => {
+                            if args.len() != 1 {
+                                self.error(*line, format!("'{}' expects exactly 1 argument", name));
+                            } else if matches!(args[0].1, Expr::String(_) | Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                self.error(*line, format!("'{}' expects a Key", name));
+                            }
+                        }
+                        "sleep" | "sleepaccurate" | "scroll" => {
+                            if args.len() != 1 {
+                                self.error(*line, format!("'{}' expects exactly 1 argument", name));
+                            } else if matches!(args[0].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                self.error(*line, format!("'{}' expects a Number", name));
+                            }
+                        }
+                        "range" | "random" => {
+                            if args.len() < 1 || args.len() > 3 {
+                                self.error(*line, format!("'{}' expects 1 to 3 arguments", name));
+                            } else {
+                                for i in 0..args.len() {
+                                    if matches!(args[i].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                        self.error(*line, format!("'{}' expects Numbers", name));
+                                    }
+                                }
+                            }
+                        }
+                        "exec" | "write" => {
+                            if args.len() != 1 {
+                                self.error(*line, format!("'{}' expects exactly 1 argument", name));
+                            } else if matches!(args[0].1, Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_)) {
+                                self.error(*line, format!("'{}' expects a String", name));
+                            }
+                        }
+                        "input" => {
+                            if args.len() > 1 {
+                                self.error(*line, format!("'{}' expects 0 or 1 argument", name));
+                            } else if args.len() == 1 {
+                                if matches!(args[0].1, Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_)) {
+                                    self.error(*line, format!("'{}' expects a String", name));
+                                }
+                            }
+                        }
+                        "setmouse" => {
+                            if args.len() < 2 || args.len() > 3 {
+                                self.error(*line, format!("'{}' expects 2 or 3 arguments", name));
+                            } else {
+                                if matches!(args[0].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                    self.error(*line, format!("'{}' x must be a number", name));
+                                }
+                                if matches!(args[1].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                    self.error(*line, format!("'{}' y must be a number", name));
+                                }
+                                if args.len() == 3 && matches!(args[2].1, Expr::String(_) | Expr::Number(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                    self.error(*line, format!("'{}' relative flag must be a boolean", name));
+                                }
+                            }
+                        }
+                        "getpixel" | "setcaret" => {
+                            if args.len() != 2 {
+                                self.error(*line, format!("'{}' expects exactly 2 arguments", name));
+                            } else {
+                                if matches!(args[0].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                    self.error(*line, format!("'{}' x must be a number", name));
+                                }
+                                if matches!(args[1].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                    self.error(*line, format!("'{}' y must be a number", name));
+                                }
+                            }
+                        }
+                        "compixel" => {
+                            if args.len() < 2 || args.len() > 3 {
+                                self.error(*line, format!("'{}' expects 2 or 3 arguments", name));
+                            } else {
+                                for i in 0..2 {
+                                    if matches!(args[i].1, Expr::String(_) | Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                        self.error(*line, format!("'{}' expects a Color enum for argument {}", name, i + 1));
+                                    }
+                                }
+                                if args.len() == 3 {
+                                    if matches!(args[2].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                        self.error(*line, format!("'{}' expects a Number for the tolerance argument", name));
+                                    }
+                                }
+                            }
+                        }
+                        "activekeys" => {
+                            if args.len() != 1 {
+                                self.error(*line, format!("'{}' expects exactly 1 argument", name));
+                            } else if matches!(args[0].1, Expr::String(_) | Expr::Number(_) | Expr::Bool(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                self.error(*line, format!("'{}' expects a List", name));
+                            }
+                        }
+                        "clear" => {
+                            if args.len() > 1 {
+                                self.error(*line, format!("'{}' expects 0 or 1 argument", name));
+                            } else if args.len() == 1 {
+                                if matches!(args[0].1, Expr::String(_) | Expr::Number(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                    self.error(*line, format!("'{}' expects a Boolean", name));
+                                }
+                            }
+                        }
+                        "macrodata" => {
+                            if args.len() > 1 {
+                                self.error(*line, format!("'{}' expects 0 or 1 argument", name));
+                            } else if args.len() == 1 {
+                                if matches!(args[0].1, Expr::String(_) | Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::FormatString(_)) {
+                                    self.error(*line, format!("'{}' expects a Dictionary", name));
+                                }
+                            }
+                        }
+                        "keypress" => {
+                            if args.len() < 1 || args.len() > 2 {
+                                self.error(*line, format!("'{}' expects 1 or 2 arguments", name));
+                            } else {
+                                if matches!(args[0].1, Expr::String(_) | Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                    self.error(*line, format!("'{}' expects a Key for argument 1", name));
+                                }
+                                if args.len() == 2 && matches!(args[1].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                    self.error(*line, format!("'{}' expects a Number for argument 2", name));
+                                }
+                            }
+                        }
+                        "beep" => {
+                            if args.len() > 2 {
+                                self.error(*line, format!("'{}' expects 0, 1, or 2 arguments", name));
+                            } else {
+                                for i in 0..args.len() {
+                                    if matches!(args[i].1, Expr::String(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_) | Expr::FormatString(_)) {
+                                        self.error(*line, format!("'{}' expects Numbers", name));
+                                    }
+                                }
+                            }
+                        }
+                        "mousex" | "mousey" | "mousedelta" | "time" | "caretx" | "carety" | "screenx" | "screeny" | "focused" => {
+                            if args.len() != 0 {
+                                self.error(*line, format!("'{}' expects exactly 0 arguments", name));
+                            }
+                        }
+                        "len" => {
+                            if args.len() != 1 {
+                                self.error(*line, format!("'{}' expects exactly 1 argument", name));
+                            } else if matches!(args[0].1, Expr::Number(_) | Expr::Bool(_)) {
+                                self.error(*line, format!("'{}' expects a String, List, or Dictionary", name));
+                            }
+                        }
+                        "max" | "min" => {
+                            if args.is_empty() {
+                                self.error(*line, format!("'{}' expects at least 1 argument", name));
+                            } else if args.len() == 1 {
+                                if matches!(args[0].1, Expr::Bool(_) | Expr::Dict(_) | Expr::Number(_)) {
+                                    self.error(*line, format!("'{}' single argument must be an iterable (String, List)", name));
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
                 for (_, arg) in args {
