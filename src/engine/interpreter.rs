@@ -4215,57 +4215,46 @@ impl Interpreter {
                         return Ok(Value::Nil);
                     }
                     "compixel" => {
-                        if eval_args.len() < 3 || eval_args.len() > 4 {
+                        if eval_args.len() < 2 || eval_args.len() > 3 {
                             return Err(format!(
-                                "Line {}: 'compixel' expects 3 or 4 arguments",
+                                "Line {}: 'compixel' expects 2 or 3 arguments",
                                 line
                             ));
                         }
-                        let x = if let Value::Number(n) = eval_args[0].1 {
-                            n as i32
-                        } else {
-                            return Err(format!("Line {}: 'compixel' x must be a number", line));
-                        };
-                        let y = if let Value::Number(n) = eval_args[1].1 {
-                            n as i32
-                        } else {
-                            return Err(format!("Line {}: 'compixel' y must be a number", line));
-                        };
 
-                        let target_color = if let Value::EnumVariant(enum_name, variant, _) =
-                            &eval_args[2].1
-                        {
-                            if enum_name == "Color" {
-                                if let Ok(c) = crate::theme::themecore::parse_color(variant) {
-                                    if let Some(rgb) = c.to_rgb() {
-                                        rgb
+                        let get_color = |arg_val: &Value,
+                                         arg_pos: usize|
+                         -> Result<(u8, u8, u8), String> {
+                            if let Value::EnumVariant(enum_name, variant, _) = arg_val {
+                                if enum_name == "Color" {
+                                    if let Ok(c) = crate::theme::themecore::parse_color(variant) {
+                                        if let Some(rgb) = c.to_rgb() {
+                                            return Ok(rgb);
+                                        } else {
+                                            return Err(format!(
+                                                "Line {}: 'compixel' color cannot be None",
+                                                line
+                                            ));
+                                        }
                                     } else {
                                         return Err(format!(
-                                            "Line {}: 'compixel' color cannot be None",
-                                            line
+                                            "Line {}: Invalid color variant '{}'",
+                                            line, variant
                                         ));
                                     }
-                                } else {
-                                    return Err(format!(
-                                        "Line {}: Invalid color variant '{}'",
-                                        line, variant
-                                    ));
                                 }
-                            } else {
-                                return Err(format!(
-                                    "Line {}: 'compixel' expects a Color enum for the 3rd argument",
-                                    line
-                                ));
                             }
-                        } else {
-                            return Err(format!(
-                                "Line {}: 'compixel' expects a Color enum for the 3rd argument",
-                                line
-                            ));
+                            Err(format!(
+                                "Line {}: 'compixel' expects a Color enum for argument {}",
+                                line, arg_pos
+                            ))
                         };
 
-                        let offset = if eval_args.len() == 4 {
-                            if let Value::Number(n) = eval_args[3].1 {
+                        let color1 = get_color(&eval_args[0].1, 1)?;
+                        let color2 = get_color(&eval_args[1].1, 2)?;
+
+                        let offset = if eval_args.len() == 3 {
+                            if let Value::Number(n) = eval_args[2].1 {
                                 n.clamp(0.0, 255.0) as u8
                             } else {
                                 return Err(format!(
@@ -4277,18 +4266,11 @@ impl Interpreter {
                             0u8
                         };
 
-                        match get_screen_pixel(x, y) {
-                            Ok((r, g, b)) => {
-                                let (tr, tg, tb) = target_color;
+                        let match_r = color1.0.abs_diff(color2.0) <= offset;
+                        let match_g = color1.1.abs_diff(color2.1) <= offset;
+                        let match_b = color1.2.abs_diff(color2.2) <= offset;
 
-                                let match_r = r.abs_diff(tr) <= offset;
-                                let match_g = g.abs_diff(tg) <= offset;
-                                let match_b = b.abs_diff(tb) <= offset;
-
-                                return Ok(Value::Bool(match_r && match_g && match_b));
-                            }
-                            Err(e) => return Err(format!("Line {}: {}", line, e)),
-                        }
+                        return Ok(Value::Bool(match_r && match_g && match_b));
                     }
                     "keypress" => {
                         if eval_args.len() < 1 || eval_args.len() > 2 {

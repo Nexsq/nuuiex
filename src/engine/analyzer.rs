@@ -293,8 +293,8 @@ impl Analyzer {
                         self.error(*line, format!("'{}' expects exactly 2 arguments", name));
                     }
                 } else if name == "compixel" {
-                    if args.len() < 3 || args.len() > 4 {
-                        self.error(*line, format!("'{}' expects 3 or 4 arguments", name));
+                    if args.len() < 2 || args.len() > 3 {
+                        self.error(*line, format!("'{}' expects 2 or 3 arguments", name));
                     }
                 } else if name == "setmouse" {
                     if args.len() < 2 || args.len() > 3 {

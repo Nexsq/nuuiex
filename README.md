@@ -314,7 +314,7 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 | `screenx()` | None | Returns the absolute screen resolution width (X) of the primary monitor. |
 | `screeny()` | None | Returns the absolute screen resolution height (Y) of the primary monitor. |
 | `getpixel(x, y)` | `Number, Number` | Returns the RGB color of the screen pixel at `(x, y)` as a `Color:Variant`. |
-| `compixel(x, y, color, tol?)` | `Num, Num, Color, Num` | Compares the pixel at `(x, y)` against the provided `Color`. Optional `tol` (0-255) defines the acceptable RGB tolerance. Returns `Bool`. |
+| `compixel(c1, c2, tol?)` | `Color, Color, Num` | Compares `c1` and `c2`. Optional `tol` (0-255) defines the acceptable RGB tolerance. Returns `Bool`. |
 | `setcaret(x, y)` | `Number, Number` | Moves the internal terminal caret to a specific row and column in the output box. |
 | `caretx()` | None | Returns the current X (column) position of the terminal output caret. |
 | `carety()` | None | Returns the current Y (row) position of the terminal output caret. |
@@ -455,8 +455,10 @@ loop:
     let x = mousex()
     let y = mousey()
 
+    let current_color = getpixel((x - 2)::abs(), (y - 2)::abs())
+
     # Check screen at mouse position Allow a color variance/tolerance of 10.
-    if compixel((x - 2)::abs(), (y - 2)::abs(), target_color, 10):
+    if compixel(current_color, target_color, 10):
         println("Target spotted!")
 
     sleep(50)
