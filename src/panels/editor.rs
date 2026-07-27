@@ -651,6 +651,43 @@ impl Editor {
                         self.visual_mode = false;
                         self.state.selection_start = None;
                     }
+                    k if k == Key::Char(config.bind_edit_error_jump) => {
+                        if !self.error_lines.is_empty() {
+                            let current_line = self.state.cursor_y + 1;
+                            let mut next_line = None;
+                            let mut first_line = None;
+                            for &line in &self.error_lines {
+                                if first_line.map_or(true, |f| line < f) {
+                                    first_line = Some(line);
+                                }
+                                if line > current_line {
+                                    if next_line.map_or(true, |n| line < n) {
+                                        next_line = Some(line);
+                                    }
+                                }
+                            }
+                            if let Some(target_line) = next_line.or(first_line) {
+                                self.state.cursor_y = target_line.saturating_sub(1);
+                                self.state.cursor_x = 0;
+                                if !self.visual_mode {
+                                    self.state.selection_start = None;
+                                }
+
+                                let target = self.state.cursor_y;
+                                let mut to_remove = Vec::new();
+                                for &fold_start in &self.folded_lines {
+                                    if target > fold_start
+                                        && target <= self.get_block_end(fold_start)
+                                    {
+                                        to_remove.push(fold_start);
+                                    }
+                                }
+                                for r in to_remove {
+                                    self.folded_lines.remove(&r);
+                                }
+                            }
+                        }
+                    }
                     k if k == Key::Char(config.bind_edit_insert) => {
                         self.visual_mode = false;
                         self.state.selection_start = None;

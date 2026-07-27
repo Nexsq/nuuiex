@@ -891,6 +891,15 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 },
             },
             Setting {
+                name: "Error Jump",
+                key: "bind_edit_error_jump",
+                kind: SettingType::Custom {
+                    value: config.bind_edit_error_jump.to_string(),
+                    default: def.bind_edit_error_jump.to_string(),
+                    validation: CustomType::Char,
+                },
+            },
+            Setting {
                 name: "Undo",
                 key: "bind_edit_undo",
                 kind: SettingType::Custom {
@@ -1125,6 +1134,7 @@ pub fn settings_modal(
                 apply_setting!(config, set, char "bind_edit_copy", bind_edit_copy);
                 apply_setting!(config, set, char "bind_edit_paste", bind_edit_paste);
                 apply_setting!(config, set, char "bind_edit_search", bind_edit_search);
+                apply_setting!(config, set, char "bind_edit_error_jump", bind_edit_error_jump);
                 apply_setting!(config, set, char "bind_edit_undo", bind_edit_undo);
                 apply_setting!(config, set, char "bind_edit_redo", bind_edit_redo);
                 apply_setting!(config, set, char "bind_edit_save", bind_edit_save);
