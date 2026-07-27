@@ -15,6 +15,7 @@ impl Analyzer {
         root_scope.insert("Color".to_string());
         root_scope.insert("Background".to_string());
         root_scope.insert("Modifier".to_string());
+        root_scope.insert("Image".to_string());
         Self {
             errors: Vec::new(),
             error_lines: HashSet::new(),
@@ -235,6 +236,10 @@ impl Analyzer {
                         if crate::theme::themecore::parse_color(method).is_err() {
                             self.error(*line, format!("Invalid color variant '{}'", method));
                         }
+                    } else if name == "Image" {
+                        if !args.is_empty() {
+                            self.error(*line, "Image variant does not take arguments".to_string());
+                        }
                         if !args.is_empty() {
                             self.error(*line, format!("{} variant does not take arguments", name));
                         }
@@ -403,6 +408,51 @@ impl Analyzer {
                                         | Expr::FormatString(_)
                                 ) {
                                     self.error(*line, format!("'{}' y must be a number", name));
+                                }
+                            }
+                        }
+                        "imgbase" => {
+                            if args.len() != 1 {
+                                self.error(*line, format!("'{}' expects exactly 1 argument", name));
+                            } else if matches!(
+                                args[0].1,
+                                Expr::Number(_) | Expr::Bool(_) | Expr::List(_) | Expr::Dict(_)
+                            ) {
+                                self.error(*line, format!("'{}' expects a String", name));
+                            }
+                        }
+                        "imgsearch" => {
+                            if args.len() < 1 || args.len() > 2 {
+                                self.error(*line, format!("'{}' expects 1 or 2 arguments", name));
+                            } else {
+                                if matches!(
+                                    args[0].1,
+                                    Expr::String(_)
+                                        | Expr::Number(_)
+                                        | Expr::Bool(_)
+                                        | Expr::List(_)
+                                        | Expr::Dict(_)
+                                        | Expr::FormatString(_)
+                                ) {
+                                    self.error(
+                                        *line,
+                                        format!("'{}' expects an Image enum for argument 1", name),
+                                    );
+                                }
+                                if args.len() == 2
+                                    && matches!(
+                                        args[1].1,
+                                        Expr::String(_)
+                                            | Expr::Bool(_)
+                                            | Expr::List(_)
+                                            | Expr::Dict(_)
+                                            | Expr::FormatString(_)
+                                    )
+                                {
+                                    self.error(
+                                        *line,
+                                        format!("'{}' expects tolerance to be a Number", name),
+                                    );
                                 }
                             }
                         }

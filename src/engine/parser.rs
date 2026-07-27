@@ -751,6 +751,11 @@ impl Parser {
                     Some(Expr::String(final_str))
                 }
             }
+            TokenKind::ImageVariant(ref base64) => Some(Expr::StaticAccess(
+                Box::new(Expr::Ident("Image".to_string(), line)),
+                base64.clone(),
+                line,
+            )),
             TokenKind::Ident(name) => {
                 let func_name = name;
 

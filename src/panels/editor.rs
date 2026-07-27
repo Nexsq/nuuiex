@@ -2038,6 +2038,46 @@ impl Editor {
         let mut target_y = self.state.cursor_y;
         let mut target_x = self.state.cursor_x;
 
+        if !self.is_output && target_y < self.state.lines.len() {
+            let chars_vec: Vec<char> = self.state.lines[target_y].chars().collect();
+            let mut i_char = 0;
+            let mut visual_x = 0;
+            while i_char < chars_vec.len() {
+                if i_char == self.state.cursor_x {
+                    target_x = visual_x;
+                }
+                if i_char + 6 <= chars_vec.len()
+                    && chars_vec[i_char..i_char + 6].iter().collect::<String>() == "Image:"
+                {
+                    let start_img = i_char;
+                    let mut end_img = i_char + 6;
+                    while end_img < chars_vec.len()
+                        && (chars_vec[end_img].is_ascii_alphanumeric()
+                            || chars_vec[end_img] == '+'
+                            || chars_vec[end_img] == '/'
+                            || chars_vec[end_img] == '=')
+                    {
+                        end_img += 1;
+                    }
+                    let b64_len = end_img - (start_img + 6);
+                    if b64_len > 10 {
+                        let collapsed_len = 12;
+                        if self.state.cursor_x > start_img && self.state.cursor_x < end_img {
+                            target_x = visual_x + collapsed_len;
+                        }
+                        visual_x += collapsed_len;
+                        i_char = end_img;
+                        continue;
+                    }
+                }
+                visual_x += 1;
+                i_char += 1;
+            }
+            if i_char == self.state.cursor_x {
+                target_x = visual_x;
+            }
+        }
+
         if self.is_output && !config.show_caret && !self.is_waiting_for_input {
             if target_y > 0 && target_y == self.state.lines.len().saturating_sub(1) {
                 if self.state.lines[target_y].is_empty() {
@@ -2121,7 +2161,34 @@ impl Editor {
             self.state
                 .lines
                 .iter()
-                .map(|l| l.chars().count())
+                .map(|l| {
+                    let mut len = 0;
+                    let chars_vec: Vec<char> = l.chars().collect();
+                    let mut i_char = 0;
+                    while i_char < chars_vec.len() {
+                        if i_char + 6 <= chars_vec.len()
+                            && chars_vec[i_char..i_char + 6].iter().collect::<String>() == "Image:"
+                        {
+                            let mut end_img = i_char + 6;
+                            while end_img < chars_vec.len()
+                                && (chars_vec[end_img].is_ascii_alphanumeric()
+                                    || chars_vec[end_img] == '+'
+                                    || chars_vec[end_img] == '/'
+                                    || chars_vec[end_img] == '=')
+                            {
+                                end_img += 1;
+                            }
+                            if end_img - (i_char + 6) > 10 {
+                                len += 12;
+                                i_char = end_img;
+                                continue;
+                            }
+                        }
+                        len += 1;
+                        i_char += 1;
+                    }
+                    len
+                })
                 .max()
                 .unwrap_or(0)
         };
@@ -2229,7 +2296,49 @@ impl Editor {
             syntax_bg_colors.clear();
             let mut syntax_modifiers = Vec::with_capacity(128);
 
-            let mut line_str = self.state.lines[i].as_str();
+            let mut display_line = String::new();
+            let adjusted_cursor_x = target_x;
+
+            if !self.is_output {
+                let chars_vec: Vec<char> = self.state.lines[i].chars().collect();
+                let mut i_char = 0;
+                while i_char < chars_vec.len() {
+                    if i_char + 6 <= chars_vec.len()
+                        && chars_vec[i_char..i_char + 6].iter().collect::<String>() == "Image:"
+                    {
+                        let start_img = i_char;
+                        let mut end_img = i_char + 6;
+                        while end_img < chars_vec.len()
+                            && (chars_vec[end_img].is_ascii_alphanumeric()
+                                || chars_vec[end_img] == '+'
+                                || chars_vec[end_img] == '/'
+                                || chars_vec[end_img] == '=')
+                        {
+                            end_img += 1;
+                        }
+
+                        let b64_len = end_img - (start_img + 6);
+                        if b64_len > 10 {
+                            let collapsed = format!(
+                                "Image:{}..{}",
+                                chars_vec[start_img + 6..start_img + 8]
+                                    .iter()
+                                    .collect::<String>(),
+                                chars_vec[end_img - 2..end_img].iter().collect::<String>()
+                            );
+                            display_line.push_str(&collapsed);
+                            i_char = end_img;
+                            continue;
+                        }
+                    }
+                    display_line.push(chars_vec[i_char]);
+                    i_char += 1;
+                }
+            } else {
+                display_line = self.state.lines[i].clone();
+            }
+
+            let mut line_str = display_line.as_str();
             if self.folded_lines.contains(&i) {
                 if let Some(pos) = line_str.rfind(':') {
                     line_str = &line_str[..pos];
@@ -2560,6 +2669,40 @@ impl Editor {
                         let start = idx;
                         let mut is_number = c.is_ascii_digit();
 
+                        let mut is_enum_prefix = false;
+                        if start >= 1 {
+                            let mut k = start;
+                            while k > 0 && line_chars[k - 1].is_whitespace() {
+                                k -= 1;
+                            }
+                            if k > 0 && line_chars[k - 1] == ':' {
+                                k -= 1;
+                                while k > 0 && line_chars[k - 1].is_whitespace() {
+                                    k -= 1;
+                                }
+                                let end_prev = k;
+                                while k > 0
+                                    && (line_chars[k - 1].is_ascii_alphanumeric()
+                                        || line_chars[k - 1] == '_')
+                                {
+                                    k -= 1;
+                                }
+                                let prev_word: String = line_chars[k..end_prev].iter().collect();
+                                if prev_word == "Key"
+                                    || prev_word == "Modifier"
+                                    || prev_word == "Color"
+                                    || prev_word == "Background"
+                                    || prev_word == "Image"
+                                {
+                                    is_enum_prefix = true;
+                                }
+                            }
+                        }
+
+                        if is_number && is_enum_prefix {
+                            is_number = false;
+                        }
+
                         if is_number {
                             let mut temp_idx = idx;
                             while temp_idx < line_chars.len()
@@ -2598,7 +2741,12 @@ impl Editor {
                         } else {
                             while idx < line_chars.len()
                                 && (line_chars[idx].is_ascii_alphanumeric()
-                                    || line_chars[idx] == '_')
+                                    || line_chars[idx] == '_'
+                                    || (is_enum_prefix
+                                        && (line_chars[idx] == '+'
+                                            || line_chars[idx] == '/'
+                                            || line_chars[idx] == '='
+                                            || line_chars[idx] == '.')))
                             {
                                 idx += 1;
                             }
@@ -2750,35 +2898,10 @@ impl Editor {
                             let is_enum_base = word_str == "Color"
                                 || word_str == "Key"
                                 || word_str == "Modifier"
-                                || word_str == "Background";
+                                || word_str == "Background"
+                                || word_str == "Image";
 
-                            let is_enum_variant = start >= 1 && {
-                                let mut k = start;
-                                while k > 0 && line_chars[k - 1].is_whitespace() {
-                                    k -= 1;
-                                }
-                                if k > 0 && line_chars[k - 1] == ':' {
-                                    k -= 1;
-                                    while k > 0 && line_chars[k - 1].is_whitespace() {
-                                        k -= 1;
-                                    }
-                                    let end_prev = k;
-                                    while k > 0
-                                        && (line_chars[k - 1].is_ascii_alphanumeric()
-                                            || line_chars[k - 1] == '_')
-                                    {
-                                        k -= 1;
-                                    }
-                                    let prev_word: String =
-                                        line_chars[k..end_prev].iter().collect();
-                                    prev_word == "Key"
-                                        || prev_word == "Modifier"
-                                        || prev_word == "Color"
-                                        || prev_word == "Background"
-                                } else {
-                                    false
-                                }
-                            };
+                            let is_enum_variant = is_enum_prefix;
 
                             let mut j = idx;
                             while j < line_chars.len() && line_chars[j].is_whitespace() {
@@ -2832,6 +2955,60 @@ impl Editor {
                 }
             }
 
+            let visual_selection = if let Some((start, end)) = selection {
+                let map_to_visual = |y: usize, x: usize| -> usize {
+                    let chars_vec: Vec<char> = self.state.lines[y].chars().collect();
+                    let mut i_char = 0;
+                    let mut vis_x = 0;
+                    while i_char < chars_vec.len() {
+                        if i_char == x {
+                            return vis_x;
+                        }
+                        if i_char + 6 <= chars_vec.len()
+                            && chars_vec[i_char..i_char + 6].iter().collect::<String>() == "Image:"
+                        {
+                            let mut end_img = i_char + 6;
+                            while end_img < chars_vec.len()
+                                && (chars_vec[end_img].is_ascii_alphanumeric()
+                                    || chars_vec[end_img] == '+'
+                                    || chars_vec[end_img] == '/'
+                                    || chars_vec[end_img] == '=')
+                            {
+                                end_img += 1;
+                            }
+                            if end_img - (i_char + 6) > 10 {
+                                if x > i_char && x < end_img {
+                                    return vis_x + 12;
+                                }
+                                vis_x += 12;
+                                i_char = end_img;
+                                continue;
+                            }
+                        }
+                        vis_x += 1;
+                        i_char += 1;
+                    }
+                    if i_char == x {
+                        return vis_x;
+                    }
+                    vis_x
+                };
+
+                let vis_start = if start.1 == i {
+                    map_to_visual(i, start.0)
+                } else {
+                    start.0
+                };
+                let vis_end = if end.1 == i {
+                    map_to_visual(i, end.0)
+                } else {
+                    end.0
+                };
+                Some(((vis_start, start.1), (vis_end, end.1)))
+            } else {
+                None
+            };
+
             for (j, &c) in line_chars
                 .iter()
                 .enumerate()
@@ -2840,7 +3017,7 @@ impl Editor {
             {
                 let display_x = (j - self.scroll_x + prefix_width) as i16;
 
-                let is_selected = if let Some((start, end)) = selection {
+                let is_selected = if let Some((start, end)) = visual_selection {
                     let is_after_start = i > start.1 || (i == start.1 && j >= start.0);
                     let is_before_end = i < end.1 || (i == end.1 && j < end.0);
                     is_after_start && is_before_end
@@ -2889,12 +3066,12 @@ impl Editor {
 
                 if self.mode != Mode::Search
                     && self.mode != Mode::LineSearch
-                    && ((self.is_editing && i == self.state.cursor_y && j == self.state.cursor_x)
+                    && ((self.is_editing && i == self.state.cursor_y && j == adjusted_cursor_x)
                         || (self.is_output
                             && config.show_caret
                             && !self.is_waiting_for_input
                             && i == self.state.cursor_y
-                            && j == self.state.cursor_x))
+                            && j == adjusted_cursor_x))
                 {
                     style.bg = Color::White;
                     style.fg = Color::Black;
@@ -2921,9 +3098,9 @@ impl Editor {
                 && i == self.state.cursor_y
             {
                 let line_len = line_chars.len();
-                if self.state.cursor_x >= line_len {
-                    if self.state.cursor_x >= self.scroll_x {
-                        let display_x = self.state.cursor_x - self.scroll_x + prefix_width;
+                if adjusted_cursor_x >= line_len {
+                    if adjusted_cursor_x >= self.scroll_x {
+                        let display_x = adjusted_cursor_x - self.scroll_x + prefix_width;
                         if display_x < inner_w {
                             b.put_cell(
                                 crate::Cell {

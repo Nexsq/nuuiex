@@ -1984,6 +1984,495 @@ fn get_screen_pixel(_x: i32, _y: i32) -> Result<(u8, u8, u8), String> {
     Err("getpixel is not supported on this OS".to_string())
 }
 
+const BASE64_ALPHABET: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+fn encode_base64(data: &[u8]) -> String {
+    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut i = 0;
+    while i < data.len() {
+        let b1 = data[i];
+        let b2 = if i + 1 < data.len() { data[i + 1] } else { 0 };
+        let b3 = if i + 2 < data.len() { data[i + 2] } else { 0 };
+
+        let idx1 = b1 >> 2;
+        let idx2 = ((b1 & 0b00000011) << 4) | (b2 >> 4);
+        let idx3 = ((b2 & 0b00001111) << 2) | (b3 >> 6);
+        let idx4 = b3 & 0b00111111;
+
+        result.push(BASE64_ALPHABET[idx1 as usize] as char);
+        result.push(BASE64_ALPHABET[idx2 as usize] as char);
+
+        if i + 1 < data.len() {
+            result.push(BASE64_ALPHABET[idx3 as usize] as char);
+        } else {
+            result.push('=');
+        }
+
+        if i + 2 < data.len() {
+            result.push(BASE64_ALPHABET[idx4 as usize] as char);
+        } else {
+            result.push('=');
+        }
+        i += 3;
+    }
+    result
+}
+
+fn decode_base64(encoded: &str) -> Result<Vec<u8>, String> {
+    let mut result = Vec::new();
+    let mut buffer = 0u32;
+    let mut bits_in_buffer = 0;
+
+    for c in encoded.chars() {
+        if c == '=' {
+            break;
+        }
+        if c.is_whitespace() {
+            continue;
+        }
+        let val = match c {
+            'A'..='Z' => c as u32 - 'A' as u32,
+            'a'..='z' => c as u32 - 'a' as u32 + 26,
+            '0'..='9' => c as u32 - '0' as u32 + 52,
+            '+' => 62,
+            '/' => 63,
+            _ => return Err(format!("Invalid base64 character: {}", c)),
+        };
+        buffer = (buffer << 6) | val;
+        bits_in_buffer += 6;
+        if bits_in_buffer >= 8 {
+            bits_in_buffer -= 8;
+            result.push((buffer >> bits_in_buffer) as u8);
+        }
+    }
+    Ok(result)
+}
+
+#[cfg(windows)]
+fn search_screen_image(
+    img_rgba: &[u8],
+    img_w: i32,
+    img_h: i32,
+    tol: u8,
+) -> Result<Option<(i32, i32)>, String> {
+    let (sw, sh) = get_screen_size()?;
+    if sw < img_w || sh < img_h {
+        return Ok(None);
+    }
+
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn GetDC(hWnd: isize) -> isize;
+        fn ReleaseDC(hWnd: isize, hDC: isize) -> i32;
+    }
+    #[link(name = "gdi32")]
+    unsafe extern "system" {
+        fn CreateCompatibleDC(hdc: isize) -> isize;
+        fn CreateCompatibleBitmap(hdc: isize, cx: i32, cy: i32) -> isize;
+        fn SelectObject(hdc: isize, h: isize) -> isize;
+        fn DeleteObject(ho: isize) -> i32;
+        fn DeleteDC(hdc: isize) -> i32;
+        fn BitBlt(
+            hdc: isize,
+            x: i32,
+            y: i32,
+            cx: i32,
+            cy: i32,
+            hdcSrc: isize,
+            x1: i32,
+            y1: i32,
+            rop: u32,
+        ) -> i32;
+        fn GetDIBits(
+            hdc: isize,
+            hbm: isize,
+            start: u32,
+            cLines: u32,
+            lpvBits: *mut u32,
+            lpbmi: *mut BITMAPINFO,
+            colorUse: u32,
+        ) -> i32;
+    }
+
+    #[allow(non_snake_case)]
+    #[repr(C)]
+    struct BITMAPINFOHEADER {
+        biSize: u32,
+        biWidth: i32,
+        biHeight: i32,
+        biPlanes: u16,
+        biBitCount: u16,
+        biCompression: u32,
+        biSizeImage: u32,
+        biXPelsPerMeter: i32,
+        biYPelsPerMeter: i32,
+        biClrUsed: u32,
+        biClrImportant: u32,
+    }
+
+    #[allow(non_snake_case)]
+    #[repr(C)]
+    struct BITMAPINFO {
+        bmiHeader: BITMAPINFOHEADER,
+        bmiColors: [u32; 1],
+    }
+
+    unsafe {
+        let hdc_screen = GetDC(0);
+        if hdc_screen == 0 {
+            return Err("Failed to get screen DC".into());
+        }
+        let hdc_mem = CreateCompatibleDC(hdc_screen);
+        let hbm = CreateCompatibleBitmap(hdc_screen, sw, sh);
+
+        if hdc_mem == 0 || hbm == 0 {
+            if hbm != 0 {
+                DeleteObject(hbm);
+            }
+            if hdc_mem != 0 {
+                DeleteDC(hdc_mem);
+            }
+            ReleaseDC(0, hdc_screen);
+            return Err("Failed to create GDI objects".into());
+        }
+
+        let old_obj = SelectObject(hdc_mem, hbm);
+        BitBlt(hdc_mem, 0, 0, sw, sh, hdc_screen, 0, 0, 0x00CC0020);
+
+        let mut bmi: BITMAPINFO = std::mem::zeroed();
+        bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+        bmi.bmiHeader.biWidth = sw;
+        bmi.bmiHeader.biHeight = -sh;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = 0;
+
+        let mut pixels = vec![0u32; (sw * sh) as usize];
+        let res = GetDIBits(hdc_mem, hbm, 0, sh as u32, pixels.as_mut_ptr(), &mut bmi, 0);
+
+        SelectObject(hdc_mem, old_obj);
+        DeleteObject(hbm);
+        DeleteDC(hdc_mem);
+        ReleaseDC(0, hdc_screen);
+
+        if res == 0 {
+            return Err("Failed to get DIBits".into());
+        }
+
+        let mut ax = 0;
+        let mut ay = 0;
+        let mut found = false;
+        for r in 0..img_h {
+            for c in 0..img_w {
+                let idx = ((r * img_w + c) * 4) as usize;
+                if img_rgba[idx + 3] > 128 {
+                    ax = c;
+                    ay = r;
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                break;
+            }
+        }
+
+        let a_idx = ((ay * img_w + ax) * 4) as usize;
+        let ar = img_rgba[a_idx];
+        let ag = img_rgba[a_idx + 1];
+        let ab = img_rgba[a_idx + 2];
+
+        for row in 0..=(sh - img_h) {
+            for col in 0..=(sw - img_w) {
+                let s_idx = ((row + ay) * sw + (col + ax)) as usize;
+                let p = pixels[s_idx];
+                let sb = (p & 0xFF) as u8;
+                let sg = ((p >> 8) & 0xFF) as u8;
+                let sr = ((p >> 16) & 0xFF) as u8;
+
+                if sr.abs_diff(ar) > tol || sg.abs_diff(ag) > tol || sb.abs_diff(ab) > tol {
+                    continue;
+                }
+
+                let mut matches = true;
+                for i_row in 0..img_h {
+                    for i_col in 0..img_w {
+                        let s_idx = ((row + i_row) * sw + (col + i_col)) as usize;
+                        let p = pixels[s_idx];
+                        let sb = (p & 0xFF) as u8;
+                        let sg = ((p >> 8) & 0xFF) as u8;
+                        let sr = ((p >> 16) & 0xFF) as u8;
+
+                        let i_idx = ((i_row * img_w + i_col) * 4) as usize;
+                        let ir = img_rgba[i_idx];
+                        let ig = img_rgba[i_idx + 1];
+                        let ib = img_rgba[i_idx + 2];
+                        let ia = img_rgba[i_idx + 3];
+
+                        if ia > 128 {
+                            if sr.abs_diff(ir) > tol
+                                || sg.abs_diff(ig) > tol
+                                || sb.abs_diff(ib) > tol
+                            {
+                                matches = false;
+                                break;
+                            }
+                        }
+                    }
+                    if !matches {
+                        break;
+                    }
+                }
+                if matches {
+                    return Ok(Some((col, row)));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
+#[cfg(target_os = "linux")]
+fn search_screen_image(
+    img_rgba: &[u8],
+    img_w: i32,
+    img_h: i32,
+    tol: u8,
+) -> Result<Option<(i32, i32)>, String> {
+    let (sw, sh) = get_screen_size()?;
+    if sw < img_w || sh < img_h {
+        return Ok(None);
+    }
+
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        return Err("imgsearch is not supported on Wayland".to_string());
+    }
+    unsafe {
+        if libc::geteuid() == 0 {
+            return Err("Cannot use imgsearch as root due to XAUTHORITY restrictions.".to_string());
+        }
+    }
+
+    thread_local! {
+        static X11_IMG_CTX: std::cell::RefCell<Option<Result<X11PixelContext, String>>> = std::cell::RefCell::new(None);
+    }
+
+    X11_IMG_CTX.with(|ctx_cell| {
+        let mut ctx_opt = ctx_cell.borrow_mut();
+        if ctx_opt.is_none() {
+            unsafe {
+                use libc::{RTLD_LAZY, dlclose, dlopen, dlsym};
+                let lib = dlopen(b"libX11.so.6\0".as_ptr() as *const i8, RTLD_LAZY);
+                if lib.is_null() {
+                    let err = "Failed to load libX11.so.6".to_string();
+                    *ctx_opt = Some(Err(err.clone()));
+                    return Err(err);
+                }
+                let xopen = dlsym(lib, b"XOpenDisplay\0".as_ptr() as *const i8);
+                let xgetimage = dlsym(lib, b"XGetImage\0".as_ptr() as *const i8);
+                let xroot = dlsym(lib, b"XDefaultRootWindow\0".as_ptr() as *const i8);
+                let xgetattr = dlsym(lib, b"XGetWindowAttributes\0".as_ptr() as *const i8);
+
+                if xopen.is_null() || xgetimage.is_null() || xroot.is_null() || xgetattr.is_null() {
+                    dlclose(lib);
+                    let err = "Failed to load X11 symbols".to_string();
+                    *ctx_opt = Some(Err(err.clone()));
+                    return Err(err);
+                }
+
+                let xopendisplay: extern "C" fn(*const i8) -> *mut libc::c_void =
+                    std::mem::transmute(xopen);
+                let xdefaultrootwindow: extern "C" fn(*mut libc::c_void) -> libc::c_ulong =
+                    std::mem::transmute(xroot);
+                let display = xopendisplay(std::ptr::null());
+                if display.is_null() {
+                    dlclose(lib);
+                    let err = "Failed to open X display".to_string();
+                    *ctx_opt = Some(Err(err.clone()));
+                    return Err(err);
+                }
+
+                let root = xdefaultrootwindow(display);
+                let xgetimage_fn: extern "C" fn(
+                    *mut libc::c_void,
+                    libc::c_ulong,
+                    i32,
+                    i32,
+                    u32,
+                    u32,
+                    libc::c_ulong,
+                    i32,
+                ) -> *mut XImage = std::mem::transmute(xgetimage);
+                let xgetwindowattributes_fn: extern "C" fn(
+                    *mut libc::c_void,
+                    libc::c_ulong,
+                    *mut XWindowAttributes,
+                ) -> i32 = std::mem::transmute(xgetattr);
+
+                *ctx_opt = Some(Ok(X11PixelContext {
+                    lib,
+                    display,
+                    root,
+                    xgetimage: xgetimage_fn,
+                    xgetwindowattributes: xgetwindowattributes_fn,
+                }));
+            }
+        }
+
+        match ctx_opt.as_ref().unwrap() {
+            Ok(x11) => unsafe {
+                let mut attr: XWindowAttributes = std::mem::zeroed();
+                if (x11.xgetwindowattributes)(x11.display, x11.root, &mut attr) == 0 {
+                    return Err("Failed to get root window attributes".into());
+                }
+
+                let safe_w = attr.width;
+                let safe_h = attr.height;
+                if safe_w < img_w || safe_h < img_h {
+                    return Ok(None);
+                }
+
+                let image = (x11.xgetimage)(
+                    x11.display,
+                    x11.root,
+                    0,
+                    0,
+                    safe_w as u32,
+                    safe_h as u32,
+                    !0,
+                    2,
+                );
+                if image.is_null() {
+                    return Err("Failed to get image from X11".into());
+                }
+
+                let rm = (*image).red_mask;
+                let gm = (*image).green_mask;
+                let bm = (*image).blue_mask;
+
+                let r_shift = rm.trailing_zeros();
+                let r_max = rm >> r_shift;
+                let g_shift = gm.trailing_zeros();
+                let g_max = gm >> g_shift;
+                let b_shift = bm.trailing_zeros();
+                let b_max = bm >> b_shift;
+
+                let mut ax = 0;
+                let mut ay = 0;
+                let mut found = false;
+                for r in 0..img_h {
+                    for c in 0..img_w {
+                        let idx = ((r * img_w + c) * 4) as usize;
+                        if img_rgba[idx + 3] > 128 {
+                            ax = c;
+                            ay = r;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if found {
+                        break;
+                    }
+                }
+
+                let a_idx = ((ay * img_w + ax) * 4) as usize;
+                let ar = img_rgba[a_idx];
+                let ag = img_rgba[a_idx + 1];
+                let ab = img_rgba[a_idx + 2];
+
+                for row in 0..=(safe_h - img_h) {
+                    for col in 0..=(safe_w - img_w) {
+                        let a_s_col = col + ax;
+                        let a_s_row = row + ay;
+                        let p = ((*image).f.get_pixel)(image, a_s_col, a_s_row);
+
+                        let sr = if r_max > 0 {
+                            (((p & rm) >> r_shift) * 255 / r_max) as u8
+                        } else {
+                            0
+                        };
+                        let sg = if g_max > 0 {
+                            (((p & gm) >> g_shift) * 255 / g_max) as u8
+                        } else {
+                            0
+                        };
+                        let sb = if b_max > 0 {
+                            (((p & bm) >> b_shift) * 255 / b_max) as u8
+                        } else {
+                            0
+                        };
+
+                        if sr.abs_diff(ar) > tol || sg.abs_diff(ag) > tol || sb.abs_diff(ab) > tol {
+                            continue;
+                        }
+
+                        let mut matches = true;
+                        for i_row in 0..img_h {
+                            for i_col in 0..img_w {
+                                let s_col = col + i_col;
+                                let s_row = row + i_row;
+                                let pixel = ((*image).f.get_pixel)(image, s_col, s_row);
+
+                                let sr = if r_max > 0 {
+                                    (((pixel & rm) >> r_shift) * 255 / r_max) as u8
+                                } else {
+                                    0
+                                };
+                                let sg = if g_max > 0 {
+                                    (((pixel & gm) >> g_shift) * 255 / g_max) as u8
+                                } else {
+                                    0
+                                };
+                                let sb = if b_max > 0 {
+                                    (((pixel & bm) >> b_shift) * 255 / b_max) as u8
+                                } else {
+                                    0
+                                };
+
+                                let i_idx = ((i_row * img_w + i_col) * 4) as usize;
+                                let ir = img_rgba[i_idx];
+                                let ig = img_rgba[i_idx + 1];
+                                let ib = img_rgba[i_idx + 2];
+                                let ia = img_rgba[i_idx + 3];
+
+                                if ia > 128 {
+                                    if sr.abs_diff(ir) > tol
+                                        || sg.abs_diff(ig) > tol
+                                        || sb.abs_diff(ib) > tol
+                                    {
+                                        matches = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            if !matches {
+                                break;
+                            }
+                        }
+                        if matches {
+                            ((*image).f.destroy_image)(image);
+                            return Ok(Some((col, row)));
+                        }
+                    }
+                }
+                ((*image).f.destroy_image)(image);
+                Ok(None)
+            },
+            Err(e) => Err(e.clone()),
+        }
+    })
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn search_screen_image(
+    img_rgba: &[u8],
+    img_w: i32,
+    img_h: i32,
+    tol: u8,
+) -> Result<Option<(i32, i32)>, String> {
+    Err("imgsearch is not supported on this OS".to_string())
+}
+
 #[cfg(windows)]
 fn search_screen_pixels(
     x: i32,
@@ -2078,15 +2567,15 @@ fn search_screen_pixels(
         }
 
         let old_obj = SelectObject(hdc_mem, hbm);
-        BitBlt(hdc_mem, 0, 0, w, h, hdc_screen, x, y, 0x00CC0020); // SRCCOPY
+        BitBlt(hdc_mem, 0, 0, w, h, hdc_screen, x, y, 0x00CC0020);
 
         let mut bmi: BITMAPINFO = std::mem::zeroed();
         bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
         bmi.bmiHeader.biWidth = w;
-        bmi.bmiHeader.biHeight = -h; // Top-down approach
+        bmi.bmiHeader.biHeight = -h;
         bmi.bmiHeader.biPlanes = 1;
         bmi.bmiHeader.biBitCount = 32;
-        bmi.bmiHeader.biCompression = 0; // BI_RGB
+        bmi.bmiHeader.biCompression = 0;
 
         let mut pixels = vec![0u32; (w * h) as usize];
         let res = GetDIBits(hdc_mem, hbm, 0, h as u32, pixels.as_mut_ptr(), &mut bmi, 0);
@@ -2149,7 +2638,6 @@ fn search_screen_pixels(
     }
 
     X11_SEARCH_CTX.with(|ctx_cell| {
-        // Reuse the exact same lazy init from get_screen_pixel
         let mut ctx_opt = ctx_cell.borrow_mut();
         if ctx_opt.is_none() {
             unsafe {
@@ -2219,7 +2707,6 @@ fn search_screen_pixels(
                     return Err("Failed to get root window attributes".into());
                 }
 
-                // Protect against X11 BadMatch by clamping coordinates to screen bounds
                 let screen_w = attr.width;
                 let screen_h = attr.height;
 
@@ -2621,6 +3108,12 @@ impl Environment {
         env.define(
             "Modifier".to_string(),
             Value::BuiltinEnum("Modifier".to_string()),
+            true,
+        )
+        .unwrap();
+        env.define(
+            "Image".to_string(),
+            Value::BuiltinEnum("Image".to_string()),
             true,
         )
         .unwrap();
@@ -3422,9 +3915,14 @@ impl Interpreter {
                 )),
             }
         } else if let Value::EnumVariant(enum_name, variant, _) = val {
-            if (enum_name == "Color" || enum_name == "Background") && method == "tostring" {
+            if (enum_name == "Color" || enum_name == "Background" || enum_name == "Image")
+                && method == "tostring"
+            {
                 if args.len() != 0 {
                     return Err(format!("Line {}: 'tostring' expects 0 arguments", line));
+                }
+                if enum_name == "Image" {
+                    return Ok((Value::String(variant.clone()), false));
                 }
                 let mut s = variant.clone();
                 if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -3787,6 +4285,7 @@ impl Interpreter {
                                 line, prop
                             ));
                         }
+                    } else if enum_name == "Image" {
                     }
                     Ok(Value::EnumVariant(enum_name, prop.clone(), None))
                 } else {
@@ -3882,6 +4381,14 @@ impl Interpreter {
                         if !eval_args.is_empty() {
                             return Err(format!(
                                 "Line {}: Modifier variant does not take arguments",
+                                line
+                            ));
+                        }
+                        return Ok(Value::EnumVariant(enum_name.clone(), method.clone(), None));
+                    } else if enum_name == "Image" {
+                        if !eval_args.is_empty() {
+                            return Err(format!(
+                                "Line {}: Image variant does not take arguments",
                                 line
                             ));
                         }
@@ -4616,6 +5123,80 @@ impl Interpreter {
                             }
                         }
                         return Ok(Value::Nil);
+                    }
+                    "imgbase" => {
+                        if eval_args.len() != 1 {
+                            return Err(format!(
+                                "Line {}: 'imgbase' expects exactly 1 argument",
+                                line
+                            ));
+                        }
+                        if let Value::String(path) = &eval_args[0].1 {
+                            let data = std::fs::read(path).map_err(|e| {
+                                format!("Line {}: Failed to read image: {}", line, e)
+                            })?;
+                            let b64 = encode_base64(&data);
+                            return Ok(Value::EnumVariant("Image".to_string(), b64, None));
+                        } else {
+                            return Err(format!("Line {}: 'imgbase' expects a string path", line));
+                        }
+                    }
+                    "imgsearch" => {
+                        if eval_args.len() < 1 || eval_args.len() > 2 {
+                            return Err(format!(
+                                "Line {}: 'imgsearch' expects 1 or 2 arguments",
+                                line
+                            ));
+                        }
+                        let b64 = if let Value::EnumVariant(enum_name, variant, _) = &eval_args[0].1
+                        {
+                            if enum_name == "Image" {
+                                variant.clone()
+                            } else {
+                                return Err(format!(
+                                    "Line {}: 'imgsearch' expects an Image enum",
+                                    line
+                                ));
+                            }
+                        } else {
+                            return Err(format!(
+                                "Line {}: 'imgsearch' expects an Image enum",
+                                line
+                            ));
+                        };
+
+                        let tol = if eval_args.len() == 2 {
+                            if let Value::Number(n) = eval_args[1].1 {
+                                n.clamp(0.0, 255.0) as u8
+                            } else {
+                                return Err(format!(
+                                    "Line {}: 'imgsearch' tolerance must be a number",
+                                    line
+                                ));
+                            }
+                        } else {
+                            0u8
+                        };
+
+                        let decoded =
+                            decode_base64(&b64).map_err(|e| format!("Line {}: {}", line, e))?;
+                        let img = image::load_from_memory(&decoded)
+                            .map_err(|e| format!("Line {}: Failed to load image: {}", line, e))?;
+                        let rgba = img.to_rgba8();
+                        let img_w = rgba.width() as i32;
+                        let img_h = rgba.height() as i32;
+                        let img_data = rgba.into_raw();
+
+                        match search_screen_image(&img_data, img_w, img_h, tol) {
+                            Ok(Some((x, y))) => {
+                                return Ok(Value::List(vec![
+                                    Value::Number(x as f64),
+                                    Value::Number(y as f64),
+                                ]));
+                            }
+                            Ok(std::option::Option::None) => return Ok(Value::Nil),
+                            Err(e) => return Err(format!("Line {}: {}", line, e)),
+                        }
                     }
                     "pixelsearch" => {
                         if eval_args.len() < 5 || eval_args.len() > 6 {

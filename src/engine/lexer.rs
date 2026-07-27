@@ -54,6 +54,7 @@ pub enum TokenKind {
     Newline,
     EOF,
     Error(String),
+    ImageVariant(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -628,6 +629,26 @@ impl<'a> Lexer<'a> {
 
         let end = self.current_byte_pos();
         let text = &self.source[start..end];
+
+        if text == "Image" && self.peek() == ':' {
+            self.advance();
+            if self.peek() == ':' {
+                self.advance();
+            }
+            let mut base64 = String::new();
+            while self.peek().is_alphanumeric()
+                || self.peek() == '+'
+                || self.peek() == '/'
+                || self.peek() == '='
+            {
+                base64.push(self.advance());
+            }
+            return Token {
+                kind: TokenKind::ImageVariant(base64),
+                line: self.line,
+            };
+        }
+
         let kind = match text {
             "let" => TokenKind::Let,
             "const" => TokenKind::Const,

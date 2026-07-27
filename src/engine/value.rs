@@ -158,6 +158,8 @@ impl fmt::Display for Value {
                     write!(f, "{{Background:{}}}", v)
                 } else if e == "Modifier" {
                     write!(f, "{{Modifier:{}}}", v)
+                } else if e == "Image" {
+                    write!(f, "{}", v)
                 } else if let Some(i) = inner {
                     write!(f, "{}::{}({})", e, v, i)
                 } else {
