@@ -2159,67 +2159,76 @@ fn search_screen_image(
             return Err("Failed to get DIBits".into());
         }
 
-        let mut ax = 0;
-        let mut ay = 0;
-        let mut found = false;
+        let mut t_pixels = Vec::with_capacity((img_w * img_h) as usize);
         for r in 0..img_h {
             for c in 0..img_w {
-                let idx = ((r * img_w + c) * 4) as usize;
-                if img_rgba[idx + 3] > 128 {
-                    ax = c;
-                    ay = r;
-                    found = true;
-                    break;
+                let i_idx = ((r * img_w + c) * 4) as usize;
+                let ia = img_rgba[i_idx + 3];
+                if ia > 128 {
+                    t_pixels.push((
+                        c,
+                        r,
+                        img_rgba[i_idx],
+                        img_rgba[i_idx + 1],
+                        img_rgba[i_idx + 2],
+                    ));
                 }
-            }
-            if found {
-                break;
             }
         }
 
-        let a_idx = ((ay * img_w + ax) * 4) as usize;
-        let ar = img_rgba[a_idx];
-        let ag = img_rgba[a_idx + 1];
-        let ab = img_rgba[a_idx + 2];
+        if t_pixels.is_empty() {
+            return Ok(None);
+        }
+
+        let mut ordered_t_pixels = Vec::with_capacity(t_pixels.len());
+        if t_pixels.len() > 20 {
+            let step = t_pixels.len() / 20;
+            for i in 0..20 {
+                ordered_t_pixels.push(t_pixels[i * step]);
+            }
+            for i in 0..t_pixels.len() {
+                if i % step != 0 || i >= 20 * step {
+                    ordered_t_pixels.push(t_pixels[i]);
+                }
+            }
+        } else {
+            ordered_t_pixels = t_pixels;
+        }
+
+        let mut ordered_t_offsets = Vec::with_capacity(ordered_t_pixels.len());
+        for tp in &ordered_t_pixels {
+            ordered_t_offsets.push((tp.1 * sw + tp.0, tp.2, tp.3, tp.4));
+        }
+
+        let tp0 = ordered_t_offsets[0];
 
         for row in 0..=(sh - img_h) {
+            let row_offset = row * sw;
             for col in 0..=(sw - img_w) {
-                let s_idx = ((row + ay) * sw + (col + ax)) as usize;
-                let p = pixels[s_idx];
-                let sb = (p & 0xFF) as u8;
-                let sg = ((p >> 8) & 0xFF) as u8;
-                let sr = ((p >> 16) & 0xFF) as u8;
+                let s_idx0 = (row_offset + col + tp0.0) as usize;
+                let p0 = pixels[s_idx0];
+                let sb0 = (p0 & 0xFF) as u8;
+                let sg0 = ((p0 >> 8) & 0xFF) as u8;
+                let sr0 = ((p0 >> 16) & 0xFF) as u8;
 
-                if sr.abs_diff(ar) > tol || sg.abs_diff(ag) > tol || sb.abs_diff(ab) > tol {
+                if sr0.abs_diff(tp0.1) > tol
+                    || sg0.abs_diff(tp0.2) > tol
+                    || sb0.abs_diff(tp0.3) > tol
+                {
                     continue;
                 }
 
                 let mut matches = true;
-                for i_row in 0..img_h {
-                    for i_col in 0..img_w {
-                        let s_idx = ((row + i_row) * sw + (col + i_col)) as usize;
-                        let p = pixels[s_idx];
-                        let sb = (p & 0xFF) as u8;
-                        let sg = ((p >> 8) & 0xFF) as u8;
-                        let sr = ((p >> 16) & 0xFF) as u8;
+                for tp in ordered_t_offsets.iter().skip(1) {
+                    let s_idx = (row_offset + col + tp.0) as usize;
+                    let p = pixels[s_idx];
+                    let sb = (p & 0xFF) as u8;
+                    let sg = ((p >> 8) & 0xFF) as u8;
+                    let sr = ((p >> 16) & 0xFF) as u8;
 
-                        let i_idx = ((i_row * img_w + i_col) * 4) as usize;
-                        let ir = img_rgba[i_idx];
-                        let ig = img_rgba[i_idx + 1];
-                        let ib = img_rgba[i_idx + 2];
-                        let ia = img_rgba[i_idx + 3];
-
-                        if ia > 128 {
-                            if sr.abs_diff(ir) > tol
-                                || sg.abs_diff(ig) > tol
-                                || sb.abs_diff(ib) > tol
-                            {
-                                matches = false;
-                                break;
-                            }
-                        }
-                    }
-                    if !matches {
+                    if sr.abs_diff(tp.1) > tol || sg.abs_diff(tp.2) > tol || sb.abs_diff(tp.3) > tol
+                    {
+                        matches = false;
                         break;
                     }
                 }
@@ -2357,95 +2366,120 @@ fn search_screen_image(
                 let b_shift = bm.trailing_zeros();
                 let b_max = bm >> b_shift;
 
-                let mut ax = 0;
-                let mut ay = 0;
-                let mut found = false;
+                let mut t_pixels = Vec::with_capacity((img_w * img_h) as usize);
                 for r in 0..img_h {
                     for c in 0..img_w {
-                        let idx = ((r * img_w + c) * 4) as usize;
-                        if img_rgba[idx + 3] > 128 {
-                            ax = c;
-                            ay = r;
-                            found = true;
-                            break;
+                        let i_idx = ((r * img_w + c) * 4) as usize;
+                        let ia = img_rgba[i_idx + 3];
+                        if ia > 128 {
+                            t_pixels.push((
+                                c,
+                                r,
+                                img_rgba[i_idx],
+                                img_rgba[i_idx + 1],
+                                img_rgba[i_idx + 2],
+                            ));
                         }
-                    }
-                    if found {
-                        break;
                     }
                 }
 
-                let a_idx = ((ay * img_w + ax) * 4) as usize;
-                let ar = img_rgba[a_idx];
-                let ag = img_rgba[a_idx + 1];
-                let ab = img_rgba[a_idx + 2];
+                if t_pixels.is_empty() {
+                    ((*image).f.destroy_image)(image);
+                    return Ok(None);
+                }
+
+                let mut ordered_t_pixels = Vec::with_capacity(t_pixels.len());
+                if t_pixels.len() > 20 {
+                    let step = t_pixels.len() / 20;
+                    for i in 0..20 {
+                        ordered_t_pixels.push(t_pixels[i * step]);
+                    }
+                    for i in 0..t_pixels.len() {
+                        if i % step != 0 || i >= 20 * step {
+                            ordered_t_pixels.push(t_pixels[i]);
+                        }
+                    }
+                } else {
+                    ordered_t_pixels = t_pixels;
+                }
+
+                let data_ptr = (*image).data as *const u8;
+                let bpl = (*image).bytes_per_line;
+                let bpp = (*image).bits_per_pixel;
+                let get_pixel_fn = (*image).f.get_pixel;
+
+                let mut ordered_t_offsets = Vec::with_capacity(ordered_t_pixels.len());
+                for tp in &ordered_t_pixels {
+                    ordered_t_offsets.push((tp.1 * bpl + tp.0 * 4, tp.0, tp.1, tp.2, tp.3, tp.4));
+                }
+
+                let tp0 = ordered_t_offsets[0];
 
                 for row in 0..=(safe_h - img_h) {
+                    let row_bpl = row * bpl;
                     for col in 0..=(safe_w - img_w) {
-                        let a_s_col = col + ax;
-                        let a_s_row = row + ay;
-                        let p = ((*image).f.get_pixel)(image, a_s_col, a_s_row);
-
-                        let sr = if r_max > 0 {
-                            (((p & rm) >> r_shift) * 255 / r_max) as u8
+                        let p0 = if bpp == 32 {
+                            let offset = (row_bpl + col * 4 + tp0.0) as isize;
+                            std::ptr::read_unaligned(data_ptr.offset(offset) as *const u32)
+                                as libc::c_ulong
                         } else {
-                            0
-                        };
-                        let sg = if g_max > 0 {
-                            (((p & gm) >> g_shift) * 255 / g_max) as u8
-                        } else {
-                            0
-                        };
-                        let sb = if b_max > 0 {
-                            (((p & bm) >> b_shift) * 255 / b_max) as u8
-                        } else {
-                            0
+                            (get_pixel_fn)(image, col + tp0.1, row + tp0.2)
                         };
 
-                        if sr.abs_diff(ar) > tol || sg.abs_diff(ag) > tol || sb.abs_diff(ab) > tol {
+                        let sr0 = if r_max > 0 {
+                            (((p0 & rm) >> r_shift) * 255 / r_max) as u8
+                        } else {
+                            0
+                        };
+                        let sg0 = if g_max > 0 {
+                            (((p0 & gm) >> g_shift) * 255 / g_max) as u8
+                        } else {
+                            0
+                        };
+                        let sb0 = if b_max > 0 {
+                            (((p0 & bm) >> b_shift) * 255 / b_max) as u8
+                        } else {
+                            0
+                        };
+
+                        if sr0.abs_diff(tp0.3) > tol
+                            || sg0.abs_diff(tp0.4) > tol
+                            || sb0.abs_diff(tp0.5) > tol
+                        {
                             continue;
                         }
 
                         let mut matches = true;
-                        for i_row in 0..img_h {
-                            for i_col in 0..img_w {
-                                let s_col = col + i_col;
-                                let s_row = row + i_row;
-                                let pixel = ((*image).f.get_pixel)(image, s_col, s_row);
+                        for tp in ordered_t_offsets.iter().skip(1) {
+                            let p = if bpp == 32 {
+                                let offset = (row_bpl + col * 4 + tp.0) as isize;
+                                std::ptr::read_unaligned(data_ptr.offset(offset) as *const u32)
+                                    as libc::c_ulong
+                            } else {
+                                (get_pixel_fn)(image, col + tp.1, row + tp.2)
+                            };
 
-                                let sr = if r_max > 0 {
-                                    (((pixel & rm) >> r_shift) * 255 / r_max) as u8
-                                } else {
-                                    0
-                                };
-                                let sg = if g_max > 0 {
-                                    (((pixel & gm) >> g_shift) * 255 / g_max) as u8
-                                } else {
-                                    0
-                                };
-                                let sb = if b_max > 0 {
-                                    (((pixel & bm) >> b_shift) * 255 / b_max) as u8
-                                } else {
-                                    0
-                                };
+                            let sr = if r_max > 0 {
+                                (((p & rm) >> r_shift) * 255 / r_max) as u8
+                            } else {
+                                0
+                            };
+                            let sg = if g_max > 0 {
+                                (((p & gm) >> g_shift) * 255 / g_max) as u8
+                            } else {
+                                0
+                            };
+                            let sb = if b_max > 0 {
+                                (((p & bm) >> b_shift) * 255 / b_max) as u8
+                            } else {
+                                0
+                            };
 
-                                let i_idx = ((i_row * img_w + i_col) * 4) as usize;
-                                let ir = img_rgba[i_idx];
-                                let ig = img_rgba[i_idx + 1];
-                                let ib = img_rgba[i_idx + 2];
-                                let ia = img_rgba[i_idx + 3];
-
-                                if ia > 128 {
-                                    if sr.abs_diff(ir) > tol
-                                        || sg.abs_diff(ig) > tol
-                                        || sb.abs_diff(ib) > tol
-                                    {
-                                        matches = false;
-                                        break;
-                                    }
-                                }
-                            }
-                            if !matches {
+                            if sr.abs_diff(tp.3) > tol
+                                || sg.abs_diff(tp.4) > tol
+                                || sb.abs_diff(tp.5) > tol
+                            {
+                                matches = false;
                                 break;
                             }
                         }
@@ -2749,9 +2783,20 @@ fn search_screen_pixels(
 
                 let mut found = None;
 
+                let data_ptr = (*image).data as *const u8;
+                let bpl = (*image).bytes_per_line;
+                let bpp = (*image).bits_per_pixel;
+                let get_pixel_fn = (*image).f.get_pixel;
+
                 for row in 0..actual_h {
                     for col in 0..actual_w {
-                        let pixel = ((*image).f.get_pixel)(image, col, row);
+                        let pixel = if bpp == 32 {
+                            let offset = (row * bpl + col * 4) as isize;
+                            std::ptr::read_unaligned(data_ptr.offset(offset) as *const u32)
+                                as libc::c_ulong
+                        } else {
+                            (get_pixel_fn)(image, col, row)
+                        };
 
                         let r = if r_max > 0 {
                             (((pixel & rm) >> r_shift) * 255 / r_max) as u8
