@@ -59,6 +59,7 @@ pub struct Config {
     pub edit_autosave: usize,
     pub edit_tab_backspace: bool,
     pub edit_auto_indent: bool,
+    pub edit_auto_bracket: bool,
     pub edit_error_highlight: String,
     pub bind_edit_insert: char,
     pub bind_edit_visual: char,
@@ -145,8 +146,9 @@ impl Default for Config {
             double_q_exit: false,
 
             edit_autosave: 0,
-            edit_tab_backspace: true,
-            edit_auto_indent: true,
+            edit_tab_backspace: false,
+            edit_auto_indent: false,
+            edit_auto_bracket: false,
             edit_error_highlight: String::new(),
             bind_edit_insert: '\0',
             bind_edit_visual: '\0',
@@ -326,6 +328,9 @@ impl Config {
                     }
                     "edit_auto_indent" => {
                         self.edit_auto_indent = val.parse().unwrap_or(self.edit_auto_indent)
+                    }
+                    "edit_auto_bracket" => {
+                        self.edit_auto_bracket = val.parse().unwrap_or(self.edit_auto_bracket)
                     }
                     "edit_error_highlight" => self.edit_error_highlight = val.to_string(),
                     "bind_edit_insert" => {
@@ -580,6 +585,7 @@ impl Config {
         self.edit_autosave = default.edit_autosave;
         self.edit_tab_backspace = default.edit_tab_backspace;
         self.edit_auto_indent = default.edit_auto_indent;
+        self.edit_auto_bracket = default.edit_auto_bracket;
         self.edit_error_highlight = default.edit_error_highlight;
     }
 
@@ -911,6 +917,12 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.edit_auto_indent, comment
+                    )
+                    .unwrap(),
+                    "edit_auto_bracket" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.edit_auto_bracket, comment
                     )
                     .unwrap(),
                     "edit_error_highlight" => writeln!(

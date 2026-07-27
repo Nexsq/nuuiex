@@ -708,6 +708,14 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 ),
             },
             Setting {
+                name: "Auto Bracket",
+                key: "edit_auto_bracket",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.edit_auto_bracket { 0 } else { 1 },
+                ),
+            },
+            Setting {
                 name: "Error Highlight",
                 key: "edit_error_highlight",
                 kind: SettingType::Choice(
@@ -1098,6 +1106,7 @@ pub fn settings_modal(
 
                 apply_setting!(config, set, bool "edit_tab_backspace", edit_tab_backspace);
                 apply_setting!(config, set, bool "edit_auto_indent", edit_auto_indent);
+                apply_setting!(config, set, bool "edit_auto_bracket", edit_auto_bracket);
                 apply_setting!(config, set, choice "edit_error_highlight", edit_error_highlight);
                 apply_setting!(config, set, char "bind_edit_insert", bind_edit_insert);
                 apply_setting!(config, set, char "bind_edit_visual", bind_edit_visual);

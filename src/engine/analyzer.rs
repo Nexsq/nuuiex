@@ -266,7 +266,8 @@ impl Analyzer {
                     self.error(*line, format!("Undefined function '{}'", name));
                 } else if !self.is_defined(name) {
                     match name.as_str() {
-                        "isdown" | "isup" | "isdownfocus" | "isupfocus" | "keydown" | "keyup" => {
+                        "isdown" | "isup" | "isdownfocus" | "isupfocus" | "keydown" | "keyup"
+                        | "interrupt" => {
                             if args.len() != 1 {
                                 self.error(*line, format!("'{}' expects exactly 1 argument", name));
                             } else if matches!(

@@ -1,1 +1,6 @@
 Publish the new release
+
+- add clipboard interactions
+- pixelsearch(x1, y1, x2, y2, color, tolerance?)
+- imagesearch(Image, tolerance?)
+- MAYBE direct window interaction (windows only)

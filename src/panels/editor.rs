@@ -874,20 +874,18 @@ impl Editor {
                 }
                 Key::Char(c) => {
                     if !c.is_control() {
-                        self.prepare_edit(c.is_whitespace());
-                        self.insert_char(c);
+                        self.handle_insert_char(c, config);
                         needs_analysis = true;
                     }
                 }
                 Key::Shift(c) => {
                     if !c.is_control() {
-                        self.prepare_edit(c.is_whitespace());
                         let final_c = if c.is_ascii_lowercase() {
                             c.to_ascii_uppercase()
                         } else {
                             c
                         };
-                        self.insert_char(final_c);
+                        self.handle_insert_char(final_c, config);
                         needs_analysis = true;
                     }
                 }
@@ -920,6 +918,23 @@ impl Editor {
                                 spaces_to_delete = if rem == 0 { 4 } else { rem };
                             } else if before_cursor.ends_with("    ") {
                                 spaces_to_delete = 4;
+                            }
+                        }
+
+                        if config.edit_auto_bracket && spaces_to_delete == 1 {
+                            let before = self.char_before_cursor();
+                            let after = self.char_after_cursor();
+                            let is_pair = match (before, after) {
+                                (Some('('), Some(')')) => true,
+                                (Some('['), Some(']')) => true,
+                                (Some('{'), Some('}')) => true,
+                                (Some('"'), Some('"')) => true,
+                                (Some('\''), Some('\'')) => true,
+                                (Some('`'), Some('`')) => true,
+                                _ => false,
+                            };
+                            if is_pair {
+                                self.delete_char_after();
                             }
                         }
 
@@ -1098,6 +1113,42 @@ impl Editor {
         let max_x = self.state.lines[self.state.cursor_y].chars().count();
         if self.state.cursor_x > max_x {
             self.state.cursor_x = max_x;
+        }
+    }
+
+    fn handle_insert_char(&mut self, c: char, config: &Config) {
+        let is_step_over = config.edit_auto_bracket
+            && ")]}\"'`".contains(c)
+            && self.char_after_cursor() == Some(c);
+
+        if is_step_over {
+            self.state.cursor_x += 1;
+        } else {
+            self.prepare_edit(c.is_whitespace());
+            self.insert_char(c);
+
+            if config.edit_auto_bracket {
+                let closing = match c {
+                    '(' => Some(')'),
+                    '[' => Some(']'),
+                    '{' => Some('}'),
+                    '"' => Some('"'),
+                    '\'' => Some('\''),
+                    '`' => Some('`'),
+                    _ => None,
+                };
+                if let Some(cc) = closing {
+                    let next_c = self.char_after_cursor();
+                    let should_close = match next_c {
+                        Some(nc) => nc.is_whitespace() || ")]},:;".contains(nc),
+                        _ => true,
+                    };
+                    if should_close {
+                        self.insert_char(cc);
+                        self.state.cursor_x -= 1;
+                    }
+                }
+            }
         }
     }
 

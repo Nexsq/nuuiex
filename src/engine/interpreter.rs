@@ -3905,6 +3905,36 @@ impl Interpreter {
                             return Ok(Value::Bool(!is_down));
                         }
                     }
+                    "interrupt" => {
+                        if eval_args.len() != 1 {
+                            return Err(format!(
+                                "Line {}: 'interrupt' expects exactly 1 argument",
+                                line
+                            ));
+                        }
+
+                        let key_str = match variant_to_key_str(&eval_args[0].1) {
+                            Ok(s) => s,
+                            Err(e) => return Err(format!("Line {}: {}", line, e)),
+                        };
+
+                        loop {
+                            if self.cancel_token.load(Ordering::Relaxed) {
+                                self.should_exit = true;
+                                return Ok(Value::Nil);
+                            }
+
+                            match check_key_down(&key_str) {
+                                Ok(true) => break,
+                                Ok(false) => {}
+                                Err(e) => return Err(format!("Line {}: {}", line, e)),
+                            }
+
+                            std::thread::sleep(std::time::Duration::from_millis(10));
+                        }
+
+                        return Ok(Value::Nil);
+                    }
                     "keydown" | "keyup" => {
                         if eval_args.len() != 1 {
                             return Err(format!(
