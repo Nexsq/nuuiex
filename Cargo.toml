@@ -1,6 +1,6 @@
 [package]
 name = "nuui"
-version = "1.4.1"
+version = "1.4.2"
 edition = "2024"
 
 [features]
@@ -10,6 +10,7 @@ portable = []
 directories = "6.0"
 arboard = { version = "3.4", default-features = false }
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.189"

@@ -1,7 +1,6 @@
 Publish the new release
 
-- pixelsearch(x1, y1, x2, y2, color, tolerance?)
-- imagesearch(Image, tolerance?)
-- MAYBE direct window interaction (windows only)
+- add imgbase(path to file) to encrypt images to base64
+- add imgsearch(Image, tolerance?)
 
 - test version 4 on linux

@@ -285,6 +285,8 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 | `macrodata(dict?)`| `Dict` | If passed a dict, saves it to a persistent `.nuuidata` file linked to the script. If called with no arguments, reads and returns the dict from disk. |
 | `beep(freq?, dur?)`| `Number, Number` | Plays a system beep. Optional arguments: frequency (Hz) and duration (ms). |
 | `focused()` | None | Returns the executable name of the currently focused/active window (e.g. `"Discord.exe"` or `"firefox"`). Returns an empty string if it cannot be determined. |
+| `getclipboard()` | None | Returns the current text content of the system clipboard. |
+| `setclipboard(text)`| `String` | Sets the system clipboard to the specified text. |
 
 ### 2. Mouse & Keyboard Automation
 
@@ -315,6 +317,7 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 | `screeny()` | None | Returns the absolute screen resolution height (Y) of the primary monitor. |
 | `getpixel(x, y)` | `Number, Number` | Returns the RGB color of the screen pixel at `(x, y)` as a `Color:Variant`. |
 | `compixel(c1, c2, tol?)` | `Color, Color, Num` | Compares `c1` and `c2`. Optional `tol` (0-255) defines the acceptable RGB tolerance. Returns `Bool`. |
+| `pixelsearch(x1, y1, x2, y2, c, tol?)` | `Num, Num, Num, Num, Color, Num` | Fast screen region search for color `c` within `(x1, y1)` to `(x2, y2)` with an optional `tol` (0-255). Returns `[x, y]` if found, or `None`. |
 | `setcaret(x, y)` | `Number, Number` | Moves the internal terminal caret to a specific row and column in the output box. |
 | `caretx()` | None | Returns the current X (column) position of the terminal output caret. |
 | `carety()` | None | Returns the current Y (row) position of the terminal output caret. |
@@ -460,7 +463,7 @@ loop:
     let current_color = getpixel((x - 2)::abs(), (y - 2)::abs())
 
     # Check screen at mouse position Allow a color variance/tolerance of 10.
-    if compixel(current_color, target_color, 10):
+    if comcolor(current_color, target_color, 10):
         println("Target spotted!")
 
     sleep(50)
