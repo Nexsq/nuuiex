@@ -89,7 +89,7 @@ fn build_clipboard_cmd(program: &str, args: &[&str]) -> std::process::Command {
     }
 }
 
-fn set_clipboard(text: String) {
+pub fn set_clipboard(text: String) {
     let is_wayland = is_wayland_session();
 
     if is_wayland {
@@ -124,7 +124,7 @@ fn set_clipboard(text: String) {
     }
 }
 
-fn get_clipboard() -> Option<String> {
+pub fn get_clipboard() -> Option<String> {
     let is_wayland = is_wayland_session();
 
     if is_wayland {

@@ -4481,6 +4481,30 @@ impl Interpreter {
                             get_focused_window().map_err(|e| format!("Line {}: {}", line, e))?;
                         return Ok(Value::String(window_name));
                     }
+                    "getclipboard" => {
+                        if eval_args.len() != 0 {
+                            return Err(format!(
+                                "Line {}: 'getclipboard' expects exactly 0 arguments",
+                                line
+                            ));
+                        }
+                        let text = crate::editor::get_clipboard().unwrap_or_default();
+                        return Ok(Value::String(text));
+                    }
+                    "setclipboard" => {
+                        if eval_args.len() != 1 {
+                            return Err(format!(
+                                "Line {}: 'setclipboard' expects exactly 1 argument",
+                                line
+                            ));
+                        }
+                        if let Value::String(text) = &eval_args[0].1 {
+                            crate::editor::set_clipboard(text.clone());
+                            return Ok(Value::Nil);
+                        } else {
+                            return Err(format!("Line {}: 'setclipboard' expects a string", line));
+                        }
+                    }
                     _ => {}
                 }
 

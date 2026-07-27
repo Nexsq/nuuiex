@@ -115,6 +115,8 @@ pub const BUILTIN_FUNCS: &[&str] = &[
     "screeny",
     "focused",
     "interrupt",
+    "getclipboard",
+    "setclipboard",
 ];
 
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {

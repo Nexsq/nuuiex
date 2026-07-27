@@ -314,7 +314,7 @@ impl Analyzer {
                                 }
                             }
                         }
-                        "exec" | "write" => {
+                        "exec" | "write" | "setclipboard" => {
                             if args.len() != 1 {
                                 self.error(*line, format!("'{}' expects exactly 1 argument", name));
                             } else if matches!(
@@ -553,7 +553,8 @@ impl Analyzer {
                             }
                         }
                         "mousex" | "mousey" | "mousedelta" | "time" | "caretx" | "carety"
-                        | "screenx" | "screeny" | "focused" | "displayx" | "displayy" => {
+                        | "screenx" | "screeny" | "focused" | "displayx" | "displayy"
+                        | "getclipboard" => {
                             if args.len() != 0 {
                                 self.error(
                                     *line,
