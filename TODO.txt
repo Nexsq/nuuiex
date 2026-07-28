@@ -1,4 +1,2 @@
 - redesign settings
 - add moving macros in and out of directories
-- add default output color (in themes)
-- add cursor color (in themes)

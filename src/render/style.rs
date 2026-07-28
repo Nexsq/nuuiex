@@ -53,6 +53,7 @@ impl Gradient {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Color {
+    Default,
     None,
     Black,
     Red,
@@ -128,6 +129,7 @@ fn push_num_u8(buf: &mut Vec<u8>, mut n: u8) {
 impl Color {
     pub fn to_rgb(&self) -> Option<(u8, u8, u8)> {
         match self {
+            Color::Default => None,
             Color::None => None,
             Color::Black => Some((0, 0, 0)),
             Color::Red => Some((205, 49, 49)),
@@ -170,7 +172,7 @@ impl Color {
 
     pub fn fg_ansi(&self, buf: &mut Vec<u8>) {
         match self {
-            Color::None => buf.extend_from_slice(b"\x1b[39m"),
+            Color::Default | Color::None => buf.extend_from_slice(b"\x1b[39m"),
             Color::Black => buf.extend_from_slice(b"\x1b[30m"),
             Color::Red => buf.extend_from_slice(b"\x1b[31m"),
             Color::Green => buf.extend_from_slice(b"\x1b[32m"),
@@ -201,7 +203,7 @@ impl Color {
 
     pub fn bg_ansi(&self, buf: &mut Vec<u8>) {
         match self {
-            Color::None => buf.extend_from_slice(b"\x1b[49m"),
+            Color::Default | Color::None => buf.extend_from_slice(b"\x1b[49m"),
             Color::Black => buf.extend_from_slice(b"\x1b[40m"),
             Color::Red => buf.extend_from_slice(b"\x1b[41m"),
             Color::Green => buf.extend_from_slice(b"\x1b[42m"),

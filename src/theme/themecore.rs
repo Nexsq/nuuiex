@@ -24,6 +24,7 @@ pub struct Theme {
     pub title: Vec<Vec<(String, Color)>>,
     pub main_label: Gradient,
     pub warning_color: Gradient,
+    pub caret_color: Gradient,
     pub keyview_color: Gradient,
     pub main_box: Gradient,
     pub list_box: Gradient,
@@ -37,6 +38,7 @@ pub struct Theme {
     pub list_file: Gradient,
     pub tab_lazy: Gradient,
     pub tab_selected: Gradient,
+    pub macro_output: Gradient,
     pub settings_entry: Gradient,
     pub settings_selected: Gradient,
     pub settings_special: Gradient,
@@ -84,6 +86,7 @@ impl Theme {
             title: Vec::new(),
             main_label: Gradient::default(),
             warning_color: Gradient::default(),
+            caret_color: Gradient::default(),
             keyview_color: Gradient::default(),
             main_box: Gradient::default(),
             list_box: Gradient::default(),
@@ -97,6 +100,7 @@ impl Theme {
             list_file: Gradient::default(),
             tab_lazy: Gradient::default(),
             tab_selected: Gradient::default(),
+            macro_output: Gradient::default(),
             settings_entry: Gradient::default(),
             settings_selected: Gradient::default(),
             settings_special: Gradient::default(),
@@ -265,6 +269,9 @@ fn parse_theme_base(content: &str, mut theme: Theme) -> Result<Theme, String> {
 pub fn parse_color(val: &str) -> Result<Color, String> {
     let val = val.trim();
 
+    if val.eq_ignore_ascii_case("default") {
+        return Ok(Color::Default);
+    }
     if val.eq_ignore_ascii_case("none") {
         return Ok(Color::None);
     }
@@ -404,6 +411,7 @@ fn apply_theme_value(theme: &mut Theme, key: &str, val: &str) -> Result<(), Stri
         "title" => theme.title = parse_title(val)?,
         "main_label" => theme.main_label = parse_gradient(val)?,
         "warning_color" => theme.warning_color = parse_gradient(val)?,
+        "caret_color" => theme.caret_color = parse_gradient(val)?,
         "keyview_color" => theme.keyview_color = parse_gradient(val)?,
         "main_box" => theme.main_box = parse_gradient(val)?,
         "list_box" => theme.list_box = parse_gradient(val)?,
@@ -417,6 +425,7 @@ fn apply_theme_value(theme: &mut Theme, key: &str, val: &str) -> Result<(), Stri
         "list_file" => theme.list_file = parse_gradient(val)?,
         "tab_lazy" => theme.tab_lazy = parse_gradient(val)?,
         "tab_selected" => theme.tab_selected = parse_gradient(val)?,
+        "macro_output" => theme.macro_output = parse_gradient(val)?,
         "settings_entry" => theme.settings_entry = parse_gradient(val)?,
         "settings_selected" => theme.settings_selected = parse_gradient(val)?,
         "settings_special" => theme.settings_special = parse_gradient(val)?,

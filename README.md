@@ -194,7 +194,7 @@ Numbers are represented internally as 64-bit floats (`f64`).
 | `capitalize()` | Capitalizes the first letter. |
 | `lower()` / `upper()` | Converts the string to lowercase or uppercase. |
 | `swapcase()` | Swaps the casing of all characters. |
-| `count(sub)` | Returns how many times `sub` appears in the string. |
+| `count(sub?)` | Returns the total length if empty, or how many times `sub` appears. |
 | `index(sub)` | Returns the starting index of `sub`, or `None`. |
 | `trim()` | Removes leading and trailing whitespace. |
 | `split(sep?)` | Splits the string into a List (by whitespace if `sep` is omitted). |
@@ -255,11 +255,12 @@ Represents keyboard and mouse inputs for automation functions (`isdown`, `keydow
 ### 2. Color & Background Enums
 Used for terminal styling and pixel color comparisons. The `Background` enum shares the exact same variants and is used to apply background colors.
 
+* **Default Color:** Defined in theme, `Color:Default`. This one is not available for `Background`
 * **Standard Colors:** `None`, `Black`, `Red`, `Green`, `Yellow`, `Blue`, `Magenta`, `Cyan`, `White`, `DarkGray`
 * **Bright Colors:** `BrightRed`, `BrightGreen`, `BrightYellow`, `BrightBlue`, `BrightMagenta`, `BrightCyan`, `BrightWhite`
-* **Custom Hex Colors:** You can use exact hex codes, e.g., `Color:ff0055` or `Background:00ff00`.
+* **Custom Hex Colors:** You can use exact hex codes, e.g., `Color:ff0055` or `Background:00ff00`
 
-*(You can call `Color:Red::tostring()` to get its string representation).*
+*(You can call `Color:00ff00::tostring()` to get its string representation).*
 
 ### 3. Modifier Enum
 Used to apply ANSI text modifiers in the terminal.
@@ -363,6 +364,7 @@ title = ' {Green}▄▄▄   {BrightGreen}▄ {BrightCyan}▄   {Cyan}▄ {Brigh
 
 main_label = Yellow
 warning_color = Yellow
+caret_color = White
 
 tabs_box = BrightBlue
 list_box = Blue

@@ -2427,7 +2427,7 @@ impl Editor {
 
             if self.is_output {
                 let mut chars = line_str.chars().peekable();
-                let mut current_color = Color::White;
+                let mut current_color = Color::Default;
                 let mut current_bg_color = Color::None;
                 let mut current_modifier = Modifier::None;
 
@@ -2499,7 +2499,7 @@ impl Editor {
             }
 
             if self.is_output && self.is_waiting_for_input && i == self.state.cursor_y {
-                let last_color = syntax_colors.last().copied().unwrap_or(Color::White);
+                let last_color = syntax_colors.last().copied().unwrap_or(Color::Default);
                 let last_bg = syntax_bg_colors.last().copied().unwrap_or(Color::None);
                 let last_modifier = syntax_modifiers.last().copied().unwrap_or(Modifier::None);
                 let pad_spaces = self.state.cursor_x.saturating_sub(line_chars.len());
@@ -2989,9 +2989,51 @@ impl Editor {
                             {
                                 skip_idx += 1;
                             }
+
+                            let is_builtin_method = matches!(
+                                word_str.as_str(),
+                                "len"
+                                    | "append"
+                                    | "clear"
+                                    | "count"
+                                    | "extend"
+                                    | "index"
+                                    | "insert"
+                                    | "pop"
+                                    | "remove"
+                                    | "get"
+                                    | "keys"
+                                    | "values"
+                                    | "update"
+                                    | "set"
+                                    | "capitalize"
+                                    | "lower"
+                                    | "upper"
+                                    | "swapcase"
+                                    | "trim"
+                                    | "join"
+                                    | "split"
+                                    | "replace"
+                                    | "startswith"
+                                    | "endswith"
+                                    | "asnum"
+                                    | "abs"
+                                    | "neg"
+                                    | "floor"
+                                    | "trunc"
+                                    | "ceil"
+                                    | "fract"
+                                    | "clamp"
+                                    | "round"
+                                    | "pow"
+                                    | "sqrt"
+                                    | "tostring"
+                            );
+
                             let is_func = skip_idx < line_chars.len()
                                 && line_chars[skip_idx] == '('
-                                && self.defined_functions.contains(&word_str);
+                                && (self.defined_functions.contains(&word_str)
+                                    || is_builtin_method);
 
                             let color = if is_kw || is_enum_base || is_enum_variant {
                                 &theme.editor_keywords
@@ -3067,22 +3109,43 @@ impl Editor {
                             let colon_idx = line_chars.iter().position(|&x| x == ':').unwrap_or(0);
                             if j <= colon_idx {
                                 theme.editor_errors.color_at(j, colon_idx + 1)
+                            } else if j < syntax_colors.len() {
+                                let c = syntax_colors[j];
+                                if self.is_output && c == Color::Default {
+                                    theme.macro_output.color_at(0, 1)
+                                } else {
+                                    c
+                                }
                             } else {
-                                Color::White
+                                if self.is_output {
+                                    theme.macro_output.color_at(0, 1)
+                                } else {
+                                    Color::White
+                                }
                             }
                         } else if error_underline {
                             theme.editor_errors.color_at(display_x as usize, inner_w)
                         } else if j < syntax_colors.len() {
-                            syntax_colors[j]
+                            let c = syntax_colors[j];
+                            if c == Color::Default {
+                                theme.macro_output.color_at(0, 1)
+                            } else {
+                                c
+                            }
                         } else {
-                            Color::White
+                            if self.is_output {
+                                theme.macro_output.color_at(0, 1)
+                            } else {
+                                Color::White
+                            }
                         },
                         bg: if is_selected {
                             Color::DarkGray
                         } else if error_bg {
                             theme.editor_errors.color_at(display_x as usize, inner_w)
                         } else if j < syntax_bg_colors.len() && syntax_bg_colors[j] != Color::None {
-                            syntax_bg_colors[j]
+                            let c = syntax_bg_colors[j];
+                            if c == Color::Default { Color::None } else { c }
                         } else {
                             Color::None
                         },
@@ -3111,7 +3174,7 @@ impl Editor {
                     }
 
                     if is_cursor {
-                        style.bg = Color::White;
+                        style.bg = theme.caret_color.color_at(0, 1);
                         style.fg = Color::Black;
                     }
 
@@ -3159,7 +3222,7 @@ impl Editor {
                                     ' ',
                                     Style {
                                         fg: Color::Black,
-                                        bg: Color::White,
+                                        bg: theme.caret_color.color_at(0, 1),
                                         md: if is_active {
                                             Modifier::None
                                         } else {
