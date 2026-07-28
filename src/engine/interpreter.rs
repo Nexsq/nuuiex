@@ -4033,8 +4033,30 @@ impl Interpreter {
                 }
                 Ok(Signal::Empty)
             }
-            Stmt::Loop(body) => {
+            Stmt::Loop(count_expr, body, line) => {
+                let max_iterations = if let Some(expr) = count_expr {
+                    let val = self.eval_expr(expr)?;
+                    if let Value::Number(n) = val {
+                        if n < 0.0 {
+                            return Err(format!("Line {}: Loop count cannot be negative", line));
+                        }
+                        Some(n.trunc() as u64)
+                    } else {
+                        return Err(format!("Line {}: Loop count must be a number", line));
+                    }
+                } else {
+                    None
+                };
+
+                let mut i = 0;
                 loop {
+                    if let Some(max) = max_iterations {
+                        if i >= max {
+                            break;
+                        }
+                    }
+                    i += 1;
+
                     if self.should_exit || self.cancel_token.load(Ordering::Relaxed) {
                         self.should_exit = true;
                         break;

@@ -2,7 +2,7 @@
 
 # NUUI ex(tended)
 
-**NUUI ex** is a powerful, highly customizable, macro engine. It features its own scripting language (NUUI Lang), a built-in code editor with syntax highlighting, a robust macro execution engine and more.
+A powerful, highly customizable, macro engine.
 
 ---
 
@@ -24,7 +24,7 @@
     - [4. Dictionaries](#4-dictionaries)
 4. [Built-in Enums](#-built-in-enums)
     - [1. Key Enum](#1-key-enum)
-    - [2. Color & Background Enums](#2-color-enum)
+    - [2. Color & Background Enums](#2-color--background-enums)
     - [3. Modifier Enum](#3-modifier-enum)
     - [4. Image Enum](#4-image-enum)
 5. [Built-in Functions Reference](#-built-in-functions-reference)
@@ -95,7 +95,7 @@ The "Deck" is a customizable widget area.
 
 ## ▪ The NUUI Scripting Language (NUUI Lang)
 
-NUUI uses its custom scripting language, called NUUI Lang. It is dynamically typed, supports asynchronous execution, and features a clean syntax inspired by Rust and Python.
+NUUI uses its custom scripting language, called **NUUI Lang**. It is dynamically typed, supports asynchronous execution, and features a clean syntax inspired by Rust and Python.
 
 ### 1. Syntax & Basics
 
@@ -130,6 +130,10 @@ else:
 loop:
     if isdown(Key:Esc):
         break
+
+# Finite loop (runs 5 times)
+loop 5:
+    println("test")
 
 # While loop
 while x > 0:
@@ -506,4 +510,5 @@ cargo build --release --features portable
 
 ***
 
-huge thanks to [@Grengorio](https://github.com/Grengorio) for bug hunting
+## <3
+* huge thanks to [@Grengorio](https://github.com/Grengorio) for bug hunting

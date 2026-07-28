@@ -267,7 +267,13 @@ impl Parser {
     }
 
     fn parse_loop(&mut self) -> Option<Stmt> {
-        self.advance();
+        let token = self.advance().clone();
+
+        let mut count_expr = None;
+        if !self.check(&TokenKind::Colon) {
+            count_expr = self.parse_expression();
+        }
+
         if !self.check(&TokenKind::Colon) {
             self.error("Expected ':' after loop");
             return None;
@@ -280,7 +286,7 @@ impl Parser {
         self.consume_statement_end();
 
         let body = self.parse_block()?;
-        Some(Stmt::Loop(body))
+        Some(Stmt::Loop(count_expr, body, token.line))
     }
 
     fn parse_while(&mut self) -> Option<Stmt> {

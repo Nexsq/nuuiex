@@ -83,7 +83,7 @@ pub enum Stmt {
     Assign(Expr, Expr, usize),
     AssignOp(Expr, BinaryOp, Expr, usize),
     If(Expr, Vec<Stmt>, Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
-    Loop(Vec<Stmt>),
+    Loop(Option<Expr>, Vec<Stmt>, usize),
     While(Expr, Vec<Stmt>),
     For(String, Expr, Vec<Stmt>, usize),
     Break(usize),

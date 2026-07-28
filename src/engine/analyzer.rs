@@ -102,7 +102,10 @@ impl Analyzer {
                     self.pop_scope();
                 }
             }
-            Stmt::Loop(body) => {
+            Stmt::Loop(count_expr, body, _) => {
+                if let Some(expr) = count_expr {
+                    self.analyze_expr(expr);
+                }
                 self.loop_depth += 1;
                 self.push_scope();
                 self.analyze(body);
