@@ -216,6 +216,63 @@ impl MainView {
         self.min_w = (config.lib_width as u16 + layout::TABS_W + 36).max(64);
     }
 
+    pub fn reload_library_tree(&mut self, config: &Config) {
+        let mut saved_expanded_paths: [Vec<std::path::PathBuf>; 6] =
+            std::array::from_fn(|_| Vec::new());
+        let mut saved_selected_paths: [Option<std::path::PathBuf>; 6] =
+            std::array::from_fn(|_| None);
+
+        for i in 0..6 {
+            let mut current = &self.library_tree;
+            for &idx in &self.expanded_path[i] {
+                if let Some(crate::lib::MacroNode::Folder { path, children, .. }) = current.get(idx)
+                {
+                    saved_expanded_paths[i].push(path.clone());
+                    current = children;
+                } else {
+                    break;
+                }
+            }
+            if let Some(node) = current.get(self.list_selected[i]) {
+                saved_selected_paths[i] = Some(node.path().to_path_buf());
+            }
+        }
+
+        if let Ok(l) = crate::lib::init(&config.lib_sorting) {
+            self.library_tree = l.tree;
+            self.library_root = l.root_path;
+
+            for i in 0..6 {
+                let old_selected = self.list_selected[i];
+                self.expanded_path[i].clear();
+                let mut current = &self.library_tree;
+
+                for target_path in &saved_expanded_paths[i] {
+                    if let Some(idx) = current.iter().position(|n| n.path() == target_path) {
+                        self.expanded_path[i].push(idx);
+                        if let crate::lib::MacroNode::Folder { children, .. } = &current[idx] {
+                            current = children;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                if let Some(target_sel) = &saved_selected_paths[i] {
+                    if let Some(idx) = current.iter().position(|n| n.path() == target_sel) {
+                        self.list_selected[i] = idx;
+                    } else {
+                        self.list_selected[i] = old_selected;
+                    }
+                } else {
+                    self.list_selected[i] = old_selected;
+                }
+            }
+        }
+    }
+
     pub fn get_selected_node(&self) -> Option<&MacroNode> {
         let mut current = &self.library_tree;
         for &idx in &self.expanded_path[self.current_tab] {
@@ -1051,8 +1108,7 @@ pub fn handle_list_input(
                         }
                     }
 
-                    let l = crate::lib::init(&config.lib_sorting)?;
-                    view.library_tree = l.tree;
+                    view.reload_library_tree(config);
 
                     let mut current = &view.library_tree;
                     let (view_path, _) = crate::panels::main::list::resolve_view(
@@ -1118,8 +1174,7 @@ pub fn handle_list_input(
                     let _ = std::fs::create_dir(&target_path);
                 }
 
-                let l = crate::lib::init(&config.lib_sorting)?;
-                view.library_tree = l.tree;
+                view.reload_library_tree(config);
 
                 let mut current = &view.library_tree;
                 let (view_path, _) = crate::panels::main::list::resolve_view(
@@ -1282,8 +1337,7 @@ pub fn handle_list_action(
 
                     view.clear_editor_for_path(&path);
 
-                    let l = crate::lib::init(&config.lib_sorting)?;
-                    view.library_tree = l.tree;
+                    view.reload_library_tree(config);
                     view.auto_load();
                     view.refresh_list(config);
                     view.refresh_main(config);
@@ -1356,8 +1410,7 @@ pub fn handle_list_action(
 
                 view.clear_editor_for_path(&path);
 
-                let l = crate::lib::init(&config.lib_sorting)?;
-                view.library_tree = l.tree;
+                view.reload_library_tree(config);
                 view.auto_load();
                 view.refresh_list(config);
                 view.refresh_main(config);

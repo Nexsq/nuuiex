@@ -494,10 +494,7 @@ fn main() {
                         );
                         main_view.update_macro_focus(true);
 
-                        if let Ok(l) = lib::init(&config.lib_sorting) {
-                            main_view.library_tree = l.tree;
-                            main_view.library_root = l.root_path;
-                        }
+                        main_view.reload_library_tree(&config);
                         main_view.auto_load();
                         main_view.update_min_sizes(&config);
                         main_view.resize(term_w, term_h, &config);

@@ -1802,37 +1802,35 @@ pub fn settings_modal(
                                         }
                                         config.save();
 
-                                        if action_type == 4 || action_type == 5 || action_type == 1
+                                        if action_type == 4 || action_type == 5 || action_type == 0
                                         {
-                                            if let Ok(l) = crate::lib::init(&config.lib_sorting) {
-                                                main_view.library_tree = l.tree;
-                                                main_view.library_root = l.root_path;
-                                                if action_type == 5 || action_type == 1 {
-                                                    for i in 0..6 {
-                                                        main_view.expanded_path[i].clear();
-                                                        main_view.list_selected[i] = 0;
-                                                        main_view.list_scroll[i] = 0;
-                                                        if let Some(token) =
-                                                            main_view.cancellation_tokens[i].take()
-                                                        {
-                                                            token.store(
-                                                                true,
-                                                                std::sync::atomic::Ordering::SeqCst,
-                                                            );
-                                                        }
-                                                        main_view.editors[i].file_path = None;
-                                                        main_view.editors[i].rel_path.clear();
-                                                        main_view.editors[i].state.lines =
-                                                            vec![String::new()];
-                                                        main_view.editors[i].process_rx = None;
-                                                        main_view.running_macros[i] = None;
-                                                        main_view.macro_start_times[i] = None;
-                                                        main_view.editors[i].error_count = 0;
-                                                        main_view.editors[i].error_lines.clear();
+                                            main_view.reload_library_tree(config);
+
+                                            if action_type == 5 || action_type == 0 {
+                                                for i in 0..6 {
+                                                    main_view.expanded_path[i].clear();
+                                                    main_view.list_selected[i] = 0;
+                                                    main_view.list_scroll[i] = 0;
+                                                    if let Some(token) =
+                                                        main_view.cancellation_tokens[i].take()
+                                                    {
+                                                        token.store(
+                                                            true,
+                                                            std::sync::atomic::Ordering::SeqCst,
+                                                        );
                                                     }
+                                                    main_view.editors[i].file_path = None;
+                                                    main_view.editors[i].rel_path.clear();
+                                                    main_view.editors[i].state.lines =
+                                                        vec![String::new()];
+                                                    main_view.editors[i].process_rx = None;
+                                                    main_view.running_macros[i] = None;
+                                                    main_view.macro_start_times[i] = None;
+                                                    main_view.editors[i].error_count = 0;
+                                                    main_view.editors[i].error_lines.clear();
                                                 }
-                                                main_view.auto_load();
                                             }
+                                            main_view.auto_load();
                                         }
 
                                         let current_theme_idx = themes
@@ -1905,11 +1903,8 @@ pub fn settings_modal(
                 }
             }
             if config.lib_sorting != prev_sorting {
-                if let Ok(l) = crate::lib::init(&config.lib_sorting) {
-                    main_view.library_tree = l.tree;
-                    main_view.library_root = l.root_path;
-                    main_view.auto_load();
-                }
+                main_view.reload_library_tree(config);
+                main_view.auto_load();
                 prev_sorting = config.lib_sorting.clone();
             }
             if config.tabs_num != prev_tabs_num || config.lib_width != prev_lib_width {
