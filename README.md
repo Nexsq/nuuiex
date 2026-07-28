@@ -512,3 +512,4 @@ cargo build --release --features portable
 
 ## <3
 * huge thanks to [@Grengorio](https://github.com/Grengorio) for bug hunting
+* huge thanks to [@whiteplacekk](https://github.com/whiteplacekk) for testing wayland support

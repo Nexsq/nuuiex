@@ -24,6 +24,7 @@ pub struct Config {
     pub monitor_bar_width: usize,
     pub monitor_icons: bool,
 
+    pub macrostats_icons: bool,
     pub macrostats_edit_name: bool,
     pub macrostats_edit_err: String,
     pub macrostats_edit_created: bool,
@@ -114,6 +115,7 @@ impl Default for Config {
             monitor_bar_width: 0,
             monitor_icons: false,
 
+            macrostats_icons: false,
             macrostats_edit_name: false,
             macrostats_edit_err: String::new(),
             macrostats_edit_created: false,
@@ -236,6 +238,9 @@ impl Config {
                         self.monitor_icons = val.parse().unwrap_or(self.monitor_icons)
                     }
 
+                    "macrostats_icons" => {
+                        self.macrostats_icons = val.parse().unwrap_or(self.macrostats_icons)
+                    }
                     "macrostats_edit_name" => {
                         self.macrostats_edit_name = val.parse().unwrap_or(self.macrostats_edit_name)
                     }
@@ -560,6 +565,7 @@ impl Config {
         self.monitor_bar_mode = default.monitor_bar_mode;
         self.monitor_bar_width = default.monitor_bar_width;
         self.monitor_icons = default.monitor_icons;
+        self.macrostats_icons = default.macrostats_icons;
         self.macrostats_edit_name = default.macrostats_edit_name;
         self.macrostats_edit_err = default.macrostats_edit_err;
         self.macrostats_edit_created = default.macrostats_edit_created;
@@ -587,6 +593,51 @@ impl Config {
         self.keyvis_gravity = default.keyvis_gravity;
         self.keyvis_tension = default.keyvis_tension;
         self.keyvis_base = default.keyvis_base;
+    }
+
+    pub fn reset_current_widget(&mut self) {
+        let default = Config::default();
+        if self.deck_widget == "monitor" {
+            self.monitor_cpu = default.monitor_cpu;
+            self.monitor_gpu = default.monitor_gpu;
+            self.monitor_mem = default.monitor_mem;
+            self.monitor_term = default.monitor_term;
+            self.monitor_divider = default.monitor_divider;
+            self.monitor_bar_mode = default.monitor_bar_mode;
+            self.monitor_bar_width = default.monitor_bar_width;
+            self.monitor_icons = default.monitor_icons;
+        } else if self.deck_widget == "macrostats" {
+            self.macrostats_icons = default.macrostats_icons;
+            self.macrostats_edit_name = default.macrostats_edit_name;
+            self.macrostats_edit_err = default.macrostats_edit_err;
+            self.macrostats_edit_created = default.macrostats_edit_created;
+            self.macrostats_edit_lines = default.macrostats_edit_lines;
+            self.macrostats_edit_code = default.macrostats_edit_code;
+            self.macrostats_run_name = default.macrostats_run_name;
+            self.macrostats_run_elapsed = default.macrostats_run_elapsed;
+            self.macrostats_run_cpu = default.macrostats_run_cpu;
+            self.macrostats_lib_name = default.macrostats_lib_name;
+            self.macrostats_lib_created = default.macrostats_lib_created;
+            self.macrostats_lib_size = default.macrostats_lib_size;
+            self.macrostats_lib_status = default.macrostats_lib_status;
+            self.macrostats_err_chart_len = default.macrostats_err_chart_len;
+            self.macrostats_err_chart_num = default.macrostats_err_chart_num;
+        } else if self.deck_widget == "clock" {
+            self.clock_date = default.clock_date;
+            self.clock_mode = default.clock_mode;
+            self.clock_position = default.clock_position;
+            self.clock_format = default.clock_format;
+            self.clock_seconds = default.clock_seconds;
+        } else if self.deck_widget == "keyvis" {
+            self.keyvis_width = default.keyvis_width;
+            self.keyvis_height = default.keyvis_height;
+            self.keyvis_steps = default.keyvis_steps;
+            self.keyvis_spread = default.keyvis_spread;
+            self.keyvis_force = default.keyvis_force;
+            self.keyvis_gravity = default.keyvis_gravity;
+            self.keyvis_tension = default.keyvis_tension;
+            self.keyvis_base = default.keyvis_base;
+        }
     }
 
     pub fn reset_editor(&mut self) {
@@ -744,6 +795,12 @@ impl Config {
                     )
                     .unwrap(),
 
+                    "macrostats_icons" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_icons, comment
+                    )
+                    .unwrap(),
                     "macrostats_edit_name" => writeln!(
                         &mut output,
                         "{} = {}{}",

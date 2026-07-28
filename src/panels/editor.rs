@@ -16,7 +16,7 @@ fn calculate_hash(lines: &[String]) -> u64 {
     hasher.finish()
 }
 
-fn is_wayland_session() -> bool {
+pub fn is_wayland_session() -> bool {
     if std::env::var("WAYLAND_DISPLAY").is_ok()
         || std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland"
     {
@@ -43,7 +43,44 @@ fn is_wayland_session() -> bool {
     false
 }
 
-fn build_clipboard_cmd(program: &str, args: &[&str]) -> std::process::Command {
+#[cfg(target_os = "linux")]
+pub fn fix_x11_sudo_env() {
+    unsafe {
+        if libc::geteuid() == 0 {
+            if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+                if std::env::var("DISPLAY").is_err()
+                    || std::env::var("DISPLAY").unwrap_or_default().is_empty()
+                {
+                    std::env::set_var("DISPLAY", ":0");
+                }
+                if std::env::var("XAUTHORITY").is_err()
+                    || std::env::var("XAUTHORITY").unwrap_or_default().is_empty()
+                {
+                    if let Ok(output) = std::process::Command::new("getent")
+                        .args(["passwd", &sudo_user])
+                        .output()
+                    {
+                        let out = String::from_utf8_lossy(&output.stdout);
+                        let parts: Vec<&str> = out.split(':').collect();
+                        if parts.len() >= 6 {
+                            let home = parts[5];
+                            std::env::set_var("XAUTHORITY", format!("{}/.Xauthority", home));
+                        } else {
+                            std::env::set_var(
+                                "XAUTHORITY",
+                                format!("/home/{}/.Xauthority", sudo_user),
+                            );
+                        }
+                    } else {
+                        std::env::set_var("XAUTHORITY", format!("/home/{}/.Xauthority", sudo_user));
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn build_clipboard_cmd(program: &str, args: &[&str]) -> std::process::Command {
     if let Ok(sudo_user) = std::env::var("SUDO_USER") {
         let mut cmd = std::process::Command::new("sudo");
         cmd.arg("-u").arg(&sudo_user).arg("env");
@@ -2075,18 +2112,29 @@ impl Editor {
         let mut target_y = self.state.cursor_y;
         let mut target_x = self.state.cursor_x;
 
+        if self.is_output && !config.show_caret && !self.is_waiting_for_input {
+            if target_y > 0 && target_y == self.state.lines.len().saturating_sub(1) {
+                if self.state.lines[target_y].is_empty() {
+                    target_y -= 1;
+                    target_x = self.state.lines[target_y].chars().count();
+                }
+            }
+            if target_y < self.state.lines.len() {
+                let current_line_len = self.state.lines[target_y].chars().count();
+                if target_x > 0 && target_x >= current_line_len {
+                    target_x = current_line_len.saturating_sub(1);
+                }
+            }
+        }
+
+        let mut visual_target_x = 0;
         if !self.is_output && target_y < self.state.lines.len() {
             let chars_vec: Vec<char> = self.state.lines[target_y].chars().collect();
             let mut i_char = 0;
-            let mut visual_x = 0;
-            while i_char < chars_vec.len() {
-                if i_char == self.state.cursor_x {
-                    target_x = visual_x;
-                }
+            while i_char < chars_vec.len() && i_char < target_x {
                 if i_char + 6 <= chars_vec.len()
                     && chars_vec[i_char..i_char + 6].iter().collect::<String>() == "Image:"
                 {
-                    let start_img = i_char;
                     let mut end_img = i_char + 6;
                     while end_img < chars_vec.len()
                         && (chars_vec[end_img].is_ascii_alphanumeric()
@@ -2096,38 +2144,24 @@ impl Editor {
                     {
                         end_img += 1;
                     }
-                    let b64_len = end_img - (start_img + 6);
-                    if b64_len > 10 {
-                        let collapsed_len = 12;
-                        if self.state.cursor_x > start_img && self.state.cursor_x < end_img {
-                            target_x = visual_x + collapsed_len;
-                        }
-                        visual_x += collapsed_len;
+                    if end_img - (i_char + 6) > 10 {
+                        visual_target_x += 12;
                         i_char = end_img;
                         continue;
                     }
                 }
-                visual_x += 1;
-                i_char += 1;
-            }
-            if i_char == self.state.cursor_x {
-                target_x = visual_x;
-            }
-        }
 
-        if self.is_output && !config.show_caret && !self.is_waiting_for_input {
-            if target_y > 0 && target_y == self.state.lines.len().saturating_sub(1) {
-                if self.state.lines[target_y].is_empty() {
-                    target_y -= 1;
-                    target_x = 0;
+                let mut cluster = crate::render::canvas::CharCluster::new(chars_vec[i_char]);
+                let mut k = i_char + 1;
+                while k < chars_vec.len() && crate::render::canvas::is_combining(chars_vec[k]) {
+                    cluster.push(chars_vec[k]);
+                    k += 1;
                 }
+                visual_target_x += cluster.width as usize;
+                i_char = k;
             }
-            if target_y < self.state.lines.len() {
-                let current_line_len = self.state.lines[target_y].chars().count();
-                if target_x > 0 && target_x >= current_line_len {
-                    target_x = current_line_len.saturating_sub(1);
-                }
-            }
+        } else {
+            visual_target_x = target_x;
         }
 
         let cursor_d_idx = d_lines
@@ -2152,10 +2186,10 @@ impl Editor {
             self.scroll_y = max_scroll_y;
         }
 
-        if target_x < self.scroll_x {
-            self.scroll_x = target_x;
-        } else if target_x >= self.scroll_x + text_inner_w && text_inner_w > 0 {
-            self.scroll_x = target_x - text_inner_w + 1;
+        if visual_target_x < self.scroll_x {
+            self.scroll_x = visual_target_x;
+        } else if visual_target_x >= self.scroll_x + text_inner_w && text_inner_w > 0 {
+            self.scroll_x = visual_target_x - text_inner_w + 1;
         }
 
         let mut max_line_len = if self.is_output {
@@ -2221,8 +2255,18 @@ impl Editor {
                                 continue;
                             }
                         }
-                        len += 1;
-                        i_char += 1;
+
+                        let mut cluster =
+                            crate::render::canvas::CharCluster::new(chars_vec[i_char]);
+                        let mut k = i_char + 1;
+                        while k < chars_vec.len()
+                            && crate::render::canvas::is_combining(chars_vec[k])
+                        {
+                            cluster.push(chars_vec[k]);
+                            k += 1;
+                        }
+                        len += cluster.width as usize;
+                        i_char = k;
                     }
                     len
                 })
@@ -2268,7 +2312,7 @@ impl Editor {
                     for (idx, c) in dot_str.chars().enumerate() {
                         if idx < inner_w {
                             b.put_cell(
-                                crate::Cell { c, s: prefix_style },
+                                crate::Cell::new(c, prefix_style),
                                 idx as u16 + 1,
                                 display_y as u16 + 1,
                             );
@@ -2319,7 +2363,7 @@ impl Editor {
                             s.fg = theme.editor_lne.color_at(idx, max_num_width);
                             s.md = Modifier::Bold;
                         }
-                        b.put_cell(crate::Cell { c, s }, idx as u16 + 1, display_y as u16 + 1);
+                        b.put_cell(crate::Cell::new(c, s), idx as u16 + 1, display_y as u16 + 1);
                     }
                 }
             }
@@ -2334,7 +2378,6 @@ impl Editor {
             let mut syntax_modifiers = Vec::with_capacity(128);
 
             let mut display_line = String::new();
-            let adjusted_cursor_x = target_x;
 
             if !self.is_output {
                 let chars_vec: Vec<char> = self.state.lines[i].chars().collect();
@@ -2940,12 +2983,14 @@ impl Editor {
 
                             let is_enum_variant = is_enum_prefix;
 
-                            let mut j = idx;
-                            while j < line_chars.len() && line_chars[j].is_whitespace() {
-                                j += 1;
+                            let mut skip_idx = idx;
+                            while skip_idx < line_chars.len()
+                                && line_chars[skip_idx].is_whitespace()
+                            {
+                                skip_idx += 1;
                             }
-                            let is_func = j < line_chars.len()
-                                && line_chars[j] == '('
+                            let is_func = skip_idx < line_chars.len()
+                                && line_chars[skip_idx] == '('
                                 && self.defined_functions.contains(&word_str);
 
                             let color = if is_kw || is_enum_base || is_enum_variant {
@@ -2992,157 +3037,127 @@ impl Editor {
                 }
             }
 
-            let visual_selection = if let Some((start, end)) = selection {
-                let map_to_visual = |y: usize, x: usize| -> usize {
-                    let chars_vec: Vec<char> = self.state.lines[y].chars().collect();
-                    let mut i_char = 0;
-                    let mut vis_x = 0;
-                    while i_char < chars_vec.len() {
-                        if i_char == x {
-                            return vis_x;
-                        }
-                        if i_char + 6 <= chars_vec.len()
-                            && chars_vec[i_char..i_char + 6].iter().collect::<String>() == "Image:"
-                        {
-                            let mut end_img = i_char + 6;
-                            while end_img < chars_vec.len()
-                                && (chars_vec[end_img].is_ascii_alphanumeric()
-                                    || chars_vec[end_img] == '+'
-                                    || chars_vec[end_img] == '/'
-                                    || chars_vec[end_img] == '=')
-                            {
-                                end_img += 1;
+            let mut current_x = 0;
+            let mut j = 0;
+            while j < line_chars.len() {
+                let mut cluster = crate::render::canvas::CharCluster::new(line_chars[j]);
+                let mut k = j + 1;
+                while k < line_chars.len() && crate::render::canvas::is_combining(line_chars[k]) {
+                    cluster.push(line_chars[k]);
+                    k += 1;
+                }
+
+                let char_w = cluster.width as usize;
+
+                if current_x + char_w > self.scroll_x && current_x < self.scroll_x + text_inner_w {
+                    let display_x = (current_x.saturating_sub(self.scroll_x) + prefix_width) as i16;
+
+                    let is_selected = if let Some((start, end)) = selection {
+                        let is_after_start = i > start.1 || (i == start.1 && j >= start.0);
+                        let is_before_end = i < end.1 || (i == end.1 && j < end.0);
+                        is_after_start && is_before_end
+                    } else {
+                        false
+                    };
+
+                    let mut style = Style {
+                        fg: if is_output_err_header {
+                            theme.editor_errors.color_at(j, line_chars.len())
+                        } else if is_output_err_line {
+                            let colon_idx = line_chars.iter().position(|&x| x == ':').unwrap_or(0);
+                            if j <= colon_idx {
+                                theme.editor_errors.color_at(j, colon_idx + 1)
+                            } else {
+                                Color::White
                             }
-                            if end_img - (i_char + 6) > 10 {
-                                if x > i_char && x < end_img {
-                                    return vis_x + 12;
-                                }
-                                vis_x += 12;
-                                i_char = end_img;
-                                continue;
-                            }
-                        }
-                        vis_x += 1;
-                        i_char += 1;
-                    }
-                    if i_char == x {
-                        return vis_x;
-                    }
-                    vis_x
-                };
-
-                let vis_start = if start.1 == i {
-                    map_to_visual(i, start.0)
-                } else {
-                    start.0
-                };
-                let vis_end = if end.1 == i {
-                    map_to_visual(i, end.0)
-                } else {
-                    end.0
-                };
-                Some(((vis_start, start.1), (vis_end, end.1)))
-            } else {
-                None
-            };
-
-            for (j, &c) in line_chars
-                .iter()
-                .enumerate()
-                .skip(self.scroll_x)
-                .take(text_inner_w)
-            {
-                let display_x = (j - self.scroll_x + prefix_width) as i16;
-
-                let is_selected = if let Some((start, end)) = visual_selection {
-                    let is_after_start = i > start.1 || (i == start.1 && j >= start.0);
-                    let is_before_end = i < end.1 || (i == end.1 && j < end.0);
-                    is_after_start && is_before_end
-                } else {
-                    false
-                };
-
-                let mut style = Style {
-                    fg: if is_output_err_header {
-                        theme.editor_errors.color_at(j, line_chars.len())
-                    } else if is_output_err_line {
-                        let colon_idx = line_chars.iter().position(|&x| x == ':').unwrap_or(0);
-                        if j <= colon_idx {
-                            theme.editor_errors.color_at(j, colon_idx + 1)
+                        } else if error_underline {
+                            theme.editor_errors.color_at(display_x as usize, inner_w)
+                        } else if j < syntax_colors.len() {
+                            syntax_colors[j]
                         } else {
                             Color::White
-                        }
-                    } else if error_underline {
-                        theme.editor_errors.color_at(display_x as usize, inner_w)
-                    } else if j < syntax_colors.len() {
-                        syntax_colors[j]
-                    } else {
-                        Color::White
-                    },
-                    bg: if is_selected {
-                        Color::DarkGray
-                    } else if error_bg {
-                        theme.editor_errors.color_at(display_x as usize, inner_w)
-                    } else if j < syntax_bg_colors.len() && syntax_bg_colors[j] != Color::None {
-                        syntax_bg_colors[j]
-                    } else {
-                        Color::None
-                    },
-                    md: if !is_active {
-                        Modifier::Dim
-                    } else if is_output_err_header {
-                        Modifier::Bold
-                    } else if error_underline {
-                        Modifier::Underline
-                    } else if j < syntax_modifiers.len() && syntax_modifiers[j] != Modifier::None {
-                        syntax_modifiers[j]
-                    } else {
-                        Modifier::None
-                    },
-                };
-
-                if self.mode != Mode::Search
-                    && self.mode != Mode::LineSearch
-                    && ((self.is_editing && i == self.state.cursor_y && j == adjusted_cursor_x)
-                        || (self.is_output
-                            && config.show_caret
-                            && !self.is_waiting_for_input
-                            && i == self.state.cursor_y
-                            && j == adjusted_cursor_x))
-                {
-                    style.bg = Color::White;
-                    style.fg = Color::Black;
-                }
-
-                let display_c = if c.is_control() { ' ' } else { c };
-
-                if (display_x as usize) < inner_w {
-                    b.put_cell(
-                        crate::Cell {
-                            c: display_c,
-                            s: style,
                         },
-                        display_x as u16 + 1,
-                        display_y as u16 + 1,
-                    );
+                        bg: if is_selected {
+                            Color::DarkGray
+                        } else if error_bg {
+                            theme.editor_errors.color_at(display_x as usize, inner_w)
+                        } else if j < syntax_bg_colors.len() && syntax_bg_colors[j] != Color::None {
+                            syntax_bg_colors[j]
+                        } else {
+                            Color::None
+                        },
+                        md: if !is_active {
+                            Modifier::Dim
+                        } else if is_output_err_header {
+                            Modifier::Bold
+                        } else if error_underline {
+                            Modifier::Underline
+                        } else if j < syntax_modifiers.len()
+                            && syntax_modifiers[j] != Modifier::None
+                        {
+                            syntax_modifiers[j]
+                        } else {
+                            Modifier::None
+                        },
+                    };
+
+                    let mut is_cursor = false;
+                    if self.mode != Mode::Search && self.mode != Mode::LineSearch {
+                        let show_caret = self.is_editing
+                            || (self.is_output && config.show_caret && !self.is_waiting_for_input);
+                        if show_caret && i == target_y && target_x >= j && target_x < k {
+                            is_cursor = true;
+                        }
+                    }
+
+                    if is_cursor {
+                        style.bg = Color::White;
+                        style.fg = Color::Black;
+                    }
+
+                    let display_c = if cluster.c.is_control() {
+                        ' '
+                    } else {
+                        cluster.c
+                    };
+
+                    if (display_x as usize) < inner_w {
+                        b.put_cell(
+                            crate::Cell {
+                                c: display_c,
+                                ext: cluster.ext,
+                                ext_len: cluster.ext_len,
+                                width: cluster.width,
+                                s: style,
+                            },
+                            display_x as u16 + 1,
+                            display_y as u16 + 1,
+                        );
+                        if cluster.width == 2 && (display_x as usize) + 1 < inner_w {
+                            b.put_cell(
+                                crate::Cell::dummy(),
+                                display_x as u16 + 2,
+                                display_y as u16 + 1,
+                            );
+                        }
+                    }
                 }
+
+                current_x += char_w;
+                j = k;
             }
 
-            if self.mode != Mode::Search
-                && self.mode != Mode::LineSearch
-                && ((self.is_editing)
-                    || (self.is_output && config.show_caret && !self.is_waiting_for_input))
-                && i == self.state.cursor_y
-            {
-                let line_len = line_chars.len();
-                if adjusted_cursor_x >= line_len {
-                    if adjusted_cursor_x >= self.scroll_x {
-                        let display_x = adjusted_cursor_x - self.scroll_x + prefix_width;
+            if self.mode != Mode::Search && self.mode != Mode::LineSearch {
+                let show_caret = self.is_editing
+                    || (self.is_output && config.show_caret && !self.is_waiting_for_input);
+                if show_caret && i == target_y && target_x >= line_chars.len() {
+                    if current_x >= self.scroll_x {
+                        let display_x = current_x - self.scroll_x + prefix_width;
                         if display_x < inner_w {
                             b.put_cell(
-                                crate::Cell {
-                                    c: ' ',
-                                    s: Style {
+                                crate::Cell::new(
+                                    ' ',
+                                    Style {
                                         fg: Color::Black,
                                         bg: Color::White,
                                         md: if is_active {
@@ -3151,7 +3166,7 @@ impl Editor {
                                             Modifier::Dim
                                         },
                                     },
-                                },
+                                ),
                                 display_x as u16 + 1,
                                 display_y as u16 + 1,
                             );
@@ -3180,14 +3195,14 @@ impl Editor {
 
             for (x, c) in bar_text.chars().enumerate().take(inner_w) {
                 b.put_cell(
-                    crate::Cell {
+                    crate::Cell::new(
                         c,
-                        s: Style {
+                        Style {
                             fg: Color::Black,
                             bg: bar_bg.color_at(x, inner_w),
                             md: Modifier::None,
                         },
-                    },
+                    ),
                     x as u16 + 1,
                     bar_y,
                 );
@@ -3201,14 +3216,14 @@ impl Editor {
             for (i, c) in err_str.chars().enumerate() {
                 if x < width.saturating_sub(1) {
                     b.put_cell(
-                        crate::Cell {
+                        crate::Cell::new(
                             c,
-                            s: Style {
+                            Style {
                                 fg: theme.editor_errors.color_at(i, err_len),
                                 bg: Color::None,
                                 md: Modifier::Bold,
                             },
-                        },
+                        ),
                         x,
                         height.saturating_sub(1),
                     );

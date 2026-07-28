@@ -410,6 +410,11 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
             }
 
             add_bool!(
+                "Macrostats Icons",
+                "macrostats_icons",
+                config.macrostats_icons
+            );
+            add_bool!(
                 "Edit Show Name",
                 "macrostats_edit_name",
                 config.macrostats_edit_name
@@ -563,6 +568,12 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 ),
             });
         }
+        widget_settings.push(Setting {
+            name: "Reset Widget",
+            key: "reset_widget",
+            kind: SettingType::Action,
+        });
+
         categories.push(Category {
             name: "Widget",
             settings: widget_settings,
@@ -1098,6 +1109,7 @@ pub fn settings_modal(
                 apply_setting!(config, set, parse_clamp "monitor_bar_width", monitor_bar_width, 4, 16);
                 apply_setting!(config, set, bool "monitor_icons", monitor_icons);
 
+                apply_setting!(config, set, bool "macrostats_icons", macrostats_icons);
                 apply_setting!(config, set, bool "macrostats_edit_name", macrostats_edit_name);
                 apply_setting!(config, set, choice "macrostats_edit_err", macrostats_edit_err);
                 apply_setting!(config, set, bool "macrostats_edit_created", macrostats_edit_created);
@@ -1446,9 +1458,9 @@ pub fn settings_modal(
                 let offset = i as u16;
                 if v_start_x + offset < det_box.width {
                     det_box.put_cell(
-                        Cell {
+                        Cell::new(
                             c,
-                            s: Style {
+                            Style {
                                 fg: main_view
                                     .theme
                                     .settings_options_box
@@ -1456,7 +1468,7 @@ pub fn settings_modal(
                                 bg: Color::None,
                                 md: Modifier::None,
                             },
-                        },
+                        ),
                         v_start_x + offset,
                         v_y,
                     );
@@ -1743,6 +1755,10 @@ pub fn settings_modal(
                                         "reset_editor" => {
                                             ("Reset editor settings to default\n\nAre you sure?", 8)
                                         }
+                                        "reset_widget" => (
+                                            "Reset current widget settings to default\n\nAre you sure?",
+                                            9,
+                                        ),
                                         _ => ("", 99),
                                     };
 
@@ -1781,6 +1797,8 @@ pub fn settings_modal(
                                             crate::lib::reset_macrodata();
                                         } else if action_type == 8 {
                                             config.reset_editor();
+                                        } else if action_type == 9 {
+                                            config.reset_current_widget();
                                         }
                                         config.save();
 

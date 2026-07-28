@@ -1,9 +1,98 @@
 use super::style::{Border, Color, Gradient, Modifier, Style};
 use std::io::{self, Write};
 
+pub fn char_width(c: char) -> u8 {
+    let u = c as u32;
+    if u < 0x7F {
+        return 1;
+    }
+    if u >= 0x1100 && u <= 0x115F {
+        return 2;
+    }
+    if u >= 0x2329 && u <= 0x232A {
+        return 2;
+    }
+    if u >= 0x2E80 && u <= 0x303E {
+        return 2;
+    }
+    if u >= 0x3040 && u <= 0xA4CF {
+        return 2;
+    }
+    if u >= 0xAC00 && u <= 0xD7A3 {
+        return 2;
+    }
+    if u >= 0xF900 && u <= 0xFAFF {
+        return 2;
+    }
+    if u >= 0xFE10 && u <= 0xFE19 {
+        return 2;
+    }
+    if u >= 0xFE30 && u <= 0xFE6F {
+        return 2;
+    }
+    if u >= 0xFF00 && u <= 0xFF60 {
+        return 2;
+    }
+    if u >= 0xFFE0 && u <= 0xFFE6 {
+        return 2;
+    }
+    if u >= 0x1F000 && u <= 0x1FAFF {
+        return 2;
+    }
+    if u >= 0x20000 && u <= 0x2FFFD {
+        return 2;
+    }
+    if u >= 0x30000 && u <= 0x3FFFD {
+        return 2;
+    }
+    1
+}
+
+pub fn is_combining(c: char) -> bool {
+    let u = c as u32;
+    u == 0x200D
+        || u == 0xFE0F
+        || u == 0x20E3
+        || (u >= 0x0300 && u <= 0x036F)
+        || (u >= 0x1F3FB && u <= 0x1F3FF)
+        || (u >= 0x1F1E6 && u <= 0x1F1FF)
+        || (u >= 0xE0020 && u <= 0xE007F)
+}
+
+#[derive(Clone, Copy)]
+pub struct CharCluster {
+    pub c: char,
+    pub ext: [char; 8],
+    pub ext_len: u8,
+    pub width: u8,
+}
+
+impl CharCluster {
+    pub fn new(c: char) -> Self {
+        Self {
+            c,
+            ext: ['\0'; 8],
+            ext_len: 0,
+            width: char_width(c),
+        }
+    }
+    pub fn push(&mut self, c: char) {
+        if (self.ext_len as usize) < self.ext.len() {
+            self.ext[self.ext_len as usize] = c;
+            self.ext_len += 1;
+            if c == '\u{FE0F}' && self.width == 1 {
+                self.width = 2;
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cell {
     pub c: char,
+    pub ext: [char; 8],
+    pub ext_len: u8,
+    pub width: u8,
     pub s: Style,
 }
 
@@ -28,16 +117,29 @@ pub struct Canvas {
 
 impl Cell {
     pub fn new(c: char, s: Style) -> Self {
-        Self { c, s }
+        Self {
+            c,
+            ext: ['\0'; 8],
+            ext_len: 0,
+            width: char_width(c),
+            s,
+        }
+    }
+
+    pub fn dummy() -> Self {
+        Self {
+            c: '\0',
+            ext: ['\0'; 8],
+            ext_len: 0,
+            width: 0,
+            s: Style::default(),
+        }
     }
 }
 
 impl Default for Cell {
     fn default() -> Self {
-        Self {
-            c: ' ',
-            s: Style::default(),
-        }
+        Self::new(' ', Style::default())
     }
 }
 
@@ -58,14 +160,14 @@ impl Box {
 
         if w > 0 && h > 0 {
             for x in 0..w {
-                grid[x] = Cell {
-                    c: ' ',
-                    s: Style {
+                grid[x] = Cell::new(
+                    ' ',
+                    Style {
                         fg: fg.color_at(x, w),
                         bg: bg.color_at(x, w),
                         md,
                     },
-                };
+                );
             }
 
             for y in 1..h {
@@ -124,7 +226,6 @@ impl Box {
         md: Modifier,
     ) {
         let pad = self.padding as i16;
-
         let eff_left = (pad + offset_x).max(0) as u16;
         let eff_top = (pad + offset_y).max(0) as u16;
 
@@ -138,12 +239,26 @@ impl Box {
         let mut cx = eff_left;
         let mut cy = eff_top;
 
-        let mut chars = text.chars().peekable();
+        let mut clusters = Vec::new();
+        let mut raw_chars = text.chars().peekable();
+        while let Some(c) = raw_chars.next() {
+            let mut cluster = CharCluster::new(c);
+            while let Some(&nc) = raw_chars.peek() {
+                if is_combining(nc) {
+                    cluster.push(nc);
+                    raw_chars.next();
+                } else {
+                    break;
+                }
+            }
+            clusters.push(cluster);
+        }
 
-        let text_len = text.chars().count().max(1);
+        let text_len = clusters.len().max(1);
         let mut text_idx = 0;
+        let mut iter = clusters.into_iter().peekable();
 
-        while let Some(&c) = chars.peek() {
+        while let Some(cluster) = iter.peek().cloned() {
             if cy >= max_y {
                 break;
             }
@@ -156,20 +271,19 @@ impl Box {
                 md,
             };
 
-            if c == '\n' {
+            if cluster.c == '\n' {
                 cy += 1;
                 cx = eff_left;
-                chars.next();
+                iter.next();
                 text_idx += 1;
                 continue;
             }
 
-            if c == '\t' {
+            if cluster.c == '\t' {
                 let tab_spaces = 4 - ((cx - eff_left) % 4);
                 for _ in 0..tab_spaces {
                     if cx < max_x {
-                        let cell = Cell { c: ' ', s: style };
-                        self.put_cell(cell, cx, cy);
+                        self.put_cell(Cell::new(' ', style), cx, cy);
                         cx += 1;
                     }
                 }
@@ -177,51 +291,67 @@ impl Box {
                     cx = eff_left;
                     cy += 1;
                 }
-                chars.next();
+                iter.next();
                 text_idx += 1;
                 continue;
             }
 
-            if c.is_control() {
-                chars.next();
+            if cluster.c.is_control() {
+                iter.next();
                 text_idx += 1;
                 continue;
             }
 
             if !word_wrap {
-                let cell = Cell { c, s: style };
-                self.put_cell(cell, cx, cy);
-
-                cx += 1;
-                if cx >= max_x {
+                if cluster.width == 2 && cx + 1 >= max_x {
+                    self.put_cell(Cell::new(' ', style), cx, cy);
                     cx = eff_left;
                     cy += 1;
-                }
-                chars.next();
-                text_idx += 1;
-            } else {
-                if c.is_whitespace() {
-                    if cx > eff_left && cx < max_x {
-                        let cell = Cell { c, s: style };
-                        self.put_cell(cell, cx, cy);
+                } else {
+                    let cell = Cell {
+                        c: cluster.c,
+                        ext: cluster.ext,
+                        ext_len: cluster.ext_len,
+                        width: cluster.width,
+                        s: style,
+                    };
+                    self.put_cell(cell, cx, cy);
+                    cx += 1;
+                    if cluster.width == 2 {
+                        self.put_cell(Cell::dummy(), cx, cy);
                         cx += 1;
                     }
-                    chars.next();
+                    if cx >= max_x {
+                        cx = eff_left;
+                        cy += 1;
+                    }
+                }
+                iter.next();
+                text_idx += 1;
+            } else {
+                if cluster.c.is_whitespace() {
+                    if cx > eff_left && cx < max_x {
+                        self.put_cell(Cell::new(cluster.c, style), cx, cy);
+                        cx += 1;
+                    }
+                    iter.next();
                     text_idx += 1;
                     continue;
                 }
 
-                let mut lookahead = chars.clone();
+                let mut lookahead = iter.clone();
+                let mut word_width = 0;
                 let mut word_len = 0;
-                while let Some(&lc) = lookahead.peek() {
-                    if lc.is_whitespace() || lc.is_control() {
+                while let Some(lc) = lookahead.peek() {
+                    if lc.c.is_whitespace() || lc.c.is_control() {
                         break;
                     }
+                    word_width += lc.width as u16;
                     word_len += 1;
                     lookahead.next();
                 }
 
-                if cx + word_len > max_x && cx > eff_left {
+                if cx + word_width > max_x && cx > eff_left {
                     cx = eff_left;
                     cy += 1;
                     if cy >= max_y {
@@ -233,21 +363,47 @@ impl Box {
                     if cy >= max_y {
                         break;
                     }
+                    let next_cluster = iter.next().unwrap();
                     let cfg = fg.color_at(text_idx, text_len);
                     let cbg = bg.color_at(text_idx, text_len);
-                    let cell = Cell {
-                        c: chars.next().unwrap(),
-                        s: Style {
-                            fg: cfg,
-                            bg: cbg,
-                            md,
-                        },
-                    };
-                    self.put_cell(cell, cx, cy);
-                    cx += 1;
-                    if cx >= max_x {
+
+                    if next_cluster.width == 2 && cx + 1 >= max_x {
+                        self.put_cell(
+                            Cell::new(
+                                ' ',
+                                Style {
+                                    fg: cfg,
+                                    bg: cbg,
+                                    md,
+                                },
+                            ),
+                            cx,
+                            cy,
+                        );
                         cx = eff_left;
                         cy += 1;
+                    } else {
+                        let cell = Cell {
+                            c: next_cluster.c,
+                            ext: next_cluster.ext,
+                            ext_len: next_cluster.ext_len,
+                            width: next_cluster.width,
+                            s: Style {
+                                fg: cfg,
+                                bg: cbg,
+                                md,
+                            },
+                        };
+                        self.put_cell(cell, cx, cy);
+                        cx += 1;
+                        if next_cluster.width == 2 {
+                            self.put_cell(Cell::dummy(), cx, cy);
+                            cx += 1;
+                        }
+                        if cx >= max_x {
+                            cx = eff_left;
+                            cy += 1;
+                        }
                     }
                     text_idx += 1;
                 }
@@ -326,13 +482,7 @@ impl Canvas {
         Self {
             width,
             height,
-            old: vec![
-                Cell {
-                    c: '\0',
-                    s: Style::default()
-                };
-                size
-            ],
+            old: vec![Cell::dummy(); size],
             new: vec![Cell::default(); size],
             buffer: Vec::with_capacity(size * 16),
             needs_clear: false,
@@ -356,12 +506,52 @@ impl Canvas {
         let mut cur_md = Modifier::None;
         let mut cursor_x: u16 = u16::MAX;
         let mut cursor_y: u16 = u16::MAX;
+
         let width = self.width;
         let mut x: u16 = 0;
         let mut y: u16 = 0;
 
-        for (old_cell, new_cell) in self.old.iter_mut().zip(self.new.iter()) {
+        while (y as usize) < (self.height as usize) {
+            let idx = (y as usize) * (width as usize) + (x as usize);
+            let old_cell = &self.old[idx];
+            let new_cell = &self.new[idx];
+
             if old_cell != new_cell {
+                if new_cell.width == 0 {
+                    let is_orphaned = x == 0 || self.new[idx - 1].width != 2;
+                    if is_orphaned {
+                        if cursor_x != x || cursor_y != y {
+                            self.buffer.extend_from_slice(b"\x1b[");
+                            push_num_u16(&mut self.buffer, y + 1);
+                            self.buffer.push(b';');
+                            push_num_u16(&mut self.buffer, x + 1);
+                            self.buffer.push(b'H');
+                        }
+                        if cur_md != Modifier::None
+                            || cur_bg != Color::None
+                            || cur_fg != Color::None
+                        {
+                            self.buffer.extend_from_slice(b"\x1b[0m");
+                            cur_md = Modifier::None;
+                            cur_fg = Color::None;
+                            cur_bg = Color::None;
+                        }
+                        self.buffer.extend_from_slice(b" ");
+                        cursor_x = x + 1;
+                        cursor_y = y;
+                        if cursor_x >= width {
+                            cursor_x = u16::MAX;
+                        }
+                    }
+                    self.old[idx] = *new_cell;
+                    x += 1;
+                    if x >= width {
+                        x = 0;
+                        y += 1;
+                    }
+                    continue;
+                }
+
                 if cursor_x != x || cursor_y != y {
                     self.buffer.extend_from_slice(b"\x1b[");
                     push_num_u16(&mut self.buffer, y + 1);
@@ -396,13 +586,15 @@ impl Canvas {
                 let mut char_buf = [0; 4];
                 self.buffer
                     .extend_from_slice(new_cell.c.encode_utf8(&mut char_buf).as_bytes());
-
-                cursor_x = x + 1;
-                cursor_y = y;
-                if cursor_x >= width {
-                    cursor_x = u16::MAX;
+                for i in 0..new_cell.ext_len as usize {
+                    self.buffer
+                        .extend_from_slice(new_cell.ext[i].encode_utf8(&mut char_buf).as_bytes());
                 }
-                *old_cell = *new_cell;
+
+                cursor_x = x + new_cell.width as u16;
+                cursor_y = y;
+
+                self.old[idx] = *new_cell;
             }
 
             x += 1;
@@ -427,13 +619,7 @@ impl Canvas {
         self.old.clear();
         self.new.clear();
 
-        self.old.resize(
-            size,
-            Cell {
-                c: '\0',
-                s: Style::default(),
-            },
-        );
+        self.old.resize(size, Cell::dummy());
         self.new.resize(size, Cell::default());
 
         self.needs_clear = true;

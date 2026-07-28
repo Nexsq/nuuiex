@@ -1,6 +1,4 @@
-- add emoji support
 - redesign settings
-- add reset deck in settings
 - add moving macros in and out of directories
 - add default output color (in themes)
-- reset keybinds for some reason closes all macros
+- add cursor color (in themes)

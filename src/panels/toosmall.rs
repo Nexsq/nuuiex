@@ -174,26 +174,26 @@ pub fn run(
                 let right_arr_x = current_w.saturating_sub(1).saturating_sub(left_arr_x);
 
                 warning_box.put_cell(
-                    Cell {
-                        c: '◀',
-                        s: Style {
+                    Cell::new(
+                        '◀',
+                        Style {
                             fg: Color::White,
                             bg: Color::None,
                             md: Modifier::Bold,
                         },
-                    },
+                    ),
                     left_arr_x,
                     line1_y,
                 );
                 warning_box.put_cell(
-                    Cell {
-                        c: '▶',
-                        s: Style {
+                    Cell::new(
+                        '▶',
+                        Style {
                             fg: Color::White,
                             bg: Color::None,
                             md: Modifier::Bold,
                         },
-                    },
+                    ),
                     right_arr_x,
                     line1_y,
                 );
@@ -205,26 +205,26 @@ pub fn run(
                 let bot_arr_y = current_h.saturating_sub(1).saturating_sub(top_arr_y);
 
                 warning_box.put_cell(
-                    Cell {
-                        c: '▲',
-                        s: Style {
+                    Cell::new(
+                        '▲',
+                        Style {
                             fg: Color::White,
                             bg: Color::None,
                             md: Modifier::Bold,
                         },
-                    },
+                    ),
                     center_x,
                     top_arr_y,
                 );
                 warning_box.put_cell(
-                    Cell {
-                        c: '▼',
-                        s: Style {
+                    Cell::new(
+                        '▼',
+                        Style {
                             fg: Color::White,
                             bg: Color::None,
                             md: Modifier::Bold,
                         },
-                    },
+                    ),
                     center_x,
                     bot_arr_y,
                 );

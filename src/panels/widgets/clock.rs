@@ -155,14 +155,14 @@ pub fn draw(state: &ClockState, b: &mut Box, config: &Config, theme: &Theme) {
                                     .clock_time_color
                                     .color_at((local_x - time_x) as usize, time_w);
                                 b.put_cell(
-                                    crate::Cell {
-                                        c: ch,
-                                        s: Style {
+                                    crate::Cell::new(
+                                        ch,
+                                        Style {
                                             fg,
                                             bg: Color::None,
                                             md: Modifier::None,
                                         },
-                                    },
+                                    ),
                                     screen_x,
                                     screen_y,
                                 );
@@ -190,14 +190,14 @@ pub fn draw(state: &ClockState, b: &mut Box, config: &Config, theme: &Theme) {
                                     .clock_time_color
                                     .color_at((local_x - time_x) as usize, time_w);
                                 b.put_cell(
-                                    crate::Cell {
-                                        c: ch,
-                                        s: Style {
+                                    crate::Cell::new(
+                                        ch,
+                                        Style {
                                             fg,
                                             bg: Color::None,
                                             md: Modifier::None,
                                         },
-                                    },
+                                    ),
                                     screen_x,
                                     screen_y,
                                 );
@@ -219,14 +219,14 @@ pub fn draw(state: &ClockState, b: &mut Box, config: &Config, theme: &Theme) {
                             .clock_time_color
                             .color_at((local_x - time_x) as usize, time_w);
                         b.put_cell(
-                            crate::Cell {
+                            crate::Cell::new(
                                 c,
-                                s: Style {
+                                Style {
                                     fg,
                                     bg: Color::None,
                                     md: Modifier::None,
                                 },
-                            },
+                            ),
                             screen_x,
                             screen_y,
                         );

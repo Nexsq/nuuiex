@@ -960,7 +960,7 @@ pub fn draw(
     for (i, (c, style)) in final_cells.into_iter().enumerate() {
         let cx = x + i as u16;
         if cx < b.width.saturating_sub(b.padding) {
-            b.put_cell(crate::Cell { c, s: style }, cx, y);
+            b.put_cell(crate::Cell::new(c, style), cx, y);
         }
     }
 }

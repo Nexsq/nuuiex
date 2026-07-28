@@ -169,7 +169,11 @@ pub fn draw(
 
     let mut lines_to_draw: Vec<Vec<(char, Style)>> = Vec::new();
 
-    let gap_str = if config.monitor_icons { "   " } else { "     " };
+    let gap_str = if config.macrostats_icons {
+        "   "
+    } else {
+        "     "
+    };
     let push_gap = |l: &mut Vec<(char, Style)>| {
         if !l.is_empty() {
             push_text(l, gap_str, &bg_none, &bg_none, Modifier::None);
@@ -188,8 +192,8 @@ pub fn draw(
             let mut line1 = Vec::new();
 
             if config.macrostats_edit_name {
-                let lbl = if config.monitor_icons {
-                    "▪ "
+                let lbl = if config.macrostats_icons {
+                    "■ "
                 } else {
                     "File: "
                 };
@@ -255,8 +259,8 @@ pub fn draw(
                 push_gap(&mut line0);
                 err_chart_align_idx = line0.len();
 
-                let lbl = if config.monitor_icons {
-                    "⚠ "
+                let lbl = if config.macrostats_icons {
+                    "× "
                 } else {
                     "Errors: "
                 };
@@ -277,8 +281,8 @@ pub fn draw(
 
             if config.macrostats_edit_created && state.last_path.is_some() {
                 push_gap(&mut line0);
-                let lbl = if config.monitor_icons {
-                    "⌚ "
+                let lbl = if config.macrostats_icons {
+                    "○ "
                 } else {
                     "Created: "
                 };
@@ -294,8 +298,8 @@ pub fn draw(
 
             if config.macrostats_edit_lines {
                 push_gap(&mut line0);
-                let lbl = if config.monitor_icons {
-                    "☰ "
+                let lbl = if config.macrostats_icons {
+                    "≡ "
                 } else {
                     "Lines: "
                 };
@@ -311,8 +315,8 @@ pub fn draw(
 
             if config.macrostats_edit_code {
                 push_gap(&mut line0);
-                let lbl = if config.monitor_icons {
-                    "≣ "
+                let lbl = if config.macrostats_icons {
+                    "≡ "
                 } else {
                     "Code: "
                 };
@@ -405,7 +409,15 @@ pub fn draw(
 
             match info {
                 MacroInfo::None => {
-                    add_item("Status: ", "Idle", true);
+                    add_item(
+                        if config.macrostats_icons {
+                            "▶ "
+                        } else {
+                            "Status: "
+                        },
+                        "Idle",
+                        true,
+                    );
                 }
                 MacroInfo::Library {
                     name,
@@ -413,8 +425,8 @@ pub fn draw(
                     is_running,
                 } => {
                     add_item(
-                        if config.monitor_icons {
-                            "▪ "
+                        if config.macrostats_icons {
+                            "■ "
                         } else {
                             "Name: "
                         },
@@ -422,8 +434,8 @@ pub fn draw(
                         config.macrostats_lib_name,
                     );
                     add_item(
-                        if config.monitor_icons {
-                            "⌚ "
+                        if config.macrostats_icons {
+                            "○ "
                         } else {
                             "Created: "
                         },
@@ -431,8 +443,8 @@ pub fn draw(
                         config.macrostats_lib_created,
                     );
                     add_item(
-                        if config.monitor_icons {
-                            "▤ "
+                        if config.macrostats_icons {
+                            "▣ "
                         } else {
                             "Size: "
                         },
@@ -441,7 +453,7 @@ pub fn draw(
                     );
                     let status = if *is_running { "Running" } else { "Stopped" };
                     add_item(
-                        if config.monitor_icons {
+                        if config.macrostats_icons {
                             "▶ "
                         } else {
                             "Status: "
@@ -456,7 +468,7 @@ pub fn draw(
                     cpu_usage,
                 } => {
                     add_item(
-                        if config.monitor_icons {
+                        if config.macrostats_icons {
                             "▶ "
                         } else {
                             "Running: "
@@ -473,8 +485,8 @@ pub fn draw(
                         format!("{:02}:{:02}", mins, secs)
                     };
                     add_item(
-                        if config.monitor_icons {
-                            "⌚ "
+                        if config.macrostats_icons {
+                            "○ "
                         } else {
                             "Elapsed: "
                         },
@@ -482,7 +494,7 @@ pub fn draw(
                         config.macrostats_run_elapsed,
                     );
                     add_item(
-                        if config.monitor_icons {
+                        if config.macrostats_icons {
                             "◈ "
                         } else {
                             "CPU: "
@@ -513,7 +525,7 @@ pub fn draw(
         for (i, (c, style)) in line.into_iter().enumerate() {
             let cx = start_x + i as u16;
             if cx < b.width.saturating_sub(b.padding) && y < b.height.saturating_sub(b.padding) {
-                b.put_cell(crate::Cell { c, s: style }, cx, y);
+                b.put_cell(crate::Cell::new(c, style), cx, y);
             }
         }
     }

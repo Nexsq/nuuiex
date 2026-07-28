@@ -190,7 +190,7 @@ pub fn draw(state: &KeyvisState, b: &mut Box, config: &Config, theme: &Theme) {
                             bg: original_bg,
                             md: Modifier::None,
                         };
-                        b.grid[target_idx] = Cell { c: ch, s: style };
+                        b.grid[target_idx] = Cell::new(ch, style);
                     }
                 }
             }

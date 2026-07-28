@@ -5,6 +5,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender};
 
+#[cfg(target_os = "linux")]
+use crate::editor::{build_clipboard_cmd, fix_x11_sudo_env, is_wayland_session};
+
 #[cfg(windows)]
 struct WinKeyInfo {
     vk: u16,
@@ -685,7 +688,7 @@ fn check_x11_key_down(key_str: &str) -> Option<bool> {
     use libc::{RTLD_LAZY, c_void, dlclose, dlopen, dlsym};
 
     unsafe {
-        if std::env::var("WAYLAND_DISPLAY").is_ok() || libc::geteuid() == 0 {
+        if is_wayland_session() || libc::geteuid() == 0 {
             return None;
         }
 
@@ -1093,7 +1096,7 @@ fn simulate_key(key: &str, down: bool) -> Result<(), String> {
     }
 
     let action = if down { "keydown" } else { "keyup" };
-    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+    if is_wayland_session() {
         Err("uinput failed. Run with sudo for keyboard simulation on Wayland.".into())
     } else {
         if std::process::Command::new("xdotool")
@@ -1187,7 +1190,7 @@ fn simulate_write(text: &str) -> Result<(), String> {
         return Ok(());
     }
 
-    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+    if is_wayland_session() {
         if std::process::Command::new("ydotool")
             .args(["type", text])
             .output()
@@ -1430,11 +1433,8 @@ fn get_mouse_pos() -> Result<(i32, i32), String> {
 
 #[cfg(target_os = "linux")]
 fn get_mouse_pos() -> Result<(i32, i32), String> {
-    if std::env::var("WAYLAND_DISPLAY").is_ok() {
-        if let Ok(output) = std::process::Command::new("hyprctl")
-            .arg("cursorpos")
-            .output()
-        {
+    if is_wayland_session() {
+        if let Ok(output) = build_clipboard_cmd("hyprctl", &["cursorpos"]).output() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let parts: Vec<&str> = stdout.trim().split(',').collect();
             if parts.len() == 2 {
@@ -1447,7 +1447,8 @@ fn get_mouse_pos() -> Result<(i32, i32), String> {
 
     use libc::{RTLD_LAZY, c_void, dlclose, dlopen, dlsym};
     unsafe {
-        if std::env::var("WAYLAND_DISPLAY").is_err() && libc::geteuid() != 0 {
+        if !is_wayland_session() {
+            fix_x11_sudo_env();
             let libx11 = dlopen(b"libX11.so.6\0".as_ptr() as *const i8, RTLD_LAZY);
             if !libx11.is_null() {
                 let xopen_sym = dlsym(libx11, b"XOpenDisplay\0".as_ptr() as *const i8);
@@ -1582,11 +1583,8 @@ fn get_screen_size() -> Result<(i32, i32), String> {
         }
     }
 
-    if std::env::var("WAYLAND_DISPLAY").is_ok() {
-        if let Ok(output) = std::process::Command::new("hyprctl")
-            .arg("monitors")
-            .output()
-        {
+    if is_wayland_session() {
+        if let Ok(output) = build_clipboard_cmd("hyprctl", &["monitors"]).output() {
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 for line in stdout.lines() {
@@ -1597,6 +1595,33 @@ fn get_screen_size() -> Result<(i32, i32), String> {
                                 let w_str = &trimmed[..x_idx];
                                 let h_str = &trimmed[x_idx + 1..at_idx];
                                 if let (Ok(w), Ok(h)) = (w_str.parse(), h_str.parse()) {
+                                    return Ok((w, h));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if let Ok(entries) = std::fs::read_dir("/sys/class/drm") {
+        for entry in entries.filter_map(Result::ok) {
+            let status_path = entry.path().join("status");
+            if let Ok(status) = std::fs::read_to_string(status_path) {
+                if status.trim() == "connected" {
+                    let modes_path = entry.path().join("modes");
+                    if let Ok(modes) = std::fs::read_to_string(modes_path) {
+                        if let Some(first_line) = modes.lines().next() {
+                            let dims: Vec<&str> = first_line.split('x').collect();
+                            if dims.len() == 2 {
+                                let w_str = dims[0];
+                                let h_str = dims[1]
+                                    .chars()
+                                    .take_while(|c| c.is_ascii_digit())
+                                    .collect::<String>();
+                                if let (Ok(w), Ok(h)) = (w_str.parse::<i32>(), h_str.parse::<i32>())
+                                {
                                     return Ok((w, h));
                                 }
                             }
@@ -1659,11 +1684,8 @@ fn get_focused_window() -> Result<String, String> {
 
 #[cfg(target_os = "linux")]
 fn get_focused_window() -> Result<String, String> {
-    if std::env::var("WAYLAND_DISPLAY").is_ok() {
-        if let Ok(output) = std::process::Command::new("hyprctl")
-            .arg("activewindow")
-            .output()
-        {
+    if is_wayland_session() {
+        if let Ok(output) = build_clipboard_cmd("hyprctl", &["activewindow"]).output() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines() {
                 let trimmed = line.trim();
@@ -1852,17 +1874,14 @@ impl Drop for X11PixelContext {
 
 #[cfg(target_os = "linux")]
 fn get_screen_pixel(x: i32, y: i32) -> Result<(u8, u8, u8), String> {
-    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+    if is_wayland_session() {
         return Err(
             "getpixel is not supported on Wayland (requires compositor-specific tools)."
                 .to_string(),
         );
     }
-    unsafe {
-        if libc::geteuid() == 0 {
-            return Err("Cannot use getpixel as root due to XAUTHORITY restrictions.".to_string());
-        }
-    }
+
+    fix_x11_sudo_env();
 
     use libc::{RTLD_LAZY, dlclose, dlopen, dlsym};
 
@@ -2253,14 +2272,11 @@ fn search_screen_image(
         return Ok(None);
     }
 
-    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+    if is_wayland_session() {
         return Err("imgsearch is not supported on Wayland".to_string());
     }
-    unsafe {
-        if libc::geteuid() == 0 {
-            return Err("Cannot use imgsearch as root due to XAUTHORITY restrictions.".to_string());
-        }
-    }
+
+    fix_x11_sudo_env();
 
     thread_local! {
         static X11_IMG_CTX: std::cell::RefCell<Option<Result<X11PixelContext, String>>> = std::cell::RefCell::new(None);
@@ -2656,16 +2672,11 @@ fn search_screen_pixels(
         return Ok(None);
     }
 
-    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+    if is_wayland_session() {
         return Err("pixelsearch is not supported on Wayland".to_string());
     }
-    unsafe {
-        if libc::geteuid() == 0 {
-            return Err(
-                "Cannot use pixelsearch as root due to XAUTHORITY restrictions.".to_string(),
-            );
-        }
-    }
+
+    fix_x11_sudo_env();
 
     thread_local! {
         static X11_SEARCH_CTX: std::cell::RefCell<Option<Result<X11PixelContext, String>>> = std::cell::RefCell::new(None);
@@ -2904,7 +2915,7 @@ fn set_mouse_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
             return Ok(());
         }
 
-        if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        if is_wayland_session() {
             if let Ok(output) = std::process::Command::new("ydotool")
                 .args(["mousemove", "-x", &x.to_string(), "-y", &y.to_string()])
                 .output()
@@ -2926,7 +2937,7 @@ fn set_mouse_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
             Err("Failed to set relative mouse pos. Run with sudo or install xdotool.".to_string())
         }
     } else {
-        if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        if is_wayland_session() {
             if let Ok(output) = std::process::Command::new("ydotool")
                 .args(["mousemove", "-a", &x.to_string(), &y.to_string()])
                 .output()
@@ -2940,11 +2951,7 @@ fn set_mouse_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
 
         use libc::{RTLD_LAZY, c_void, dlclose, dlopen, dlsym};
         unsafe {
-            if libc::geteuid() == 0 {
-                return Err(
-                    "Cannot use set_mouse_pos as root due to XAUTHORITY restrictions.".to_string(),
-                );
-            }
+            fix_x11_sudo_env();
             let libx11 = dlopen(b"libX11.so.6\0".as_ptr() as *const i8, RTLD_LAZY);
             if !libx11.is_null() {
                 let xopen_sym = dlsym(libx11, b"XOpenDisplay\0".as_ptr() as *const i8);
