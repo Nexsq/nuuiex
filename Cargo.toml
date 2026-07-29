@@ -8,7 +8,7 @@ portable = []
 
 [dependencies]
 directories = "6.0"
-arboard = { version = "3.4", default-features = false }
+arboard = { version = "3.6", default-features = false }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 
