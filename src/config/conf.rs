@@ -5,6 +5,10 @@ const DEFAULT_CONFIG: &str = include_str!("template.conf");
 
 #[derive(Debug, Clone)]
 pub struct Config {
+    pub settings_style: String,
+    pub setting_indicator_choice: String,
+    pub setting_indicator_custom: String,
+    pub fancy_bools: bool,
     pub indicator_style: String,
     pub border_style: String,
     pub theme: String,
@@ -98,6 +102,10 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         let mut config = Self {
+            settings_style: String::new(),
+            setting_indicator_choice: String::new(),
+            setting_indicator_custom: String::new(),
+            fancy_bools: false,
             indicator_style: String::new(),
             border_style: String::new(),
             theme: String::new(),
@@ -216,6 +224,10 @@ impl Config {
                 val = val.split_once(" #").map_or(val, |(v, _)| v).trim();
 
                 match key {
+                    "settings_style" => self.settings_style = val.to_string(),
+                    "setting_indicator_choice" => self.setting_indicator_choice = val.to_string(),
+                    "setting_indicator_custom" => self.setting_indicator_custom = val.to_string(),
+                    "fancy_bools" => self.fancy_bools = val.parse().unwrap_or(self.fancy_bools),
                     "indicator_style" => self.indicator_style = val.to_string(),
                     "border_style" => self.border_style = val.to_string(),
                     "theme" => self.theme = val.to_string(),
@@ -571,6 +583,14 @@ impl Config {
         self.show_caret = default.show_caret;
     }
 
+    pub fn reset_settings_menu(&mut self) {
+        let default = Config::default();
+        self.settings_style = default.settings_style;
+        self.setting_indicator_choice = default.setting_indicator_choice;
+        self.setting_indicator_custom = default.setting_indicator_custom;
+        self.fancy_bools = default.fancy_bools;
+    }
+
     pub fn reset_deck(&mut self) {
         let default = Config::default();
         self.deck_mode = default.deck_mode;
@@ -739,6 +759,28 @@ impl Config {
                 };
 
                 match key_str {
+                    "settings_style" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.settings_style, comment
+                    )
+                    .unwrap(),
+                    "setting_indicator_choice" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.setting_indicator_choice, comment
+                    )
+                    .unwrap(),
+                    "setting_indicator_custom" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.setting_indicator_custom, comment
+                    )
+                    .unwrap(),
+                    "fancy_bools" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.fancy_bools, comment)
+                            .unwrap()
+                    }
                     "indicator_style" => writeln!(
                         &mut output,
                         "{} = {}{}",

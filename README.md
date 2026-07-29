@@ -383,6 +383,8 @@ tab_selected = Yellow
 settings_entry = White
 settings_selected = Green
 settings_special = Red
+fancy_bools_true = Green
+fancy_bools_false = Red
 
 editor_ins = Magenta
 editor_cmd = Blue

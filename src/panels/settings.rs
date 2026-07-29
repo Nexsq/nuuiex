@@ -146,6 +146,73 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
     });
 
     categories.push(Category {
+        name: "Settings",
+        settings: vec![
+            Setting {
+                name: "Settings Style",
+                key: "settings_style",
+                kind: SettingType::Choice(
+                    vec![
+                        "inline".to_string(),
+                        "aligned".to_string(),
+                        "right".to_string(),
+                    ],
+                    match config.settings_style.as_str() {
+                        "aligned" => 1,
+                        "right" => 2,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "Choice Indicator",
+                key: "setting_indicator_choice",
+                kind: SettingType::Choice(
+                    vec![
+                        "modern".to_string(),
+                        "classic".to_string(),
+                        "none".to_string(),
+                    ],
+                    match config.setting_indicator_choice.as_str() {
+                        "classic" => 1,
+                        "none" => 2,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "Custom Indicator",
+                key: "setting_indicator_custom",
+                kind: SettingType::Choice(
+                    vec![
+                        "modern".to_string(),
+                        "classic".to_string(),
+                        "none".to_string(),
+                    ],
+                    match config.setting_indicator_custom.as_str() {
+                        "classic" => 1,
+                        "none" => 2,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "Fancy Bools",
+                key: "fancy_bools",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.fancy_bools { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Reset Settings Menu",
+                key: "reset_settings_menu",
+                kind: SettingType::Action,
+            },
+        ],
+    });
+
+    categories.push(Category {
         name: "Deck",
         settings: {
             let mut s = vec![Setting {
@@ -1035,6 +1102,8 @@ pub fn settings_modal(
     let version_str = format!(" v{} ", env!("CARGO_PKG_VERSION"));
     let version_len = version_str.chars().count() as u16;
 
+    let mut last_blink = false;
+
     macro_rules! apply_setting {
         ($config:expr, $set:expr, char $key:expr, $field:ident) => {
             if $set.key == $key {
@@ -1095,6 +1164,10 @@ pub fn settings_modal(
     let apply_settings = |categories: &[Category], config: &mut Config| {
         for cat in categories {
             for set in &cat.settings {
+                apply_setting!(config, set, choice "settings_style", settings_style);
+                apply_setting!(config, set, choice "setting_indicator_choice", setting_indicator_choice);
+                apply_setting!(config, set, choice "setting_indicator_custom", setting_indicator_custom);
+                apply_setting!(config, set, bool "fancy_bools", fancy_bools);
                 apply_setting!(config, set, choice "theme", theme);
                 apply_setting!(config, set, choice "border_style", border_style);
                 apply_setting!(config, set, choice "indicator_style", indicator_style);
@@ -1191,6 +1264,16 @@ pub fn settings_modal(
 
         if current_w != canvas.width || current_h != canvas.height {
             canvas.resize(current_w, current_h);
+            dirty = true;
+        }
+
+        let time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let current_blink = time % 1000 < 500;
+        if edit_mode && current_blink != last_blink {
+            last_blink = current_blink;
             dirty = true;
         }
 
@@ -1389,6 +1472,12 @@ pub fn settings_modal(
             det_scroll[cat_selected] = current_det_scroll;
 
             let max_det_len = right_w.saturating_sub(2) as usize;
+            let target_width = max_det_len.saturating_sub(2);
+            let max_name_len = current_settings
+                .iter()
+                .map(|s| s.name.chars().count() + 1)
+                .max()
+                .unwrap_or(0);
 
             for (i, setting) in current_settings
                 .iter()
@@ -1428,29 +1517,97 @@ pub fn settings_modal(
                     }
                 }
 
+                let (cho_l, cho_r) = match config.setting_indicator_choice.as_str() {
+                    "classic" => ("› ", " ‹"),
+                    "none" => ("  ", "  "),
+                    _ => ("▶ ", " ◀"),
+                };
+                let pad_cho_l = " ".repeat(cho_l.chars().count());
+
+                let (cus_l, cus_r) = match config.setting_indicator_custom.as_str() {
+                    "classic" => ("» ", " «"),
+                    "none" => ("  ", "  "),
+                    _ => ("❯ ", " ❮"),
+                };
+                let pad_cus_l = " ".repeat(cus_l.chars().count());
+
+                let mut is_fancy_bool = false;
+                let mut bool_val = false;
+
                 let mut text = match &setting.kind {
                     SettingType::Action => setting.name.to_string(),
                     _ => {
                         let val_str = match &setting.kind {
                             SettingType::Choice(opts, idx) => {
+                                let mut disp_val = opts[*idx].clone();
+                                if config.fancy_bools
+                                    && opts.len() == 2
+                                    && opts[0] == "true"
+                                    && opts[1] == "false"
+                                {
+                                    is_fancy_bool = true;
+                                    bool_val = *idx == 0;
+                                    disp_val = "[▪]".to_string();
+                                }
+
                                 if is_selected && det_active {
-                                    format!("< {} >", opts[*idx])
+                                    if config.settings_style == "inline" {
+                                        format!("{}{}", disp_val, cho_r)
+                                    } else if config.settings_style == "aligned" {
+                                        format!("{}{}{}", cho_l, disp_val, cho_r)
+                                    } else {
+                                        format!("{}{}", cho_l, disp_val)
+                                    }
+                                } else if config.settings_style == "inline" {
+                                    format!("{}", disp_val)
                                 } else {
-                                    format!("{}", opts[*idx])
+                                    format!("{}{}", pad_cho_l, disp_val)
                                 }
                             }
                             SettingType::Custom { value, .. } => {
                                 if edit_mode && is_selected && det_active {
-                                    format!("[ {}_ ]", edit_buffer)
+                                    let cursor_char = if last_blink { '_' } else { ' ' };
+                                    if config.settings_style == "inline" {
+                                        format!("{}{}{}", edit_buffer, cursor_char, cus_r)
+                                    } else if config.settings_style == "aligned" {
+                                        format!("{}{}{}{}", cus_l, edit_buffer, cursor_char, cus_r)
+                                    } else {
+                                        format!("{}{}{}", cus_l, edit_buffer, cursor_char)
+                                    }
                                 } else if is_selected && det_active {
-                                    format!("[ {} ]", value)
-                                } else {
+                                    if config.settings_style == "inline" {
+                                        format!("{}{}", value, cus_r)
+                                    } else if config.settings_style == "aligned" {
+                                        format!("{}{}{}", cus_l, value, cus_r)
+                                    } else {
+                                        format!("{}{}", cus_l, value)
+                                    }
+                                } else if config.settings_style == "inline" {
                                     format!("{}", value)
+                                } else {
+                                    format!("{}{}", pad_cus_l, value)
                                 }
                             }
                             SettingType::Action => unreachable!(),
                         };
-                        format!("{}: {}", setting.name, val_str)
+
+                        let name_str = format!("{}:", setting.name);
+                        let name_len = name_str.chars().count();
+                        let val_len = val_str.chars().count();
+
+                        if config.settings_style == "right" {
+                            if name_len + val_len >= target_width {
+                                format!("{} {}", name_str, val_str)
+                            } else {
+                                let spaces = target_width.saturating_sub(name_len + val_len);
+                                format!("{}{}{}", name_str, " ".repeat(spaces), val_str)
+                            }
+                        } else if config.settings_style == "aligned" {
+                            let name_pad = max_name_len.saturating_sub(name_len);
+                            format!("{}{} {}", name_str, " ".repeat(name_pad), val_str)
+                        } else {
+                            format!("{} {}", name_str, val_str)
+                        }
                     }
                 };
 
@@ -1459,9 +1616,7 @@ pub fn settings_modal(
                 if char_count > max_det_len {
                     text = text.chars().take(max_det_len).collect();
                 } else {
-                    for _ in 0..(max_det_len.saturating_sub(char_count + 2)) {
-                        text.push(' ');
-                    }
+                    text.push_str(&" ".repeat(max_det_len.saturating_sub(char_count + 2)));
                 }
 
                 let display_y = (i - current_det_scroll) as i16;
@@ -1474,6 +1629,39 @@ pub fn settings_modal(
                     bg_color,
                     Modifier::None,
                 );
+
+                if is_fancy_bool {
+                    if let Some(dot_byte_idx) = text.rfind('▪') {
+                        let text_before = &text[..dot_byte_idx];
+                        let mut x_offset = 0;
+                        for c in text_before.chars() {
+                            x_offset += crate::render::canvas::char_width(c) as u16;
+                        }
+
+                        let mut t_col = main_view.theme.fancy_bools_true.color_at(0, 1);
+                        if t_col == Color::None {
+                            t_col = Color::Green;
+                        }
+                        let mut f_col = main_view.theme.fancy_bools_false.color_at(0, 1);
+                        if f_col == Color::None {
+                            f_col = Color::Red;
+                        }
+
+                        let dot_color = if bool_val { t_col } else { f_col };
+                        let dot_char_idx = text_before.chars().count();
+                        let final_text_len = text.chars().count();
+                        let style = Style {
+                            fg: dot_color,
+                            bg: bg_color.color_at(dot_char_idx, final_text_len),
+                            md: Modifier::Bold,
+                        };
+                        det_box.put_cell(
+                            Cell::new('▪', style),
+                            2 + x_offset,
+                            (1 + display_y) as u16,
+                        );
+                    }
+                }
             }
 
             let v_y = det_box.height.saturating_sub(1);
@@ -1788,6 +1976,10 @@ pub fn settings_modal(
                                             "Reset library settings to default\n\nAre you sure?",
                                             10,
                                         ),
+                                        "reset_settings_menu" => (
+                                            "Reset settings menu configuration to default\n\nAre you sure?",
+                                            11,
+                                        ),
                                         _ => ("", 99),
                                     };
 
@@ -1830,6 +2022,8 @@ pub fn settings_modal(
                                             config.reset_current_widget();
                                         } else if action_type == 10 {
                                             config.reset_library();
+                                        } else if action_type == 11 {
+                                            config.reset_settings_menu();
                                         }
                                         config.save();
 
