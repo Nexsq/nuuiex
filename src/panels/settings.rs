@@ -613,6 +613,11 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 key: "reset_order",
                 kind: SettingType::Action,
             },
+            Setting {
+                name: "Reset Library",
+                key: "reset_library",
+                kind: SettingType::Action,
+            },
         ],
     });
 
@@ -679,6 +684,24 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 kind: SettingType::Custom {
                     value: config.bind_lib_move_down.to_string(),
                     default: def.bind_lib_move_down.to_string(),
+                    validation: CustomType::Char,
+                },
+            },
+            Setting {
+                name: "Move Out",
+                key: "bind_lib_move_out",
+                kind: SettingType::Custom {
+                    value: config.bind_lib_move_out.to_string(),
+                    default: def.bind_lib_move_out.to_string(),
+                    validation: CustomType::Char,
+                },
+            },
+            Setting {
+                name: "Move In",
+                key: "bind_lib_move_in",
+                kind: SettingType::Custom {
+                    value: config.bind_lib_move_in.to_string(),
+                    default: def.bind_lib_move_in.to_string(),
                     validation: CustomType::Char,
                 },
             },
@@ -1157,6 +1180,8 @@ pub fn settings_modal(
                 apply_setting!(config, set, char "bind_lib_delete", bind_lib_delete);
                 apply_setting!(config, set, char "bind_lib_move_up", bind_lib_move_up);
                 apply_setting!(config, set, char "bind_lib_move_down", bind_lib_move_down);
+                apply_setting!(config, set, char "bind_lib_move_out", bind_lib_move_out);
+                apply_setting!(config, set, char "bind_lib_move_in", bind_lib_move_in);
             }
         }
     };
@@ -1759,6 +1784,10 @@ pub fn settings_modal(
                                             "Reset current widget settings to default\n\nAre you sure?",
                                             9,
                                         ),
+                                        "reset_library" => (
+                                            "Reset library settings to default\n\nAre you sure?",
+                                            10,
+                                        ),
                                         _ => ("", 99),
                                     };
 
@@ -1799,6 +1828,8 @@ pub fn settings_modal(
                                             config.reset_editor();
                                         } else if action_type == 9 {
                                             config.reset_current_widget();
+                                        } else if action_type == 10 {
+                                            config.reset_library();
                                         }
                                         config.save();
 

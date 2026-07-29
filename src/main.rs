@@ -448,7 +448,7 @@ fn main() {
                         &key,
                         &terminal,
                         &mut canvas,
-                        &config,
+                        &mut config,
                     ) {
                         Ok(true) => {
                             dirty = true;

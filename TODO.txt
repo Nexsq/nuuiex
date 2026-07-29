@@ -1,2 +1,1 @@
 - redesign settings
-- add moving macros in and out of directories

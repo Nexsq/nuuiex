@@ -91,6 +91,8 @@ pub struct Config {
     pub bind_lib_delete: char,
     pub bind_lib_move_up: char,
     pub bind_lib_move_down: char,
+    pub bind_lib_move_out: char,
+    pub bind_lib_move_in: char,
 }
 
 impl Default for Config {
@@ -182,6 +184,8 @@ impl Default for Config {
             bind_lib_delete: '\0',
             bind_lib_move_up: '\0',
             bind_lib_move_down: '\0',
+            bind_lib_move_out: '\0',
+            bind_lib_move_in: '\0',
         };
         config.parse_str(DEFAULT_CONFIG).unwrap();
         config
@@ -536,6 +540,20 @@ impl Config {
                             .unwrap_or(self.bind_lib_move_down)
                             .to_ascii_lowercase()
                     }
+                    "bind_lib_move_out" => {
+                        self.bind_lib_move_out = val
+                            .chars()
+                            .next()
+                            .unwrap_or(self.bind_lib_move_out)
+                            .to_ascii_lowercase()
+                    }
+                    "bind_lib_move_in" => {
+                        self.bind_lib_move_in = val
+                            .chars()
+                            .next()
+                            .unwrap_or(self.bind_lib_move_in)
+                            .to_ascii_lowercase()
+                    }
                     _ => {}
                 }
             }
@@ -640,6 +658,12 @@ impl Config {
         }
     }
 
+    pub fn reset_library(&mut self) {
+        let default = Config::default();
+        self.lib_width = default.lib_width;
+        self.lib_sorting = default.lib_sorting;
+    }
+
     pub fn reset_editor(&mut self) {
         let default = Config::default();
         self.edit_autosave = default.edit_autosave;
@@ -683,6 +707,8 @@ impl Config {
         self.bind_lib_delete = default.bind_lib_delete;
         self.bind_lib_move_up = default.bind_lib_move_up;
         self.bind_lib_move_down = default.bind_lib_move_down;
+        self.bind_lib_move_out = default.bind_lib_move_out;
+        self.bind_lib_move_in = default.bind_lib_move_in;
     }
 
     pub fn save(&self) {
@@ -1165,6 +1191,18 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.bind_lib_move_down, comment
+                    )
+                    .unwrap(),
+                    "bind_lib_move_out" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_lib_move_out, comment
+                    )
+                    .unwrap(),
+                    "bind_lib_move_in" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.bind_lib_move_in, comment
                     )
                     .unwrap(),
                     _ => {
