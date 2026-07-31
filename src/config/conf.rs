@@ -61,7 +61,6 @@ pub struct Config {
 
     pub double_q_exit: bool,
 
-    pub edit_autosave: usize,
     pub edit_tab_backspace: bool,
     pub edit_auto_indent: bool,
     pub edit_auto_bracket: bool,
@@ -158,7 +157,6 @@ impl Default for Config {
 
             double_q_exit: false,
 
-            edit_autosave: 0,
             edit_tab_backspace: false,
             edit_auto_indent: false,
             edit_auto_bracket: false,
@@ -340,10 +338,6 @@ impl Config {
 
                     "double_q_exit" => {
                         self.double_q_exit = val.parse().unwrap_or(self.double_q_exit)
-                    }
-
-                    "edit_autosave" => {
-                        self.edit_autosave = val.parse().unwrap_or(self.edit_autosave).clamp(0, 60)
                     }
 
                     "edit_tab_backspace" => {
@@ -686,7 +680,6 @@ impl Config {
 
     pub fn reset_editor(&mut self) {
         let default = Config::default();
-        self.edit_autosave = default.edit_autosave;
         self.edit_tab_backspace = default.edit_tab_backspace;
         self.edit_auto_indent = default.edit_auto_indent;
         self.edit_auto_bracket = default.edit_auto_bracket;
@@ -1032,13 +1025,6 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.double_q_exit, comment
-                    )
-                    .unwrap(),
-
-                    "edit_autosave" => writeln!(
-                        &mut output,
-                        "{} = {}{}",
-                        key_str, self.edit_autosave, comment
                     )
                     .unwrap(),
 

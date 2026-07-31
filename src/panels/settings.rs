@@ -784,15 +784,6 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
         name: "Editor",
         settings: vec![
             Setting {
-                name: "Autosave",
-                key: "edit_autosave",
-                kind: SettingType::Custom {
-                    value: config.edit_autosave.to_string(),
-                    default: def.edit_autosave.to_string(),
-                    validation: CustomType::Int,
-                },
-            },
-            Setting {
                 name: "Tab Backspace",
                 key: "edit_tab_backspace",
                 kind: SettingType::Choice(
@@ -1194,7 +1185,6 @@ pub fn settings_modal(
                 apply_setting!(config, set, bool "keyvis_base", keyvis_base);
 
                 apply_setting!(config, set, bool "double_q_exit", double_q_exit);
-                apply_setting!(config, set, parse_clamp "edit_autosave", edit_autosave, 0, 60);
 
                 apply_setting!(config, set, choice "monitor_cpu", monitor_cpu);
                 apply_setting!(config, set, choice "monitor_gpu", monitor_gpu);

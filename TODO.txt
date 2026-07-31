@@ -1,4 +1,2 @@
-- remove autosave as its useless
-- add warnings (runtime error higlighting)
+- refine error highlighting
 - shift + arrows should move the editor view up / down
-    

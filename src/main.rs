@@ -107,26 +107,7 @@ fn main() {
     let mut dirty = true;
     let mut q_pressed_once = false;
 
-    let mut last_autosave = std::time::Instant::now();
-
     loop {
-        if config.edit_autosave > 0 {
-            if last_autosave.elapsed().as_secs() >= (config.edit_autosave as u64) * 60 {
-                let mut any_saved = false;
-                for i in 0..6 {
-                    if main_view.editors[i].is_editing && main_view.editors[i].is_dirty() {
-                        main_view.editors[i].save();
-                        any_saved = true;
-                    }
-                }
-                if any_saved {
-                    main_view.refresh_list(&config);
-                    dirty = true;
-                }
-                last_autosave = std::time::Instant::now();
-            }
-        }
-
         let (current_w, current_h) = Terminal::size();
 
         if current_w != term_w || current_h != term_h {

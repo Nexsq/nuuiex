@@ -1134,6 +1134,18 @@ impl Editor {
                 self.state.cursor_x = match_char_idx + query_char_count;
                 self.state.selection_start = Some((match_char_idx, y));
                 self.visual_mode = true;
+
+                let target = self.state.cursor_y;
+                let mut to_remove = Vec::new();
+                for &fold_start in &self.folded_lines {
+                    if target > fold_start && target <= self.get_block_end(fold_start) {
+                        to_remove.push(fold_start);
+                    }
+                }
+                for r in to_remove {
+                    self.folded_lines.remove(&r);
+                }
+
                 self.clamp_cursor();
                 return;
             }
