@@ -83,6 +83,7 @@ A modal code editor, complete with an AST-based real-time syntax checker.
 * `a`: Select All.
 * `g` / `Shift+g` / `Ctrl+g`: Jump to start / Jump to end / Open Line Search Mode.
 * `w` / `b`: Jump word forward/backward.
+* `Shift` + Movement keys: Scroll the editor view up/down/left/right without jumping the cursor.
 
 ### 4. Deck & Dashboard Widgets
 The "Deck" is a customizable widget area.

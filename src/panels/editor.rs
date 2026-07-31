@@ -243,6 +243,9 @@ pub struct Editor {
     pub last_edit_pos: Option<(usize, usize)>,
     pub last_edited_path: Option<PathBuf>,
 
+    pub last_text_inner_w: usize,
+    pub last_text_inner_h: usize,
+
     pub last_key_select_all: bool,
     pub last_key_file_bounds: bool,
     pub last_key_delete: bool,
@@ -298,6 +301,8 @@ impl Editor {
             redo_stack: Vec::new(),
             last_edit_pos: None,
             last_edited_path: None,
+            last_text_inner_w: 0,
+            last_text_inner_h: 0,
             last_key_select_all: false,
             last_key_file_bounds: false,
             last_key_delete: false,
@@ -754,6 +759,18 @@ impl Editor {
                             }
                         }
                     }
+                    k if k == Key::ShiftLeft || k == Key::Shift(config.bind_edit_left) => {
+                        self.scroll_view(-1, 0);
+                    }
+                    k if k == Key::ShiftRight || k == Key::Shift(config.bind_edit_right) => {
+                        self.scroll_view(1, 0);
+                    }
+                    k if k == Key::ShiftUp || k == Key::Shift(config.bind_edit_up) => {
+                        self.scroll_view(0, -1);
+                    }
+                    k if k == Key::ShiftDown || k == Key::Shift(config.bind_edit_down) => {
+                        self.scroll_view(0, 1);
+                    }
                     k if k == Key::Left || k == Key::Char(config.bind_edit_left) => {
                         self.move_cursor(-1, 0, self.visual_mode)
                     }
@@ -1061,10 +1078,10 @@ impl Editor {
                 Key::Right => self.move_cursor(1, 0, false),
                 Key::Up => self.move_cursor(0, -1, false),
                 Key::Down => self.move_cursor(0, 1, false),
-                Key::ShiftLeft => self.move_cursor(-1, 0, true),
-                Key::ShiftRight => self.move_cursor(1, 0, true),
-                Key::ShiftUp => self.move_cursor(0, -1, true),
-                Key::ShiftDown => self.move_cursor(0, 1, true),
+                Key::ShiftLeft => self.scroll_view(-1, 0),
+                Key::ShiftRight => self.scroll_view(1, 0),
+                Key::ShiftUp => self.scroll_view(0, -1),
+                Key::ShiftDown => self.scroll_view(0, 1),
                 _ => {}
             },
         }
@@ -1189,6 +1206,72 @@ impl Editor {
         let max_x = self.state.lines[self.state.cursor_y].chars().count();
         let x = x.clamp(0, max_x as isize) as usize;
         self.state.cursor_x = x;
+    }
+
+    pub fn scroll_view(&mut self, dx: isize, dy: isize) {
+        let d_lines = self.get_display_lines();
+
+        if dy != 0 {
+            let max_scroll_y = d_lines.len().saturating_sub(self.last_text_inner_h);
+            let new_scroll_y =
+                (self.scroll_y as isize + dy).clamp(0, max_scroll_y as isize) as usize;
+            self.scroll_y = new_scroll_y;
+
+            let mut cursor_d_idx = d_lines
+                .iter()
+                .position(|&x| x == self.state.cursor_y as isize)
+                .unwrap_or(0);
+
+            let mut moved_cursor = false;
+            if cursor_d_idx < self.scroll_y {
+                cursor_d_idx = self.scroll_y;
+                moved_cursor = true;
+            } else if cursor_d_idx >= self.scroll_y + self.last_text_inner_h
+                && self.last_text_inner_h > 0
+            {
+                cursor_d_idx = self.scroll_y + self.last_text_inner_h - 1;
+                moved_cursor = true;
+            }
+
+            if moved_cursor && cursor_d_idx < d_lines.len() {
+                let mut new_y = d_lines[cursor_d_idx];
+                if new_y == -1 {
+                    if dy > 0 {
+                        for i in cursor_d_idx..d_lines.len() {
+                            if d_lines[i] != -1 {
+                                new_y = d_lines[i];
+                                break;
+                            }
+                        }
+                    } else {
+                        for i in (0..=cursor_d_idx).rev() {
+                            if d_lines[i] != -1 {
+                                new_y = d_lines[i];
+                                break;
+                            }
+                        }
+                    }
+                }
+                if new_y != -1 {
+                    self.state.cursor_y = new_y as usize;
+                }
+            }
+        }
+
+        if dx != 0 {
+            let new_scroll_x = (self.scroll_x as isize + dx).max(0) as usize;
+            self.scroll_x = new_scroll_x;
+
+            if self.state.cursor_x < self.scroll_x {
+                self.state.cursor_x = self.scroll_x;
+            } else if self.state.cursor_x >= self.scroll_x + self.last_text_inner_w
+                && self.last_text_inner_w > 0
+            {
+                self.state.cursor_x = self.scroll_x + self.last_text_inner_w - 1;
+            }
+        }
+
+        self.clamp_cursor();
     }
 
     fn clamp_cursor(&mut self) {
@@ -2118,6 +2201,9 @@ impl Editor {
         };
 
         let text_inner_w = inner_w.saturating_sub(prefix_width);
+
+        self.last_text_inner_w = text_inner_w;
+        self.last_text_inner_h = text_inner_h;
 
         let d_lines = self.get_display_lines();
 
