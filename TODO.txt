@@ -1,2 +1,0 @@
-- refine error highlighting
-- shift + arrows should move the editor view up / down
