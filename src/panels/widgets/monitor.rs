@@ -386,11 +386,12 @@ fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
         }
 
         let mut cmd = std::process::Command::new("powershell");
-        cmd.args(&[
-            "-NoProfile",
-            "-Command",
-            "while($true) { $val = (Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -ErrorAction SilentlyContinue | Measure-Object -Property UtilizationPercentage -Sum).Sum; if ($null -eq $val) { echo 0 } else { echo $val }; Start-Sleep -Seconds 1 }"
-        ]);
+        let pid = std::process::id();
+        let script = format!(
+            "while(Get-Process -Id {} -ErrorAction SilentlyContinue) {{ $val = (Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -ErrorAction SilentlyContinue | Measure-Object -Property UtilizationPercentage -Sum).Sum; if ($null -eq $val) {{ echo 0 }} else {{ echo $val }}; Start-Sleep -Seconds 1 }}",
+            pid
+        );
+        cmd.args(&["-NoProfile", "-Command", &script]);
         cmd.creation_flags(0x08000000);
         cmd.stdout(std::process::Stdio::piped());
 

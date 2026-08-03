@@ -89,7 +89,8 @@ impl Terminal {
     pub fn read_key(&self, timeout: Duration) -> Key {
         let b = match self.key_rx.recv_timeout(timeout) {
             Ok(b) => b,
-            Err(_) => return Key::None,
+            Err(mpsc::RecvTimeoutError::Timeout) => return Key::None,
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Key::Char('\x03'),
         };
 
         match b {

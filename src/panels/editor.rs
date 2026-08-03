@@ -1206,6 +1206,8 @@ impl Editor {
         let max_x = self.state.lines[self.state.cursor_y].chars().count();
         let x = x.clamp(0, max_x as isize) as usize;
         self.state.cursor_x = x;
+
+        self.snap_cursor_image_blocks(dx);
     }
 
     pub fn scroll_view(&mut self, dx: isize, dy: isize) {
@@ -1283,6 +1285,60 @@ impl Editor {
         if self.state.cursor_x > max_x {
             self.state.cursor_x = max_x;
         }
+
+        self.snap_cursor_image_blocks(0);
+    }
+
+    fn snap_cursor_image_blocks(&mut self, dx: isize) {
+        if self.is_output {
+            return;
+        }
+        let y = self.state.cursor_y;
+        if y >= self.state.lines.len() {
+            return;
+        }
+
+        let chars_vec: Vec<char> = self.state.lines[y].chars().collect();
+        let mut i = 0;
+        while i < chars_vec.len() {
+            if i + 6 <= chars_vec.len()
+                && chars_vec[i..i + 6].iter().collect::<String>() == "Image:"
+            {
+                let start_img = i;
+                let mut end_img = i + 6;
+                while end_img < chars_vec.len()
+                    && (chars_vec[end_img].is_ascii_alphanumeric()
+                        || chars_vec[end_img] == '+'
+                        || chars_vec[end_img] == '/'
+                        || chars_vec[end_img] == '=')
+                {
+                    end_img += 1;
+                }
+
+                if end_img - (start_img + 6) > 10 {
+                    let hidden_start = start_img + 8;
+                    let hidden_end = end_img - 2;
+
+                    if self.state.cursor_x > hidden_start && self.state.cursor_x < hidden_end {
+                        if dx > 0 {
+                            self.state.cursor_x = hidden_end;
+                        } else if dx < 0 {
+                            self.state.cursor_x = hidden_start;
+                        } else {
+                            if self.state.cursor_x - hidden_start < hidden_end - self.state.cursor_x
+                            {
+                                self.state.cursor_x = hidden_start;
+                            } else {
+                                self.state.cursor_x = hidden_end;
+                            }
+                        }
+                    }
+                }
+                i = end_img;
+            } else {
+                i += 1;
+            }
+        }
     }
 
     fn handle_insert_char(&mut self, c: char, config: &Config) {
@@ -1330,6 +1386,7 @@ impl Editor {
             .unwrap_or(line.len());
         line.insert(byte_idx, c);
         self.state.cursor_x += 1;
+        self.clamp_cursor();
     }
 
     fn insert_newline(&mut self, config: &Config) {
@@ -1965,6 +2022,7 @@ impl Editor {
         }
 
         self.state.cursor_x = self.state.cursor_x.saturating_sub(skipped);
+        self.clamp_cursor();
     }
 
     fn jump_block_forward(&mut self, select: bool) {
@@ -2226,6 +2284,7 @@ impl Editor {
         }
 
         let mut visual_target_x = 0;
+        let mut target_j = 0;
         if !self.is_output && target_y < self.state.lines.len() {
             let chars_vec: Vec<char> = self.state.lines[target_y].chars().collect();
             let mut i_char = 0;
@@ -2233,6 +2292,7 @@ impl Editor {
                 if i_char + 6 <= chars_vec.len()
                     && chars_vec[i_char..i_char + 6].iter().collect::<String>() == "Image:"
                 {
+                    let start_img = i_char;
                     let mut end_img = i_char + 6;
                     while end_img < chars_vec.len()
                         && (chars_vec[end_img].is_ascii_alphanumeric()
@@ -2242,24 +2302,50 @@ impl Editor {
                     {
                         end_img += 1;
                     }
-                    if end_img - (i_char + 6) > 10 {
-                        visual_target_x += 12;
-                        i_char = end_img;
-                        continue;
+                    if end_img - (start_img + 6) > 10 {
+                        if target_x < end_img {
+                            let hidden_start = start_img + 8;
+                            let hidden_end = end_img - 2;
+
+                            if target_x <= hidden_start {
+                                let diff = target_x - start_img;
+                                visual_target_x += diff;
+                                target_j += diff;
+                            } else if target_x >= hidden_end {
+                                let diff = 10 + (target_x - hidden_end);
+                                visual_target_x += diff;
+                                target_j += diff;
+                            } else {
+                                visual_target_x += 8;
+                                target_j += 8;
+                            }
+                            i_char = target_x;
+                            continue;
+                        } else {
+                            visual_target_x += 12;
+                            target_j += 12;
+                            i_char = end_img;
+                            continue;
+                        }
                     }
                 }
 
                 let mut cluster = crate::render::canvas::CharCluster::new(chars_vec[i_char]);
                 let mut k = i_char + 1;
-                while k < chars_vec.len() && crate::render::canvas::is_combining(chars_vec[k]) {
+                while k < chars_vec.len()
+                    && k < target_x
+                    && crate::render::canvas::is_combining(chars_vec[k])
+                {
                     cluster.push(chars_vec[k]);
                     k += 1;
                 }
                 visual_target_x += cluster.width as usize;
+                target_j += k - i_char;
                 i_char = k;
             }
         } else {
             visual_target_x = target_x;
+            target_j = target_x;
         }
 
         let cursor_d_idx = d_lines
@@ -3266,7 +3352,7 @@ impl Editor {
                     if self.mode != Mode::Search && self.mode != Mode::LineSearch {
                         let show_caret = self.is_editing
                             || (self.is_output && config.show_caret && !self.is_waiting_for_input);
-                        if show_caret && i == target_y && target_x >= j && target_x < k {
+                        if show_caret && i == target_y && target_j >= j && target_j < k {
                             is_cursor = true;
                         }
                     }
@@ -3311,7 +3397,7 @@ impl Editor {
             if self.mode != Mode::Search && self.mode != Mode::LineSearch {
                 let show_caret = self.is_editing
                     || (self.is_output && config.show_caret && !self.is_waiting_for_input);
-                if show_caret && i == target_y && target_x >= line_chars.len() {
+                if show_caret && i == target_y && target_j >= line_chars.len() {
                     if current_x >= self.scroll_x {
                         let display_x = current_x - self.scroll_x + prefix_width;
                         if display_x < inner_w {
