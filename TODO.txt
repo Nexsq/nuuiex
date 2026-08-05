@@ -1,1 +1,2 @@
 add macos support?
+add option for compression types to snipbase
