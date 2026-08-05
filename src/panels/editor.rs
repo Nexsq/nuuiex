@@ -126,6 +126,42 @@ pub fn build_clipboard_cmd(program: &str, args: &[&str]) -> std::process::Comman
     }
 }
 
+#[cfg(not(target_os = "macos"))]
+static CLIPBOARD: std::sync::OnceLock<std::sync::Mutex<Option<Clipboard>>> = std::sync::OnceLock::new();
+
+#[cfg(not(target_os = "macos"))]
+fn with_clipboard<F, R>(f: F) -> Option<R>
+where
+    F: FnOnce(&mut Clipboard) -> R,
+{
+    let mutex = CLIPBOARD.get_or_init(|| std::sync::Mutex::new(Clipboard::new().ok()));
+    if let Ok(mut guard) = mutex.lock() {
+        if let Some(cb) = guard.as_mut() {
+            return Some(f(cb));
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "macos")]
+thread_local! {
+    static CLIPBOARD: std::cell::RefCell<Option<Clipboard>> = std::cell::RefCell::new(Clipboard::new().ok());
+}
+
+#[cfg(target_os = "macos")]
+fn with_clipboard<F, R>(f: F) -> Option<R>
+where
+    F: FnOnce(&mut Clipboard) -> R,
+{
+    CLIPBOARD.with(|cell| {
+        if let Some(cb) = cell.borrow_mut().as_mut() {
+            Some(f(cb))
+        } else {
+            None
+        }
+    })
+}
+
 pub fn set_clipboard(text: String) {
     let is_wayland = is_wayland_session();
 
@@ -143,10 +179,10 @@ pub fn set_clipboard(text: String) {
         }
     }
 
-    if let Ok(mut cb) = Clipboard::new() {
-        if cb.set_text(text.clone()).is_ok() {
-            return;
-        }
+    let arboard_success = with_clipboard(|cb| cb.set_text(text.clone()).is_ok()).unwrap_or(false);
+
+    if arboard_success {
+        return;
     }
 
     use std::io::Write;
@@ -175,11 +211,11 @@ pub fn get_clipboard() -> Option<String> {
         }
     }
 
-    if let Ok(mut cb) = Clipboard::new() {
-        if let Ok(text) = cb.get_text() {
-            if !text.is_empty() || !is_wayland {
-                return Some(text);
-            }
+    let arboard_text = with_clipboard(|cb| cb.get_text().ok()).flatten();
+
+    if let Some(text) = arboard_text {
+        if !text.is_empty() || !is_wayland {
+            return Some(text);
         }
     }
 
