@@ -962,6 +962,11 @@ fn check_key_down(key: &str) -> Result<bool, String> {
     Ok(is_down)
 }
 
+#[cfg(not(any(windows, target_os = "linux")))]
+fn check_key_down(_key: &str) -> Result<bool, String> {
+    Err("Key detection is not supported on this OS".to_string())
+}
+
 #[cfg(target_os = "linux")]
 fn get_or_create_uinput() -> Result<i32, String> {
     thread_local! {
@@ -1111,6 +1116,11 @@ fn simulate_key(key: &str, down: bool) -> Result<(), String> {
     }
 }
 
+#[cfg(not(any(windows, target_os = "linux")))]
+fn simulate_key(_key: &str, _down: bool) -> Result<(), String> {
+    Err("Key simulation is not supported on this OS".to_string())
+}
+
 #[cfg(target_os = "linux")]
 fn simulate_write(text: &str) -> Result<(), String> {
     if let Ok(fd) = get_or_create_uinput() {
@@ -1210,6 +1220,11 @@ fn simulate_write(text: &str) -> Result<(), String> {
             Err("Failed to simulate write. Run with sudo or install xdotool.".into())
         }
     }
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn simulate_write(_text: &str) -> Result<(), String> {
+    Err("Typing simulation is not supported on this OS".to_string())
 }
 
 fn variant_to_key_str(v: &Value) -> Result<String, String> {
@@ -2964,33 +2979,33 @@ pub fn snip_screen_png(x: i32, y: i32, w: i32, h: i32) -> Result<Vec<u8>, String
             return Err("Failed to get DIBits".into());
         }
 
-        let mut rgba_data = Vec::with_capacity((w * h * 4) as usize);
-        for row in 0..h {
-            for col in 0..w {
-                let idx = (row * w + col) as usize;
-                let p = pixels[idx];
+        let mut rgba_data = vec![0u8; (w * h * 4) as usize];
 
-                let b = (p & 0xFF) as u8;
-                let g = ((p >> 8) & 0xFF) as u8;
-                let r = ((p >> 16) & 0xFF) as u8;
-
-                rgba_data.push(r);
-                rgba_data.push(g);
-                rgba_data.push(b);
-                rgba_data.push(255);
-            }
+        for (i, chunk) in rgba_data.chunks_exact_mut(4).enumerate() {
+            let p = pixels[i];
+            chunk[0] = ((p >> 16) & 0xFF) as u8;
+            chunk[1] = ((p >> 8) & 0xFF) as u8;
+            chunk[2] = (p & 0xFF) as u8;
+            chunk[3] = 255;
         }
 
         let mut cursor = std::io::Cursor::new(Vec::new());
-        image::write_buffer_with_format(
+
+        use image::ImageEncoder;
+        let encoder = image::codecs::png::PngEncoder::new_with_quality(
             &mut cursor,
-            &rgba_data,
-            w as u32,
-            h as u32,
-            image::ColorType::Rgba8,
-            image::ImageFormat::Png,
-        )
-        .map_err(|e| format!("Failed to encode image: {}", e))?;
+            image::codecs::png::CompressionType::Fast,
+            image::codecs::png::FilterType::Adaptive,
+        );
+
+        encoder
+            .write_image(
+                &rgba_data,
+                w as u32,
+                h as u32,
+                image::ExtendedColorType::Rgba8,
+            )
+            .map_err(|e| format!("Failed to encode image: {}", e))?;
 
         Ok(cursor.into_inner())
     }
@@ -3085,95 +3100,128 @@ pub fn snip_screen_png(x: i32, y: i32, w: i32, h: i32) -> Result<Vec<u8>, String
                 let screen_w = attr.width;
                 let screen_h = attr.height;
 
-                let start_x = x.clamp(0, screen_w - 1);
-                let start_y = y.clamp(0, screen_h - 1);
-                let end_x = (x + w).clamp(0, screen_w);
-                let end_y = (y + h).clamp(0, screen_h);
+                let src_x = x.max(0);
+                let src_y = y.max(0);
+                let src_w = (x + w).min(screen_w) - src_x;
+                let src_h = (y + h).min(screen_h) - src_y;
 
-                let actual_w = end_x - start_x;
-                let actual_h = end_y - start_y;
-
-                if actual_w <= 0 || actual_h <= 0 {
-                    return Err("Calculated dimensions are <= 0".to_string());
+                let mut rgba_data = vec![0u8; (w * h * 4) as usize];
+                for chunk in rgba_data.chunks_exact_mut(4) {
+                    chunk[3] = 255;
                 }
 
-                let image = (x11.xgetimage)(
-                    x11.display,
-                    x11.root,
-                    start_x,
-                    start_y,
-                    actual_w as u32,
-                    actual_h as u32,
-                    !0,
-                    2,
-                );
-                if image.is_null() {
-                    return Err("Failed to get image from X11".into());
-                }
-
-                let rm = (*image).red_mask;
-                let gm = (*image).green_mask;
-                let bm = (*image).blue_mask;
-
-                let r_shift = rm.trailing_zeros();
-                let r_max = rm >> r_shift;
-                let g_shift = gm.trailing_zeros();
-                let g_max = gm >> g_shift;
-                let b_shift = bm.trailing_zeros();
-                let b_max = bm >> b_shift;
-
-                let data_ptr = (*image).data as *const u8;
-                let bpl = (*image).bytes_per_line;
-                let bpp = (*image).bits_per_pixel;
-                let get_pixel_fn = (*image).f.get_pixel;
-
-                let mut rgba_data = Vec::with_capacity((actual_w * actual_h * 4) as usize);
-
-                for row in 0..actual_h {
-                    for col in 0..actual_w {
-                        let pixel = if bpp == 32 {
-                            let offset = (row * bpl + col * 4) as isize;
-                            std::ptr::read_unaligned(data_ptr.offset(offset) as *const u32)
-                                as libc::c_ulong
-                        } else {
-                            (get_pixel_fn)(image, col, row)
-                        };
-
-                        let r = if r_max > 0 {
-                            (((pixel & rm) >> r_shift) * 255 / r_max) as u8
-                        } else {
-                            0
-                        };
-                        let g = if g_max > 0 {
-                            (((pixel & gm) >> g_shift) * 255 / g_max) as u8
-                        } else {
-                            0
-                        };
-                        let b = if b_max > 0 {
-                            (((pixel & bm) >> b_shift) * 255 / b_max) as u8
-                        } else {
-                            0
-                        };
-
-                        rgba_data.push(r);
-                        rgba_data.push(g);
-                        rgba_data.push(b);
-                        rgba_data.push(255);
+                if src_w > 0 && src_h > 0 {
+                    let image = (x11.xgetimage)(
+                        x11.display,
+                        x11.root,
+                        src_x,
+                        src_y,
+                        src_w as u32,
+                        src_h as u32,
+                        !0,
+                        2,
+                    );
+                    if image.is_null() {
+                        return Err("Failed to get image from X11".into());
                     }
-                }
 
-                ((*image).f.destroy_image)(image);
+                    let rm = (*image).red_mask;
+                    let gm = (*image).green_mask;
+                    let bm = (*image).blue_mask;
+
+                    let r_shift = rm.trailing_zeros();
+                    let r_max = rm >> r_shift;
+                    let g_shift = gm.trailing_zeros();
+                    let g_max = gm >> g_shift;
+                    let b_shift = bm.trailing_zeros();
+                    let b_max = bm >> b_shift;
+
+                    let data_ptr = (*image).data as *const u8;
+                    let bpl = (*image).bytes_per_line;
+                    let bpp = (*image).bits_per_pixel;
+                    let get_pixel_fn = (*image).f.get_pixel;
+
+                    let dst_start_x = src_x - x;
+                    let dst_start_y = src_y - y;
+
+                    if bpp == 32 {
+                        for row in 0..src_h {
+                            let dst_row = dst_start_y + row;
+                            let row_offset = row * bpl;
+
+                            for col in 0..src_w {
+                                let dst_col = dst_start_x + col;
+                                let offset = (row_offset + col * 4) as isize;
+                                let pixel =
+                                    std::ptr::read_unaligned(data_ptr.offset(offset) as *const u32)
+                                        as libc::c_ulong;
+
+                                let out_idx = ((dst_row * w + dst_col) * 4) as usize;
+                                rgba_data[out_idx] = if r_max > 0 {
+                                    (((pixel & rm) >> r_shift) * 255 / r_max) as u8
+                                } else {
+                                    0
+                                };
+                                rgba_data[out_idx + 1] = if g_max > 0 {
+                                    (((pixel & gm) >> g_shift) * 255 / g_max) as u8
+                                } else {
+                                    0
+                                };
+                                rgba_data[out_idx + 2] = if b_max > 0 {
+                                    (((pixel & bm) >> b_shift) * 255 / b_max) as u8
+                                } else {
+                                    0
+                                };
+                            }
+                        }
+                    } else {
+                        for row in 0..src_h {
+                            let dst_row = dst_start_y + row;
+
+                            for col in 0..src_w {
+                                let dst_col = dst_start_x + col;
+                                let pixel = (get_pixel_fn)(image, col, row);
+
+                                let out_idx = ((dst_row * w + dst_col) * 4) as usize;
+                                rgba_data[out_idx] = if r_max > 0 {
+                                    (((pixel & rm) >> r_shift) * 255 / r_max) as u8
+                                } else {
+                                    0
+                                };
+                                rgba_data[out_idx + 1] = if g_max > 0 {
+                                    (((pixel & gm) >> g_shift) * 255 / g_max) as u8
+                                } else {
+                                    0
+                                };
+                                rgba_data[out_idx + 2] = if b_max > 0 {
+                                    (((pixel & bm) >> b_shift) * 255 / b_max) as u8
+                                } else {
+                                    0
+                                };
+                            }
+                        }
+                    }
+
+                    ((*image).f.destroy_image)(image);
+                }
 
                 let mut cursor = std::io::Cursor::new(Vec::new());
-                image::write_buffer_with_format(
+
+                use image::ImageEncoder;
+                let encoder = image::codecs::png::PngEncoder::new_with_quality(
                     &mut cursor,
-                    &rgba_data,
-                    actual_w as u32,
-                    actual_h as u32,
-                    image::ColorType::Rgba8,
-                    image::ImageFormat::Png,
-                )
-                .map_err(|e| format!("Failed to encode image: {}", e))?;
+                    image::codecs::png::CompressionType::Fast,
+                    image::codecs::png::FilterType::NoFilter,
+                );
+
+                encoder
+                    .write_image(
+                        &rgba_data,
+                        w as u32,
+                        h as u32,
+                        image::ExtendedColorType::Rgba8,
+                    )
+                    .map_err(|e| format!("Failed to encode image: {}", e))?;
 
                 Ok(cursor.into_inner())
             },
@@ -5579,7 +5627,10 @@ impl Interpreter {
                         let h = (y1 - y2).abs() + 1;
 
                         if w <= 0 || h <= 0 {
-                            return Err(format!("Line {}: 'snipbase' width and height must be > 0", line));
+                            return Err(format!(
+                                "Line {}: 'snipbase' width and height must be > 0",
+                                line
+                            ));
                         }
 
                         let png_data = snip_screen_png(start_x, start_y, w, h)

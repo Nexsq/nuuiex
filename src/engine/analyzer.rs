@@ -426,7 +426,10 @@ impl Analyzer {
                         }
                         "snipbase" => {
                             if args.len() != 4 {
-                                self.error(*line, format!("'{}' expects exactly 4 arguments", name));
+                                self.error(
+                                    *line,
+                                    format!("'{}' expects exactly 4 arguments", name),
+                                );
                             } else {
                                 for i in 0..4 {
                                     if matches!(

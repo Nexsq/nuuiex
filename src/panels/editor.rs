@@ -127,7 +127,8 @@ pub fn build_clipboard_cmd(program: &str, args: &[&str]) -> std::process::Comman
 }
 
 #[cfg(not(target_os = "macos"))]
-static CLIPBOARD: std::sync::OnceLock<std::sync::Mutex<Option<Clipboard>>> = std::sync::OnceLock::new();
+static CLIPBOARD: std::sync::OnceLock<std::sync::Mutex<Option<Clipboard>>> =
+    std::sync::OnceLock::new();
 
 #[cfg(not(target_os = "macos"))]
 fn with_clipboard<F, R>(f: F) -> Option<R>
