@@ -1,1 +1,0 @@
-- add a function that takes a snippet of the screen and returns the Image base64 string off of it

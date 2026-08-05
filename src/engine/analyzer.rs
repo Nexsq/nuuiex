@@ -424,6 +424,30 @@ impl Analyzer {
                                 self.error(*line, format!("'{}' expects a String", name));
                             }
                         }
+                        "snipbase" => {
+                            if args.len() != 4 {
+                                self.error(*line, format!("'{}' expects exactly 4 arguments", name));
+                            } else {
+                                for i in 0..4 {
+                                    if matches!(
+                                        args[i].1,
+                                        Expr::String(_)
+                                            | Expr::Bool(_)
+                                            | Expr::List(_)
+                                            | Expr::Dict(_)
+                                            | Expr::FormatString(_)
+                                    ) {
+                                        self.error(
+                                            *line,
+                                            format!(
+                                                "'{}' expects coordinate arguments to be Numbers",
+                                                name
+                                            ),
+                                        );
+                                    }
+                                }
+                            }
+                        }
                         "imgsearch" => {
                             if args.len() < 1 || args.len() > 2 {
                                 self.error(*line, format!("'{}' expects 1 or 2 arguments", name));

@@ -120,6 +120,7 @@ pub const BUILTIN_FUNCS: &[&str] = &[
     "pixelsearch",
     "imgsearch",
     "imgbase",
+    "snipbase",
 ];
 
 pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {

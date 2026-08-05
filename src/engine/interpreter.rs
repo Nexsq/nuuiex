@@ -2858,6 +2858,336 @@ fn search_screen_pixels(
 }
 
 #[cfg(windows)]
+pub fn snip_screen_png(x: i32, y: i32, w: i32, h: i32) -> Result<Vec<u8>, String> {
+    if w <= 0 || h <= 0 {
+        return Err("Width and height must be positive".to_string());
+    }
+
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn GetDC(hWnd: isize) -> isize;
+        fn ReleaseDC(hWnd: isize, hDC: isize) -> i32;
+    }
+
+    #[link(name = "gdi32")]
+    unsafe extern "system" {
+        fn CreateCompatibleDC(hdc: isize) -> isize;
+        fn CreateCompatibleBitmap(hdc: isize, cx: i32, cy: i32) -> isize;
+        fn SelectObject(hdc: isize, h: isize) -> isize;
+        fn DeleteObject(ho: isize) -> i32;
+        fn DeleteDC(hdc: isize) -> i32;
+        fn BitBlt(
+            hdc: isize,
+            x: i32,
+            y: i32,
+            cx: i32,
+            cy: i32,
+            hdcSrc: isize,
+            x1: i32,
+            y1: i32,
+            rop: u32,
+        ) -> i32;
+        fn GetDIBits(
+            hdc: isize,
+            hbm: isize,
+            start: u32,
+            cLines: u32,
+            lpvBits: *mut u32,
+            lpbmi: *mut BITMAPINFO,
+            colorUse: u32,
+        ) -> i32;
+    }
+
+    #[allow(non_snake_case)]
+    #[repr(C)]
+    struct BITMAPINFOHEADER {
+        biSize: u32,
+        biWidth: i32,
+        biHeight: i32,
+        biPlanes: u16,
+        biBitCount: u16,
+        biCompression: u32,
+        biSizeImage: u32,
+        biXPelsPerMeter: i32,
+        biYPelsPerMeter: i32,
+        biClrUsed: u32,
+        biClrImportant: u32,
+    }
+
+    #[allow(non_snake_case)]
+    #[repr(C)]
+    struct BITMAPINFO {
+        bmiHeader: BITMAPINFOHEADER,
+        bmiColors: [u32; 1],
+    }
+
+    unsafe {
+        let hdc_screen = GetDC(0);
+        if hdc_screen == 0 {
+            return Err("Failed to get screen DC".into());
+        }
+
+        let hdc_mem = CreateCompatibleDC(hdc_screen);
+        let hbm = CreateCompatibleBitmap(hdc_screen, w, h);
+
+        if hdc_mem == 0 || hbm == 0 {
+            if hbm != 0 {
+                DeleteObject(hbm);
+            }
+            if hdc_mem != 0 {
+                DeleteDC(hdc_mem);
+            }
+            ReleaseDC(0, hdc_screen);
+            return Err("Failed to create GDI objects".into());
+        }
+
+        let old_obj = SelectObject(hdc_mem, hbm);
+        BitBlt(hdc_mem, 0, 0, w, h, hdc_screen, x, y, 0x00CC0020);
+
+        let mut bmi: BITMAPINFO = std::mem::zeroed();
+        bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+        bmi.bmiHeader.biWidth = w;
+        bmi.bmiHeader.biHeight = -h;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = 0;
+
+        let mut pixels = vec![0u32; (w * h) as usize];
+        let res = GetDIBits(hdc_mem, hbm, 0, h as u32, pixels.as_mut_ptr(), &mut bmi, 0);
+
+        SelectObject(hdc_mem, old_obj);
+        DeleteObject(hbm);
+        DeleteDC(hdc_mem);
+        ReleaseDC(0, hdc_screen);
+
+        if res == 0 {
+            return Err("Failed to get DIBits".into());
+        }
+
+        let mut rgba_data = Vec::with_capacity((w * h * 4) as usize);
+        for row in 0..h {
+            for col in 0..w {
+                let idx = (row * w + col) as usize;
+                let p = pixels[idx];
+
+                let b = (p & 0xFF) as u8;
+                let g = ((p >> 8) & 0xFF) as u8;
+                let r = ((p >> 16) & 0xFF) as u8;
+
+                rgba_data.push(r);
+                rgba_data.push(g);
+                rgba_data.push(b);
+                rgba_data.push(255);
+            }
+        }
+
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        image::write_buffer_with_format(
+            &mut cursor,
+            &rgba_data,
+            w as u32,
+            h as u32,
+            image::ColorType::Rgba8,
+            image::ImageFormat::Png,
+        )
+        .map_err(|e| format!("Failed to encode image: {}", e))?;
+
+        Ok(cursor.into_inner())
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn snip_screen_png(x: i32, y: i32, w: i32, h: i32) -> Result<Vec<u8>, String> {
+    if w <= 0 || h <= 0 {
+        return Err("Width and height must be positive".to_string());
+    }
+
+    if is_wayland_session() {
+        return Err("snipbase is not supported on Wayland".to_string());
+    }
+
+    fix_x11_sudo_env();
+
+    thread_local! {
+        static X11_SNIP_CTX: std::cell::RefCell<Option<Result<X11PixelContext, String>>> = std::cell::RefCell::new(None);
+    }
+
+    X11_SNIP_CTX.with(|ctx_cell| {
+        let mut ctx_opt = ctx_cell.borrow_mut();
+        if ctx_opt.is_none() {
+            unsafe {
+                use libc::{RTLD_LAZY, dlclose, dlopen, dlsym};
+                let lib = dlopen(b"libX11.so.6\0".as_ptr() as *const i8, RTLD_LAZY);
+                if lib.is_null() {
+                    let err = "Failed to load libX11.so.6".to_string();
+                    *ctx_opt = Some(Err(err.clone()));
+                    return Err(err);
+                }
+                let xopen = dlsym(lib, b"XOpenDisplay\0".as_ptr() as *const i8);
+                let xgetimage = dlsym(lib, b"XGetImage\0".as_ptr() as *const i8);
+                let xroot = dlsym(lib, b"XDefaultRootWindow\0".as_ptr() as *const i8);
+                let xgetattr = dlsym(lib, b"XGetWindowAttributes\0".as_ptr() as *const i8);
+
+                if xopen.is_null() || xgetimage.is_null() || xroot.is_null() || xgetattr.is_null() {
+                    dlclose(lib);
+                    let err = "Failed to load X11 symbols".to_string();
+                    *ctx_opt = Some(Err(err.clone()));
+                    return Err(err);
+                }
+
+                let xopendisplay: extern "C" fn(*const i8) -> *mut libc::c_void =
+                    std::mem::transmute(xopen);
+                let xdefaultrootwindow: extern "C" fn(*mut libc::c_void) -> libc::c_ulong =
+                    std::mem::transmute(xroot);
+                let display = xopendisplay(std::ptr::null());
+                if display.is_null() {
+                    dlclose(lib);
+                    let err = "Failed to open X display".to_string();
+                    *ctx_opt = Some(Err(err.clone()));
+                    return Err(err);
+                }
+
+                let root = xdefaultrootwindow(display);
+                let xgetimage_fn: extern "C" fn(
+                    *mut libc::c_void,
+                    libc::c_ulong,
+                    i32,
+                    i32,
+                    u32,
+                    u32,
+                    libc::c_ulong,
+                    i32,
+                ) -> *mut XImage = std::mem::transmute(xgetimage);
+
+                let xgetwindowattributes_fn: extern "C" fn(
+                    *mut libc::c_void,
+                    libc::c_ulong,
+                    *mut XWindowAttributes,
+                ) -> i32 = std::mem::transmute(xgetattr);
+
+                *ctx_opt = Some(Ok(X11PixelContext {
+                    lib,
+                    display,
+                    root,
+                    xgetimage: xgetimage_fn,
+                    xgetwindowattributes: xgetwindowattributes_fn,
+                }));
+            }
+        }
+
+        match ctx_opt.as_ref().unwrap() {
+            Ok(x11) => unsafe {
+                let mut attr: XWindowAttributes = std::mem::zeroed();
+                if (x11.xgetwindowattributes)(x11.display, x11.root, &mut attr) == 0 {
+                    return Err("Failed to get root window attributes".into());
+                }
+
+                let screen_w = attr.width;
+                let screen_h = attr.height;
+
+                let start_x = x.clamp(0, screen_w - 1);
+                let start_y = y.clamp(0, screen_h - 1);
+                let end_x = (x + w).clamp(0, screen_w);
+                let end_y = (y + h).clamp(0, screen_h);
+
+                let actual_w = end_x - start_x;
+                let actual_h = end_y - start_y;
+
+                if actual_w <= 0 || actual_h <= 0 {
+                    return Err("Calculated dimensions are <= 0".to_string());
+                }
+
+                let image = (x11.xgetimage)(
+                    x11.display,
+                    x11.root,
+                    start_x,
+                    start_y,
+                    actual_w as u32,
+                    actual_h as u32,
+                    !0,
+                    2,
+                );
+                if image.is_null() {
+                    return Err("Failed to get image from X11".into());
+                }
+
+                let rm = (*image).red_mask;
+                let gm = (*image).green_mask;
+                let bm = (*image).blue_mask;
+
+                let r_shift = rm.trailing_zeros();
+                let r_max = rm >> r_shift;
+                let g_shift = gm.trailing_zeros();
+                let g_max = gm >> g_shift;
+                let b_shift = bm.trailing_zeros();
+                let b_max = bm >> b_shift;
+
+                let data_ptr = (*image).data as *const u8;
+                let bpl = (*image).bytes_per_line;
+                let bpp = (*image).bits_per_pixel;
+                let get_pixel_fn = (*image).f.get_pixel;
+
+                let mut rgba_data = Vec::with_capacity((actual_w * actual_h * 4) as usize);
+
+                for row in 0..actual_h {
+                    for col in 0..actual_w {
+                        let pixel = if bpp == 32 {
+                            let offset = (row * bpl + col * 4) as isize;
+                            std::ptr::read_unaligned(data_ptr.offset(offset) as *const u32)
+                                as libc::c_ulong
+                        } else {
+                            (get_pixel_fn)(image, col, row)
+                        };
+
+                        let r = if r_max > 0 {
+                            (((pixel & rm) >> r_shift) * 255 / r_max) as u8
+                        } else {
+                            0
+                        };
+                        let g = if g_max > 0 {
+                            (((pixel & gm) >> g_shift) * 255 / g_max) as u8
+                        } else {
+                            0
+                        };
+                        let b = if b_max > 0 {
+                            (((pixel & bm) >> b_shift) * 255 / b_max) as u8
+                        } else {
+                            0
+                        };
+
+                        rgba_data.push(r);
+                        rgba_data.push(g);
+                        rgba_data.push(b);
+                        rgba_data.push(255);
+                    }
+                }
+
+                ((*image).f.destroy_image)(image);
+
+                let mut cursor = std::io::Cursor::new(Vec::new());
+                image::write_buffer_with_format(
+                    &mut cursor,
+                    &rgba_data,
+                    actual_w as u32,
+                    actual_h as u32,
+                    image::ColorType::Rgba8,
+                    image::ImageFormat::Png,
+                )
+                .map_err(|e| format!("Failed to encode image: {}", e))?;
+
+                Ok(cursor.into_inner())
+            },
+            Err(e) => Err(e.clone()),
+        }
+    })
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+pub fn snip_screen_png(_x: i32, _y: i32, _w: i32, _h: i32) -> Result<Vec<u8>, String> {
+    Err("snipbase is not supported on this OS".to_string())
+}
+
+#[cfg(windows)]
 fn set_mouse_pos(x: i32, y: i32, relative: bool) -> Result<(), String> {
     if relative {
         use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
@@ -5214,6 +5544,49 @@ impl Interpreter {
                         } else {
                             return Err(format!("Line {}: 'imgbase' expects a string path", line));
                         }
+                    }
+                    "snipbase" => {
+                        if eval_args.len() != 4 {
+                            return Err(format!(
+                                "Line {}: 'snipbase' expects exactly 4 arguments",
+                                line
+                            ));
+                        }
+                        let x1 = if let Value::Number(n) = eval_args[0].1 {
+                            n as i32
+                        } else {
+                            return Err(format!("Line {}: 'snipbase' x1 must be a number", line));
+                        };
+                        let y1 = if let Value::Number(n) = eval_args[1].1 {
+                            n as i32
+                        } else {
+                            return Err(format!("Line {}: 'snipbase' y1 must be a number", line));
+                        };
+                        let x2 = if let Value::Number(n) = eval_args[2].1 {
+                            n as i32
+                        } else {
+                            return Err(format!("Line {}: 'snipbase' x2 must be a number", line));
+                        };
+                        let y2 = if let Value::Number(n) = eval_args[3].1 {
+                            n as i32
+                        } else {
+                            return Err(format!("Line {}: 'snipbase' y2 must be a number", line));
+                        };
+
+                        let start_x = x1.min(x2);
+                        let start_y = y1.min(y2);
+                        let w = (x1 - x2).abs() + 1;
+                        let h = (y1 - y2).abs() + 1;
+
+                        if w <= 0 || h <= 0 {
+                            return Err(format!("Line {}: 'snipbase' width and height must be > 0", line));
+                        }
+
+                        let png_data = snip_screen_png(start_x, start_y, w, h)
+                            .map_err(|e| format!("Line {}: {}", line, e))?;
+
+                        let b64 = encode_base64(&png_data);
+                        return Ok(Value::EnumVariant("Image".to_string(), b64, None));
                     }
                     "imgsearch" => {
                         if eval_args.len() < 1 || eval_args.len() > 2 {

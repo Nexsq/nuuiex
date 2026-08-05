@@ -330,8 +330,9 @@ NUUI provides powerful built-in functions injected directly into the runtime env
 | `getpixel(x, y)` | `Number, Number` | Returns the RGB color of the screen pixel at `(x, y)` as a `Color:Variant`. |
 | `compixel(c1, c2, tol?)` | `Color, Color, Num` | Compares `c1` and `c2`. Optional `tol` (0-255) defines the acceptable RGB tolerance. Returns `Bool`. |
 | `pixelsearch(x1, y1, x2, y2, c, tol?)` | `Num, Num, Num, Num, Color, Num` | Fast screen region search for color `c` within `(x1, y1)` to `(x2, y2)` with an optional `tol` (0-255). Returns `[x, y]` if found, or `None`. |
-| `imgbase(path)` | `String` | Loads a png image from the specified file `path`, encodes it, and returns an `Image` enum variant. |
 | `imgsearch(img, tol?)` | `Image, Num` | Searches the screen for the specified `Image` enum with an optional tolerance `tol` (0-255) for color variance. Returns `[x, y]` of the match, or `None`. |
+| `imgbase(path)` | `String` | Loads a png image from the specified file `path`, encodes it, and returns an `Image` enum variant. |
+| `snipbase(x1, y1, x2, y2)` | `Num, Num, Num, Num` | Captures a region of the screen and returns it as an `Image` enum variant containing base64-encoded PNG data. |
 | `setcaret(x, y)` | `Number, Number` | Moves the internal terminal caret to a specific row and column in the output box. |
 | `caretx()` | None | Returns the current X (column) position of the terminal output caret. |
 | `carety()` | None | Returns the current Y (row) position of the terminal output caret. |
