@@ -1,2 +1,3 @@
 add macos support?
 add option for compression types to snipbase
+add ctrl backspace to all the inputs (fnd, custom settings, renaming etc...)
