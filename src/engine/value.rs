@@ -1,15 +1,15 @@
 use super::ast::FunctionDef;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
 pub enum Value {
     Number(f64),
     String(String),
     Bool(bool),
-    List(Vec<Value>),
-    Dict(HashMap<Value, Value>),
+    List(Arc<Mutex<Vec<Value>>>),
+    Dict(Arc<Mutex<HashMap<Value, Value>>>),
     Function(Arc<FunctionDef>),
     BuiltinEnum(String),
     EnumVariant(String, String, Option<Box<Value>>),
@@ -22,8 +22,26 @@ impl PartialEq for Value {
             (Value::Number(a), Value::Number(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
-            (Value::List(a), Value::List(b)) => a == b,
-            (Value::Dict(a), Value::Dict(b)) => a == b,
+            (Value::List(a), Value::List(b)) => {
+                if Arc::ptr_eq(a, b) {
+                    return true;
+                }
+                if let (Ok(a_lock), Ok(b_lock)) = (a.try_lock(), b.try_lock()) {
+                    *a_lock == *b_lock
+                } else {
+                    false
+                }
+            }
+            (Value::Dict(a), Value::Dict(b)) => {
+                if Arc::ptr_eq(a, b) {
+                    return true;
+                }
+                if let (Ok(a_lock), Ok(b_lock)) = (a.try_lock(), b.try_lock()) {
+                    *a_lock == *b_lock
+                } else {
+                    false
+                }
+            }
             (Value::Function(a), Value::Function(b)) => Arc::ptr_eq(a, b),
             (Value::BuiltinEnum(a), Value::BuiltinEnum(b)) => a == b,
             (Value::EnumVariant(e1, v1, i1), Value::EnumVariant(e2, v2, i2)) => {
@@ -59,18 +77,22 @@ impl std::hash::Hash for Value {
             }
             Value::List(l) => {
                 state.write_u8(4);
-                for item in l {
-                    item.hash(state);
+                if let Ok(l_lock) = l.try_lock() {
+                    for item in l_lock.iter() {
+                        item.hash(state);
+                    }
                 }
             }
             Value::Dict(d) => {
                 state.write_u8(5);
                 let mut dict_hash = 0u64;
-                for (k, v) in d {
-                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                    k.hash(&mut hasher);
-                    v.hash(&mut hasher);
-                    dict_hash ^= std::hash::Hasher::finish(&hasher);
+                if let Ok(d_lock) = d.try_lock() {
+                    for (k, v) in d_lock.iter() {
+                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                        k.hash(&mut hasher);
+                        v.hash(&mut hasher);
+                        dict_hash ^= std::hash::Hasher::finish(&hasher);
+                    }
                 }
                 state.write_u64(dict_hash);
             }
@@ -101,8 +123,8 @@ impl Value {
             Value::Number(n) => *n != 0.0,
             Value::String(s) => !s.is_empty(),
             Value::Bool(b) => *b,
-            Value::List(l) => !l.is_empty(),
-            Value::Dict(d) => !d.is_empty(),
+            Value::List(l) => l.try_lock().map(|l| !l.is_empty()).unwrap_or(true),
+            Value::Dict(d) => d.try_lock().map(|d| !d.is_empty()).unwrap_or(true),
             Value::Function(_) => true,
             Value::BuiltinEnum(_) | Value::EnumVariant(..) => true,
             Value::Nil => false,
@@ -118,34 +140,42 @@ impl fmt::Display for Value {
             Value::Bool(b) => write!(f, "{}", if *b { "True" } else { "False" }),
             Value::List(l) => {
                 write!(f, "[")?;
-                for (i, val) in l.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if let Ok(l_lock) = l.try_lock() {
+                    for (i, val) in l_lock.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        if let Value::String(s) = val {
+                            write!(f, "\"{}\"", s)?;
+                        } else {
+                            write!(f, "{}", val)?;
+                        }
                     }
-                    if let Value::String(s) = val {
-                        write!(f, "\"{}\"", s)?;
-                    } else {
-                        write!(f, "{}", val)?;
-                    }
+                } else {
+                    write!(f, "...")?;
                 }
                 write!(f, "]")
             }
             Value::Dict(d) => {
                 write!(f, "{{")?;
-                for (i, (k, v)) in d.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if let Ok(d_lock) = d.try_lock() {
+                    for (i, (k, v)) in d_lock.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        if let Value::String(s) = k {
+                            write!(f, "\"{}\": ", s)?;
+                        } else {
+                            write!(f, "{}: ", k)?;
+                        }
+                        if let Value::String(s) = v {
+                            write!(f, "\"{}\"", s)?;
+                        } else {
+                            write!(f, "{}", v)?;
+                        }
                     }
-                    if let Value::String(s) = k {
-                        write!(f, "\"{}\": ", s)?;
-                    } else {
-                        write!(f, "{}: ", k)?;
-                    }
-                    if let Value::String(s) = v {
-                        write!(f, "\"{}\"", s)?;
-                    } else {
-                        write!(f, "{}", v)?;
-                    }
+                } else {
+                    write!(f, "...")?;
                 }
                 write!(f, "}}")
             }

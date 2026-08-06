@@ -687,7 +687,7 @@ impl Analyzer {
                         }
                         "mousex" | "mousey" | "mousedelta" | "time" | "caretx" | "carety"
                         | "screenx" | "screeny" | "focused" | "displayx" | "displayy"
-                        | "getclipboard" => {
+                        | "getclipboard" | "onlinux" | "onwindows" | "exit" => {
                             if args.len() != 0 {
                                 self.error(
                                     *line,

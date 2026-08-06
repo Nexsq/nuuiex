@@ -3215,6 +3215,7 @@ impl Editor {
                                 word_str.as_str(),
                                 "len"
                                     | "append"
+                                    | "copy"
                                     | "clear"
                                     | "count"
                                     | "extend"

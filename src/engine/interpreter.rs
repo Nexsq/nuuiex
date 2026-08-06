@@ -1,9 +1,9 @@
 use super::ast::{BinaryOp, Expr, FunctionDef, Stmt, StringPart};
 use super::value::Value;
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender};
+use std::sync::{Arc, Mutex};
 
 #[cfg(target_os = "linux")]
 use crate::editor::{build_clipboard_cmd, fix_x11_sudo_env, is_wayland_session};
@@ -3836,9 +3836,9 @@ impl Interpreter {
                 .assign(name, value)
                 .map_err(|e| format!("Line {}: {}", line, e)),
             Expr::Index(left, index_expr, line) => {
-                let mut left_val = self.eval_expr(left)?;
+                let left_val = self.eval_expr(left)?;
                 let index_val = self.eval_expr(index_expr)?;
-                if let Value::List(vec) = &mut left_val {
+                if let Value::List(vec_arc) = &left_val {
                     if let Value::Number(n) = index_val {
                         if n < 0.0 {
                             return Err(format!("Line {}: List index cannot be negative", line));
@@ -3847,62 +3847,24 @@ impl Interpreter {
                             return Err(format!("Line {}: List index must be an integer", line));
                         }
                         let idx = n as usize;
+                        let mut vec = vec_arc.lock().unwrap();
                         if idx < vec.len() {
                             vec[idx] = value;
-                            self.assign_expr(left, left_val)
+                            Ok(())
                         } else {
                             Err(format!("Line {}: Index out of bounds", line))
                         }
                     } else {
                         Err(format!("Line {}: List index must be a number", line))
                     }
-                } else if let Value::Dict(map) = &mut left_val {
-                    map.insert(index_val, value);
-                    self.assign_expr(left, left_val)
+                } else if let Value::Dict(map_arc) = &left_val {
+                    map_arc.lock().unwrap().insert(index_val, value);
+                    Ok(())
                 } else {
                     Err(format!("Line {}: Cannot index into non-list/dict", line))
                 }
             }
             _ => Err("Invalid assignment target".to_string()),
-        }
-    }
-
-    fn try_assign_expr(&mut self, target: &Expr, value: Value) -> Result<(), String> {
-        match target {
-            Expr::Ident(name, line) => self
-                .env
-                .assign(name, value)
-                .map_err(|e| format!("Line {}: {}", line, e)),
-            Expr::Index(left, index_expr, line) => {
-                let mut left_val = self.eval_expr(left)?;
-                let index_val = self.eval_expr(index_expr)?;
-                if let Value::List(vec) = &mut left_val {
-                    if let Value::Number(n) = index_val {
-                        if n < 0.0 {
-                            return Err(format!("Line {}: List index cannot be negative", line));
-                        }
-                        if n.fract() != 0.0 {
-                            return Err(format!("Line {}: List index must be an integer", line));
-                        }
-                        let idx = n as usize;
-                        if idx < vec.len() {
-                            vec[idx] = value;
-                            self.try_assign_expr(left, left_val)
-                        } else {
-                            Err(format!("Line {}: Index out of bounds", line))
-                        }
-                    } else {
-                        Err(format!("Line {}: List index must be a number", line))
-                    }
-                } else if let Value::Dict(map) = &mut left_val {
-                    map.insert(index_val, value);
-                    self.try_assign_expr(left, left_val)
-                } else {
-                    Err(format!("Line {}: Cannot index into non-list/dict", line))
-                }
-            }
-            Expr::MethodCall(left, _, _, _) => self.try_assign_expr(left, value),
-            _ => Ok(()),
         }
     }
 
@@ -3913,7 +3875,25 @@ impl Interpreter {
         args: Vec<Value>,
         line: usize,
     ) -> Result<(Value, bool), String> {
-        if let Value::List(vec) = val {
+        if method == "copy" {
+            if args.len() != 0 {
+                return Err(format!("Line {}: 'copy' expects 0 arguments", line));
+            }
+            return match val {
+                Value::List(vec_arc) => Ok((
+                    Value::List(Arc::new(Mutex::new(vec_arc.lock().unwrap().clone()))),
+                    false,
+                )),
+                Value::Dict(map_arc) => Ok((
+                    Value::Dict(Arc::new(Mutex::new(map_arc.lock().unwrap().clone()))),
+                    false,
+                )),
+                _ => Ok((val.clone(), false)),
+            };
+        }
+
+        if let Value::List(vec_arc) = val {
+            let mut vec = vec_arc.lock().unwrap();
             match method {
                 "len" => {
                     if args.len() != 0 {
@@ -3926,14 +3906,14 @@ impl Interpreter {
                         return Err(format!("Line {}: 'append' expects 1 argument", line));
                     }
                     vec.push(args[0].clone());
-                    Ok((Value::List(vec.clone()), true))
+                    Ok((Value::List(vec_arc.clone()), true))
                 }
                 "clear" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'clear' expects 0 arguments", line));
                     }
                     vec.clear();
-                    Ok((Value::List(vec.clone()), true))
+                    Ok((Value::List(vec_arc.clone()), true))
                 }
                 "count" => {
                     if args.len() != 1 {
@@ -3947,9 +3927,9 @@ impl Interpreter {
                     if args.len() != 1 {
                         return Err(format!("Line {}: 'extend' expects 1 argument", line));
                     }
-                    if let Value::List(other) = &args[0] {
-                        vec.extend(other.clone());
-                        Ok((Value::List(vec.clone()), true))
+                    if let Value::List(other_arc) = &args[0] {
+                        vec.extend(other_arc.lock().unwrap().clone());
+                        Ok((Value::List(vec_arc.clone()), true))
                     } else {
                         Err(format!("Line {}: 'extend' expects a list", line))
                     }
@@ -3979,7 +3959,7 @@ impl Interpreter {
                         let idx = pos as usize;
                         if idx <= vec.len() {
                             vec.insert(idx, element);
-                            Ok((Value::List(vec.clone()), true))
+                            Ok((Value::List(vec_arc.clone()), true))
                         } else {
                             Err(format!("Line {}: Index out of bounds", line))
                         }
@@ -4022,11 +4002,12 @@ impl Interpreter {
                     if let Some(pos) = vec.iter().position(|x| x == &args[0]) {
                         vec.remove(pos);
                     }
-                    Ok((Value::List(vec.clone()), true))
+                    Ok((Value::List(vec_arc.clone()), true))
                 }
                 _ => Err(format!("Line {}: Undefined list method '{}'", line, method)),
             }
-        } else if let Value::Dict(map) = val {
+        } else if let Value::Dict(map_arc) = val {
+            let mut map = map_arc.lock().unwrap();
             match method {
                 "len" => {
                     if args.len() != 0 {
@@ -4039,7 +4020,7 @@ impl Interpreter {
                         return Err(format!("Line {}: 'clear' expects 0 arguments", line));
                     }
                     map.clear();
-                    Ok((Value::Dict(map.clone()), true))
+                    Ok((Value::Dict(map_arc.clone()), true))
                 }
                 "get" => {
                     if args.len() != 1 && args.len() != 2 {
@@ -4058,21 +4039,21 @@ impl Interpreter {
                         return Err(format!("Line {}: 'keys' expects 0 arguments", line));
                     }
                     let keys: Vec<Value> = map.keys().cloned().collect();
-                    Ok((Value::List(keys), false))
+                    Ok((Value::List(Arc::new(Mutex::new(keys))), false))
                 }
                 "values" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'values' expects 0 arguments", line));
                     }
                     let vals: Vec<Value> = map.values().cloned().collect();
-                    Ok((Value::List(vals), false))
+                    Ok((Value::List(Arc::new(Mutex::new(vals))), false))
                 }
                 "pop" => {
                     if args.len() == 0 {
                         let key = map.keys().next().cloned();
                         if let Some(k) = key {
                             let v = map.remove(&k).unwrap();
-                            Ok((Value::List(vec![k, v]), true))
+                            Ok((Value::List(Arc::new(Mutex::new(vec![k, v]))), true))
                         } else {
                             Err(format!("Line {}: pop from empty dict", line))
                         }
@@ -4090,11 +4071,11 @@ impl Interpreter {
                     if args.len() != 1 {
                         return Err(format!("Line {}: 'update' expects 1 argument", line));
                     }
-                    if let Value::Dict(other) = &args[0] {
-                        for (k, v) in other {
+                    if let Value::Dict(other_arc) = &args[0] {
+                        for (k, v) in other_arc.lock().unwrap().iter() {
                             map.insert(k.clone(), v.clone());
                         }
-                        Ok((Value::Dict(map.clone()), true))
+                        Ok((Value::Dict(map_arc.clone()), true))
                     } else {
                         Err(format!("Line {}: 'update' expects a dict", line))
                     }
@@ -4104,7 +4085,7 @@ impl Interpreter {
                         return Err(format!("Line {}: 'set' expects 2 arguments", line));
                     }
                     map.insert(args[0].clone(), args[1].clone());
-                    Ok((Value::Dict(map.clone()), true))
+                    Ok((Value::Dict(map_arc.clone()), true))
                 }
                 _ => Err(format!("Line {}: Undefined dict method '{}'", line, method)),
             }
@@ -4190,8 +4171,13 @@ impl Interpreter {
                     if args.len() != 1 {
                         return Err(format!("Line {}: 'join' expects 1 argument", line));
                     }
-                    if let Value::List(l) = &args[0] {
-                        let strings: Vec<String> = l.iter().map(|v| v.to_string()).collect();
+                    if let Value::List(l_arc) = &args[0] {
+                        let strings: Vec<String> = l_arc
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .map(|v| v.to_string())
+                            .collect();
                         Ok((Value::String(strings.join(s)), false))
                     } else {
                         Err(format!("Line {}: 'join' expects a list", line))
@@ -4203,12 +4189,12 @@ impl Interpreter {
                             .split_whitespace()
                             .map(|p| Value::String(p.to_string()))
                             .collect();
-                        Ok((Value::List(parts), false))
+                        Ok((Value::List(Arc::new(Mutex::new(parts))), false))
                     } else if args.len() == 1 {
                         if let Value::String(sep) = &args[0] {
                             let parts: Vec<Value> =
                                 s.split(sep).map(|p| Value::String(p.to_string())).collect();
-                            Ok((Value::List(parts), false))
+                            Ok((Value::List(Arc::new(Mutex::new(parts))), false))
                         } else {
                             Err(format!("Line {}: 'split' expects a string separator", line))
                         }
@@ -4479,9 +4465,9 @@ impl Interpreter {
             Stmt::For(name, expr, body, line) => {
                 let iterable_val = self.eval_expr(expr)?;
                 let items: Vec<Value> = match iterable_val {
-                    Value::List(l) => l,
+                    Value::List(l) => l.lock().unwrap().clone(),
                     Value::String(s) => s.chars().map(|c| Value::String(c.to_string())).collect(),
-                    Value::Dict(d) => d.keys().cloned().collect(),
+                    Value::Dict(d) => d.lock().unwrap().keys().cloned().collect(),
                     _ => return Err(format!("Line {}: TypeError: value is not iterable", line)),
                 };
 
@@ -4698,7 +4684,7 @@ impl Interpreter {
                 for item in items {
                     vec.push(self.eval_expr(item)?);
                 }
-                Ok(Value::List(vec))
+                Ok(Value::List(Arc::new(Mutex::new(vec))))
             }
             Expr::Dict(items) => {
                 let mut map = std::collections::HashMap::with_capacity(items.len());
@@ -4707,7 +4693,7 @@ impl Interpreter {
                     let v_val = self.eval_expr(v_expr)?;
                     map.insert(k_val, v_val);
                 }
-                Ok(Value::Dict(map))
+                Ok(Value::Dict(Arc::new(Mutex::new(map))))
             }
             Expr::Ident(name, line) => {
                 if let Some(val) = self.env.get(name) {
@@ -4750,7 +4736,7 @@ impl Interpreter {
             Expr::Index(left, index_expr, line) => {
                 let left_val = self.eval_expr(left)?;
                 let index_val = self.eval_expr(index_expr)?;
-                if let Value::List(vec) = left_val {
+                if let Value::List(vec_arc) = left_val {
                     if let Value::Number(n) = index_val {
                         if n < 0.0 {
                             return Err(format!("Line {}: List index cannot be negative", line));
@@ -4759,6 +4745,7 @@ impl Interpreter {
                             return Err(format!("Line {}: List index must be an integer", line));
                         }
                         let idx = n as usize;
+                        let vec = vec_arc.lock().unwrap();
                         if idx < vec.len() {
                             Ok(vec[idx].clone())
                         } else {
@@ -4767,8 +4754,8 @@ impl Interpreter {
                     } else {
                         Err(format!("Line {}: List index must be a number", line))
                     }
-                } else if let Value::Dict(map) = left_val {
-                    if let Some(v) = map.get(&index_val) {
+                } else if let Value::Dict(map_arc) = left_val {
+                    if let Some(v) = map_arc.lock().unwrap().get(&index_val) {
                         Ok(v.clone())
                     } else {
                         Ok(Value::Nil)
@@ -4848,11 +4835,8 @@ impl Interpreter {
                     }
                 }
 
-                let (res, is_mutated) =
+                let (res, _is_mutated) =
                     self.apply_method(&mut left_val, method, eval_args, *line)?;
-                if is_mutated {
-                    self.try_assign_expr(left, left_val)?;
-                }
                 Ok(res)
             }
             Expr::Not(expr, _) => {
@@ -4979,7 +4963,7 @@ impl Interpreter {
                                 curr += step;
                             }
                         }
-                        return Ok(Value::List(items));
+                        return Ok(Value::List(Arc::new(Mutex::new(items))));
                     }
                     "random" => {
                         let (start, stop, step) =
@@ -5040,8 +5024,12 @@ impl Interpreter {
                         }
                         match &eval_args[0].1 {
                             Value::String(s) => return Ok(Value::Number(s.chars().count() as f64)),
-                            Value::List(l) => return Ok(Value::Number(l.len() as f64)),
-                            Value::Dict(d) => return Ok(Value::Number(d.len() as f64)),
+                            Value::List(l) => {
+                                return Ok(Value::Number(l.lock().unwrap().len() as f64));
+                            }
+                            Value::Dict(d) => {
+                                return Ok(Value::Number(d.lock().unwrap().len() as f64));
+                            }
                             _ => {
                                 return Err(format!(
                                     "Line {}: 'len' is not supported for this type",
@@ -5060,7 +5048,7 @@ impl Interpreter {
 
                         let items = if eval_args.len() == 1 {
                             match &eval_args[0].1 {
-                                Value::List(l) => l.clone(),
+                                Value::List(l) => l.lock().unwrap().clone(),
                                 Value::String(s) => {
                                     s.chars().map(|c| Value::String(c.to_string())).collect()
                                 }
@@ -5193,6 +5181,12 @@ impl Interpreter {
                             return Err(format!("Line {}: 'onlinux' expects 0 arguments", line));
                         }
                         return Ok(Value::Bool(cfg!(target_os = "linux")));
+                    }
+                    "onwindows" => {
+                        if !eval_args.is_empty() {
+                            return Err(format!("Line {}: 'onwindows' expects 0 arguments", line));
+                        }
+                        return Ok(Value::Bool(cfg!(target_os = "windows")));
                     }
                     "isdown" | "isup" | "isdownfocus" | "isupfocus" => {
                         if eval_args.len() != 1 {
@@ -5332,10 +5326,10 @@ impl Interpreter {
                         }
                         let dx = MOUSE_DX.swap(0, Ordering::Relaxed);
                         let dy = MOUSE_DY.swap(0, Ordering::Relaxed);
-                        return Ok(Value::List(vec![
+                        return Ok(Value::List(Arc::new(Mutex::new(vec![
                             Value::Number(dx as f64),
                             Value::Number(dy as f64),
-                        ]));
+                        ]))));
                     }
                     "setmouse" => {
                         if eval_args.len() < 2 || eval_args.len() > 3 {
@@ -5420,8 +5414,8 @@ impl Interpreter {
                             ));
                         }
                         let mut active = Vec::new();
-                        if let Value::List(keys) = &eval_args[0].1 {
-                            for k in keys {
+                        if let Value::List(keys_arc) = &eval_args[0].1 {
+                            for k in keys_arc.lock().unwrap().iter() {
                                 let key_str = match variant_to_key_str(k) {
                                     Ok(s) => s,
                                     Err(e) => return Err(format!("Line {}: {}", line, e)),
@@ -5436,7 +5430,7 @@ impl Interpreter {
                                 line
                             ));
                         }
-                        return Ok(Value::List(active));
+                        return Ok(Value::List(Arc::new(Mutex::new(active))));
                     }
                     "setcaret" => {
                         if eval_args.len() != 2 {
@@ -5540,19 +5534,20 @@ impl Interpreter {
                                         }
                                     }
                                 }
-                                return Ok(Value::Dict(map));
+                                return Ok(Value::Dict(Arc::new(Mutex::new(map))));
                             } else {
-                                if let Value::Dict(map) = &eval_args[0].1 {
+                                if let Value::Dict(map_arc) = &eval_args[0].1 {
                                     if let Some(parent) = md_file.parent() {
                                         let _ = std::fs::create_dir_all(parent);
                                     }
+                                    let map = map_arc.lock().unwrap();
                                     if map.is_empty() {
                                         if md_file.exists() {
                                             let _ = std::fs::remove_file(md_file);
                                         }
                                     } else {
                                         let mut content = String::new();
-                                        for (k, v) in map {
+                                        for (k, v) in map.iter() {
                                             let k_str = match k {
                                                 Value::String(s) => s.clone(),
                                                 _ => k.to_string(),
@@ -5687,10 +5682,10 @@ impl Interpreter {
 
                         match search_screen_image(&img_data, img_w, img_h, tol) {
                             Ok(Some((x, y))) => {
-                                return Ok(Value::List(vec![
+                                return Ok(Value::List(Arc::new(Mutex::new(vec![
                                     Value::Number(x as f64),
                                     Value::Number(y as f64),
-                                ]));
+                                ]))));
                             }
                             Ok(std::option::Option::None) => return Ok(Value::Nil),
                             Err(e) => return Err(format!("Line {}: {}", line, e)),
@@ -5791,10 +5786,10 @@ impl Interpreter {
 
                         match search_screen_pixels(start_x, start_y, w, h, tr, tg, tb, tol) {
                             Ok(Some((fx, fy))) => {
-                                return Ok(Value::List(vec![
+                                return Ok(Value::List(Arc::new(Mutex::new(vec![
                                     Value::Number(fx as f64),
                                     Value::Number(fy as f64),
-                                ]));
+                                ]))));
                             }
                             Ok(std::option::Option::None) => return Ok(Value::Nil),
                             Err(e) => return Err(format!("Line {}: {}", line, e)),

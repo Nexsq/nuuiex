@@ -186,6 +186,7 @@ Numbers are represented internally as 64-bit floats (`f64`).
 | `round(places?)` | Rounds the number (optionally to `places` decimal points). |
 | `pow(exp)` | Raises the number to the power of `exp`. |
 | `sqrt()` | Returns the square root. |
+| `copy()` | Returns the number itself. |
 
 ### 2. Strings
 
@@ -204,6 +205,7 @@ Numbers are represented internally as 64-bit floats (`f64`).
 | `startswith(s)` | Returns `True` if the string starts with `s`. |
 | `endswith(s)` | Returns `True` if the string ends with `s`. |
 | `asnum()` | Parses the string into a Number, or `None` if invalid. |
+| `copy()` | Returns the string itself. |
 
 ### 3. Lists
 Lists are dynamically sized arrays: `let arr = [1, "two", False]`
@@ -219,6 +221,7 @@ Lists are dynamically sized arrays: `let arr = [1, "two", False]`
 | `index(val)` | Returns the index of `val`, or `None`. |
 | `count(val)` | Returns the number of `val` occurrences. |
 | `clear()` | Empties the list. |
+| `copy()` | Returns a detached, shallow copy of the list. |
 
 ### 4. Dictionaries
 Dictionaries are HashMaps with dynamic keys and values: `let dict = {"key": "value"}`
@@ -233,6 +236,7 @@ Dictionaries are HashMaps with dynamic keys and values: `let dict = {"key": "val
 | `values()` | Returns a List of all values. |
 | `pop(key?)` | Removes and returns the value for `key`, or a random `[key, value]` pair. |
 | `clear()` | Empties the dictionary. |
+| `copy()` | Returns a detached, shallow copy of the dictionary. |
 
 ---
 
