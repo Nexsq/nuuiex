@@ -4,4 +4,5 @@ add ctrl backspace to all the inputs (fnd, custom settings, renaming etc...)
 
 change copy method to clone
 add highlighting for unknown methods
+backspacing into a folded function moves the cursor in some random aah position
 add pass !!!
