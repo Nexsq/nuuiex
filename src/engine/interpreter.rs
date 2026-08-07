@@ -3875,9 +3875,9 @@ impl Interpreter {
         args: Vec<Value>,
         line: usize,
     ) -> Result<(Value, bool), String> {
-        if method == "copy" {
+        if method == "clone" {
             if args.len() != 0 {
-                return Err(format!("Line {}: 'copy' expects 0 arguments", line));
+                return Err(format!("Line {}: 'clone' expects 0 arguments", line));
             }
             return match val {
                 Value::List(vec_arc) => Ok((

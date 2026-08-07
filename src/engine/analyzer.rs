@@ -228,6 +228,66 @@ impl Analyzer {
                     }
                     self.analyze_expr(arg);
                 }
+
+                let is_valid_method = matches!(
+                    method.as_str(),
+                    "clone"
+                        | "len"
+                        | "append"
+                        | "clear"
+                        | "count"
+                        | "extend"
+                        | "index"
+                        | "insert"
+                        | "pop"
+                        | "remove"
+                        | "get"
+                        | "keys"
+                        | "values"
+                        | "update"
+                        | "set"
+                        | "capitalize"
+                        | "lower"
+                        | "upper"
+                        | "swapcase"
+                        | "trim"
+                        | "join"
+                        | "split"
+                        | "replace"
+                        | "startswith"
+                        | "endswith"
+                        | "asnum"
+                        | "abs"
+                        | "neg"
+                        | "floor"
+                        | "trunc"
+                        | "ceil"
+                        | "fract"
+                        | "clamp"
+                        | "round"
+                        | "pow"
+                        | "sqrt"
+                        | "tostring"
+                );
+
+                if !is_valid_method {
+                    let mut is_enum = false;
+                    if let Expr::Ident(name, _) = &**left {
+                        if name == "Key"
+                            || name == "Color"
+                            || name == "Background"
+                            || name == "Modifier"
+                            || name == "Image"
+                        {
+                            is_enum = true;
+                        }
+                    }
+
+                    if !is_enum {
+                        self.error(*line, format!("Unknown method '{}'", method));
+                    }
+                }
+
                 if let Expr::Ident(name, _) = &**left {
                     if name == "Key" {
                         if !crate::engine::core::is_valid_key_variant(&method) {
@@ -243,9 +303,6 @@ impl Analyzer {
                     } else if name == "Image" {
                         if !args.is_empty() {
                             self.error(*line, "Image variant does not take arguments".to_string());
-                        }
-                        if !args.is_empty() {
-                            self.error(*line, format!("{} variant does not take arguments", name));
                         }
                     } else if name == "Modifier" {
                         if !crate::engine::core::is_valid_modifier_variant(&method) {
