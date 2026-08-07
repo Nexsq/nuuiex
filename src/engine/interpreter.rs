@@ -4535,6 +4535,7 @@ impl Interpreter {
             }
             Stmt::Break(_) => Ok(Signal::Break),
             Stmt::Continue(_) => Ok(Signal::Continue),
+            Stmt::Pass(_) => Ok(Signal::Empty),
             Stmt::Fn(name, params, body, line) => {
                 let func_def = Arc::new(FunctionDef {
                     name: name.clone(),

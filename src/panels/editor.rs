@@ -1323,6 +1323,17 @@ impl Editor {
             self.state.cursor_x = max_x;
         }
 
+        let target = self.state.cursor_y;
+        let mut to_unfold = Vec::new();
+        for &fold_start in &self.folded_lines {
+            if target > fold_start && target <= self.get_block_end(fold_start) {
+                to_unfold.push(fold_start);
+            }
+        }
+        for r in to_unfold {
+            self.folded_lines.remove(&r);
+        }
+
         self.snap_cursor_image_blocks(0);
     }
 
@@ -1600,6 +1611,17 @@ impl Editor {
             let prev_line = &mut self.state.lines[self.state.cursor_y];
             self.state.cursor_x = prev_line.chars().count();
             prev_line.push_str(&current_line);
+        }
+
+        let target = self.state.cursor_y;
+        let mut to_unfold = Vec::new();
+        for &fold_start in &self.folded_lines {
+            if target > fold_start && target <= self.get_block_end(fold_start) {
+                to_unfold.push(fold_start);
+            }
+        }
+        for r in to_unfold {
+            self.folded_lines.remove(&r);
         }
     }
 
@@ -3191,6 +3213,7 @@ impl Editor {
                                     | "else"
                                     | "break"
                                     | "continue"
+                                    | "pass"
                                     | "async"
                             );
                             let is_op_word = matches!(word_str.as_str(), "and" | "or" | "not");

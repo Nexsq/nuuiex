@@ -144,6 +144,7 @@ impl Analyzer {
                     self.error(*line, "Continue statement outside of a loop".into());
                 }
             }
+            Stmt::Pass(_) => {}
             Stmt::Fn(_, params, body, line) => {
                 for param in params {
                     if let Some(default) = &param.default {
