@@ -295,8 +295,38 @@ fn main() {
                                     editor.is_waiting_for_input = false;
                                     editor.input_buffer.clear();
                                 }
-                                Key::Backspace | Key::CtrlBackspace => {
+                                Key::Backspace => {
                                     editor.input_buffer.pop();
+                                }
+                                Key::CtrlBackspace | Key::Ctrl('w') | Key::Ctrl('h') => {
+                                    let n = &mut editor.input_buffer;
+                                    if !n.is_empty() {
+                                        let chars: Vec<char> = n.chars().collect();
+                                        let mut i = chars.len();
+                                        while i > 0 && chars[i - 1].is_whitespace() {
+                                            i -= 1;
+                                        }
+                                        if i > 0 {
+                                            let is_word = chars[i - 1].is_alphanumeric()
+                                                || chars[i - 1] == '_';
+                                            while i > 0 {
+                                                let prev_is_word = chars[i - 1].is_alphanumeric()
+                                                    || chars[i - 1] == '_';
+                                                if chars[i - 1].is_whitespace()
+                                                    || prev_is_word != is_word
+                                                {
+                                                    break;
+                                                }
+                                                i -= 1;
+                                            }
+                                        }
+                                        let start_byte = n
+                                            .char_indices()
+                                            .nth(i)
+                                            .map(|(idx, _)| idx)
+                                            .unwrap_or(n.len());
+                                        n.drain(start_byte..);
+                                    }
                                 }
                                 Key::Char(c) if !c.is_control() => {
                                     editor.input_buffer.push(c);

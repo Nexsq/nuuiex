@@ -41,6 +41,7 @@ pub fn refresh(
     config: &Config,
     theme: &Theme,
     list_input: &ListInputMode,
+    list_input_cursor: usize,
 ) -> Box {
     let list_h = term_h.saturating_sub(header_h);
     let is_active = active == ActivePanel::List;
@@ -380,17 +381,13 @@ pub fn refresh(
             String::new()
         };
 
-        if item.is_input {
-            base_name.push('_');
-        }
-
         let is_editing_this = if let Some(n) = item.node {
             Some(n.path()) == editing_path
         } else {
             false
         };
 
-        if !base_name.is_empty() && !prefix.is_empty() {
+        if (!base_name.is_empty() || item.is_input) && !prefix.is_empty() {
             prefix.push(' ');
         }
 
@@ -402,11 +399,32 @@ pub fn refresh(
         let allowed_name_len = allowed_len.saturating_sub(prefix_chars);
         let name_chars = base_name.chars().count();
 
-        if name_chars > allowed_name_len {
-            if item.is_input {
-                let skip = name_chars.saturating_sub(allowed_name_len);
-                base_name = base_name.chars().skip(skip).collect();
-            } else if let Some((byte_idx, _)) = base_name.char_indices().nth(allowed_name_len) {
+        let mut visual_cursor_pos = list_input_cursor;
+
+        if item.is_input {
+            let total_input_len = base_name.chars().count();
+
+            let effective_allowed = if list_input_cursor == total_input_len {
+                allowed_name_len.saturating_sub(1)
+            } else {
+                allowed_name_len
+            };
+
+            if total_input_len > effective_allowed {
+                let skip = if list_input_cursor == total_input_len {
+                    list_input_cursor.saturating_sub(effective_allowed)
+                } else {
+                    list_input_cursor.saturating_sub(effective_allowed.saturating_sub(1))
+                };
+                base_name = base_name
+                    .chars()
+                    .skip(skip)
+                    .take(effective_allowed)
+                    .collect();
+                visual_cursor_pos = list_input_cursor.saturating_sub(skip);
+            }
+        } else if name_chars > allowed_name_len {
+            if let Some((byte_idx, _)) = base_name.char_indices().nth(allowed_name_len) {
                 base_name.truncate(byte_idx);
             }
         }
@@ -415,12 +433,14 @@ pub fn refresh(
         let mut text = prefix;
 
         let char_count = text.chars().count();
-        if char_count > allowed_len {
-            if let Some((byte_idx, _)) = text.char_indices().nth(allowed_len) {
+        let pad_target = allowed_len;
+
+        if char_count > pad_target {
+            if let Some((byte_idx, _)) = text.char_indices().nth(pad_target) {
                 text.truncate(byte_idx);
             }
         } else {
-            let padding = allowed_len.saturating_sub(char_count);
+            let padding = pad_target.saturating_sub(char_count);
             text.reserve(padding);
             for _ in 0..padding {
                 text.push(' ');
@@ -437,6 +457,23 @@ pub fn refresh(
 
         let display_y = (display_line - *list_scroll) as i16;
         list_box.insert_text(&text, 1, display_y, false, fg_color, bg_color, md);
+
+        if item.is_input {
+            let cursor_char_idx = prefix_chars + visual_cursor_pos;
+            let mut visual_x = 0;
+            for c in text.chars().take(cursor_char_idx) {
+                visual_x += crate::render::canvas::char_width(c) as usize;
+            }
+
+            let cursor_x = 1 + visual_x;
+            let box_x = cursor_x + list_box.padding as usize;
+            let box_y = display_y as usize + list_box.padding as usize;
+
+            if box_x < list_box.width as usize && box_y < list_box.height as usize {
+                let cell_idx = box_y * list_box.width as usize + box_x;
+                list_box.grid[cell_idx].s.md = Modifier::Underline;
+            }
+        }
     }
 
     list_box

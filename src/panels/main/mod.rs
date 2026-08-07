@@ -71,6 +71,7 @@ pub struct MainView {
 
     pub theme: Theme,
     pub list_input: ListInputMode,
+    pub list_input_cursor: usize,
 }
 
 impl MainView {
@@ -141,6 +142,7 @@ impl MainView {
             macrostats: crate::panels::widgets::macrostats::MacrostatsState::new(),
             theme,
             list_input: ListInputMode::None,
+            list_input_cursor: 0,
         };
 
         view.update_min_sizes(config);
@@ -501,6 +503,7 @@ impl MainView {
             config,
             &self.theme,
             &self.list_input,
+            self.list_input_cursor,
         );
     }
 
@@ -1365,18 +1368,154 @@ pub fn handle_list_input(
             }
         }
         Key::Backspace => {
+            let cursor = &mut view.list_input_cursor;
             match &mut view.list_input {
                 ListInputMode::CreatingFile(n)
                 | ListInputMode::CreatingFolder(n)
                 | ListInputMode::Renaming(n) => {
-                    n.pop();
+                    if *cursor > 0 && !n.is_empty() {
+                        *cursor -= 1;
+                        let byte_idx = n.char_indices().nth(*cursor).map(|(i, _)| i).unwrap();
+                        n.remove(byte_idx);
+                    }
                 }
                 _ => {}
             }
             view.refresh_list(config);
             return Ok(true);
         }
-        Key::Up | Key::Down | Key::Left | Key::Right | Key::Tab => {
+        Key::CtrlBackspace | Key::Ctrl('w') | Key::Ctrl('h') => {
+            let cursor = &mut view.list_input_cursor;
+            match &mut view.list_input {
+                ListInputMode::CreatingFile(n)
+                | ListInputMode::CreatingFolder(n)
+                | ListInputMode::Renaming(n) => {
+                    if *cursor > 0 && !n.is_empty() {
+                        let initial_cursor = *cursor;
+                        let chars: Vec<char> = n.chars().collect();
+                        let mut i = *cursor;
+
+                        while i > 0 && chars[i - 1].is_whitespace() {
+                            i -= 1;
+                        }
+                        if i > 0 {
+                            let is_word = chars[i - 1].is_alphanumeric() || chars[i - 1] == '_';
+                            while i > 0 {
+                                let prev_is_word =
+                                    chars[i - 1].is_alphanumeric() || chars[i - 1] == '_';
+                                if chars[i - 1].is_whitespace() || prev_is_word != is_word {
+                                    break;
+                                }
+                                i -= 1;
+                            }
+                        }
+
+                        let delete_count = initial_cursor - i;
+                        if delete_count > 0 {
+                            let start_byte = n
+                                .char_indices()
+                                .nth(i)
+                                .map(|(idx, _)| idx)
+                                .unwrap_or(n.len());
+                            let end_byte = n
+                                .char_indices()
+                                .nth(initial_cursor)
+                                .map(|(idx, _)| idx)
+                                .unwrap_or(n.len());
+                            n.drain(start_byte..end_byte);
+                            *cursor = i;
+                        }
+                    }
+                }
+                _ => {}
+            }
+            view.refresh_list(config);
+            return Ok(true);
+        }
+        Key::Left => {
+            if view.list_input_cursor > 0 {
+                view.list_input_cursor -= 1;
+            }
+            view.refresh_list(config);
+            return Ok(true);
+        }
+        Key::CtrlLeft => {
+            let cursor = &mut view.list_input_cursor;
+            match &view.list_input {
+                ListInputMode::CreatingFile(n)
+                | ListInputMode::CreatingFolder(n)
+                | ListInputMode::Renaming(n) => {
+                    let chars: Vec<char> = n.chars().collect();
+                    let mut i = *cursor;
+                    while i > 0 && chars[i - 1].is_whitespace() {
+                        i -= 1;
+                    }
+                    if i > 0 {
+                        let is_word = chars[i - 1].is_alphanumeric() || chars[i - 1] == '_';
+                        while i > 0 {
+                            let prev_is_word =
+                                chars[i - 1].is_alphanumeric() || chars[i - 1] == '_';
+                            if chars[i - 1].is_whitespace() || prev_is_word != is_word {
+                                break;
+                            }
+                            i -= 1;
+                        }
+                    }
+                    *cursor = i;
+                }
+                _ => {}
+            }
+            view.refresh_list(config);
+            return Ok(true);
+        }
+        Key::Right => {
+            let max_len = match &view.list_input {
+                ListInputMode::CreatingFile(s) => s.chars().count(),
+                ListInputMode::CreatingFolder(s) => s.chars().count(),
+                ListInputMode::Renaming(s) => s.chars().count(),
+                _ => 0,
+            };
+            if view.list_input_cursor < max_len {
+                view.list_input_cursor += 1;
+            }
+            view.refresh_list(config);
+            return Ok(true);
+        }
+        Key::CtrlRight => {
+            let cursor = &mut view.list_input_cursor;
+            match &view.list_input {
+                ListInputMode::CreatingFile(n)
+                | ListInputMode::CreatingFolder(n)
+                | ListInputMode::Renaming(n) => {
+                    let chars: Vec<char> = n.chars().collect();
+                    let mut i = *cursor;
+                    let len = chars.len();
+
+                    if i < len && chars[i].is_whitespace() {
+                        while i < len && chars[i].is_whitespace() {
+                            i += 1;
+                        }
+                    } else if i < len {
+                        let is_word = chars[i].is_alphanumeric() || chars[i] == '_';
+                        while i < len {
+                            let curr_is_word = chars[i].is_alphanumeric() || chars[i] == '_';
+                            if chars[i].is_whitespace() || curr_is_word != is_word {
+                                break;
+                            }
+                            i += 1;
+                        }
+                        while i < len && chars[i].is_whitespace() {
+                            i += 1;
+                        }
+                    }
+                    *cursor = i;
+                }
+                _ => {}
+            }
+            view.refresh_list(config);
+            return Ok(true);
+        }
+        Key::Up | Key::Down | Key::Tab => {
             return Ok(true);
         }
         Key::Char(c) | Key::Shift(c) => {
@@ -1387,13 +1526,20 @@ pub fn handle_list_input(
                     *c
                 };
 
+                let cursor = &mut view.list_input_cursor;
                 match &mut view.list_input {
                     ListInputMode::CreatingFile(n)
                     | ListInputMode::CreatingFolder(n)
                     | ListInputMode::Renaming(n) => {
                         if n.chars().count() < 64 {
                             if final_c != '/' && final_c != '\\' {
-                                n.push(final_c);
+                                let byte_idx = n
+                                    .char_indices()
+                                    .nth(*cursor)
+                                    .map(|(i, _)| i)
+                                    .unwrap_or(n.len());
+                                n.insert(byte_idx, final_c);
+                                *cursor += 1;
                             }
                         }
                     }
@@ -1452,17 +1598,20 @@ pub fn handle_list_action(
             handled = true;
         } else if *c == config.bind_lib_new_file {
             view.list_input = ListInputMode::CreatingFile(String::new());
+            view.list_input_cursor = 0;
             view.refresh_list(config);
             handled = true;
         } else if *c == config.bind_lib_new_folder {
             view.list_input = ListInputMode::CreatingFolder(String::new());
+            view.list_input_cursor = 0;
             view.refresh_list(config);
             handled = true;
         } else if *c == config.bind_lib_edit {
             view.edit_selected(config);
             handled = true;
         } else if *c == config.bind_lib_rename {
-            if let Some(node) = view.get_selected_node() {
+            if let Some(node) = view.get_selected_node().cloned() {
+                view.list_input_cursor = node.name().chars().count();
                 view.list_input = ListInputMode::Renaming(node.name().to_string());
                 view.refresh_list(config);
                 handled = true;

@@ -289,6 +289,7 @@ pub struct Editor {
     pub last_key_copy: bool,
 
     pub search_query: String,
+    pub search_cursor: usize,
     pub last_search: String,
     pub line_search_query: String,
 
@@ -345,6 +346,7 @@ impl Editor {
             last_key_delete: false,
             last_key_copy: false,
             search_query: String::new(),
+            search_cursor: 0,
             last_search: String::new(),
             line_search_query: String::new(),
             error_count: 0,
@@ -694,7 +696,109 @@ impl Editor {
                     }
                 }
                 Key::Backspace => {
-                    self.search_query.pop();
+                    if self.search_cursor > 0 && !self.search_query.is_empty() {
+                        self.search_cursor -= 1;
+                        let byte_idx = self
+                            .search_query
+                            .char_indices()
+                            .nth(self.search_cursor)
+                            .map(|(i, _)| i)
+                            .unwrap();
+                        self.search_query.remove(byte_idx);
+                    }
+                }
+                Key::CtrlBackspace | Key::Ctrl('w') | Key::Ctrl('h') => {
+                    if self.search_cursor > 0 && !self.search_query.is_empty() {
+                        let initial_cursor = self.search_cursor;
+                        let chars: Vec<char> = self.search_query.chars().collect();
+                        let mut i = self.search_cursor;
+
+                        while i > 0 && chars[i - 1].is_whitespace() {
+                            i -= 1;
+                        }
+                        if i > 0 {
+                            let is_word = chars[i - 1].is_alphanumeric() || chars[i - 1] == '_';
+                            while i > 0 {
+                                let prev_is_word =
+                                    chars[i - 1].is_alphanumeric() || chars[i - 1] == '_';
+                                if chars[i - 1].is_whitespace() || prev_is_word != is_word {
+                                    break;
+                                }
+                                i -= 1;
+                            }
+                        }
+
+                        let delete_count = initial_cursor - i;
+                        if delete_count > 0 {
+                            let start_byte = self
+                                .search_query
+                                .char_indices()
+                                .nth(i)
+                                .map(|(idx, _)| idx)
+                                .unwrap_or(self.search_query.len());
+                            let end_byte = self
+                                .search_query
+                                .char_indices()
+                                .nth(initial_cursor)
+                                .map(|(idx, _)| idx)
+                                .unwrap_or(self.search_query.len());
+                            self.search_query.drain(start_byte..end_byte);
+                            self.search_cursor = i;
+                        }
+                    }
+                }
+                Key::Left => {
+                    if self.search_cursor > 0 {
+                        self.search_cursor -= 1;
+                    }
+                }
+                Key::CtrlLeft => {
+                    let chars: Vec<char> = self.search_query.chars().collect();
+                    let mut i = self.search_cursor;
+                    while i > 0 && chars[i - 1].is_whitespace() {
+                        i -= 1;
+                    }
+                    if i > 0 {
+                        let is_word = chars[i - 1].is_alphanumeric() || chars[i - 1] == '_';
+                        while i > 0 {
+                            let prev_is_word =
+                                chars[i - 1].is_alphanumeric() || chars[i - 1] == '_';
+                            if chars[i - 1].is_whitespace() || prev_is_word != is_word {
+                                break;
+                            }
+                            i -= 1;
+                        }
+                    }
+                    self.search_cursor = i;
+                }
+                Key::Right => {
+                    if self.search_cursor < self.search_query.chars().count() {
+                        self.search_cursor += 1;
+                    }
+                }
+                Key::CtrlRight => {
+                    let chars: Vec<char> = self.search_query.chars().collect();
+                    let mut i = self.search_cursor;
+                    let len = chars.len();
+
+                    if i < len && chars[i].is_whitespace() {
+                        while i < len && chars[i].is_whitespace() {
+                            i += 1;
+                        }
+                    } else if i < len {
+                        let is_word = chars[i].is_alphanumeric() || chars[i] == '_';
+                        while i < len {
+                            let curr_is_word = chars[i].is_alphanumeric() || chars[i] == '_';
+                            if chars[i].is_whitespace() || curr_is_word != is_word {
+                                break;
+                            }
+                            i += 1;
+                        }
+                        while i < len && chars[i].is_whitespace() {
+                            i += 1;
+                        }
+                    }
+                    self.search_cursor = i;
                 }
                 Key::Char(c) | Key::Shift(c) => {
                     if !c.is_control() {
@@ -703,7 +807,14 @@ impl Editor {
                         } else {
                             c
                         };
-                        self.search_query.push(final_c);
+                        let byte_idx = self
+                            .search_query
+                            .char_indices()
+                            .nth(self.search_cursor)
+                            .map(|(i, _)| i)
+                            .unwrap_or(self.search_query.len());
+                        self.search_query.insert(byte_idx, final_c);
+                        self.search_cursor += 1;
                     }
                 }
                 _ => {}
@@ -729,6 +840,7 @@ impl Editor {
                         self.mode = Mode::Search;
                         self.visual_mode = false;
                         self.state.selection_start = None;
+                        self.search_cursor = self.search_query.chars().count();
                     }
                     k if k == Key::Char(config.bind_edit_error_jump) => {
                         if !self.error_lines.is_empty() {
@@ -3486,29 +3598,42 @@ impl Editor {
 
         if self.mode == Mode::Search {
             let bar_y = text_inner_h as u16 + 1;
-            let mut bar_text = format!(":{}", self.search_query);
+            let cursor_query = self.search_query.clone();
+
+            let visible_width = inner_w.saturating_sub(1);
+            let skip = self
+                .search_cursor
+                .saturating_sub(visible_width.saturating_sub(1));
+
+            let scrolled_query: String = cursor_query
+                .chars()
+                .skip(skip)
+                .take(visible_width)
+                .collect();
+            let mut bar_text = format!(":{}", scrolled_query);
+            let visible_cursor_idx = 1 + self.search_cursor.saturating_sub(skip);
 
             let char_count = bar_text.chars().count();
             if char_count < inner_w {
-                bar_text.push('_');
-                let spaces = inner_w.saturating_sub(char_count + 1);
+                let spaces = inner_w.saturating_sub(char_count);
                 bar_text.push_str(&" ".repeat(spaces));
-            } else {
-                let skip = char_count.saturating_sub(inner_w) + 1;
-                bar_text = bar_text.chars().skip(skip).collect();
-                bar_text.push('_');
             }
 
             let bar_bg = &theme.editor_fnd_bg;
 
             for (x, c) in bar_text.chars().enumerate().take(inner_w) {
+                let is_cursor = x == visible_cursor_idx;
                 b.put_cell(
                     crate::Cell::new(
                         c,
                         Style {
                             fg: Color::Black,
                             bg: bar_bg.color_at(x, inner_w),
-                            md: Modifier::None,
+                            md: if is_cursor {
+                                Modifier::Underline
+                            } else {
+                                Modifier::None
+                            },
                         },
                     ),
                     x as u16 + 1,

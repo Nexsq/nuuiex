@@ -1068,6 +1068,7 @@ pub fn settings_modal(
 
     let mut edit_mode = false;
     let mut edit_buffer = String::new();
+    let mut edit_cursor = 0_usize;
 
     let themes = available_themes();
     let current_theme_idx = themes.iter().position(|t| t == &config.theme).unwrap_or(0);
@@ -1374,7 +1375,7 @@ pub fn settings_modal(
                 cat_scroll = cat_selected.saturating_sub(visible_items - 1);
             }
 
-            let max_cat_len = left_w.saturating_sub(2) as usize;
+            let max_cat_len = left_w.saturating_sub(4) as usize;
 
             for (i, cat) in categories
                 .iter()
@@ -1406,10 +1407,11 @@ pub fn settings_modal(
                 if char_count > max_cat_len {
                     text = text.chars().take(max_cat_len).collect();
                 } else {
-                    text.push_str(&" ".repeat(max_cat_len.saturating_sub(char_count + 2)));
+                    text.push_str(&" ".repeat(max_cat_len.saturating_sub(char_count)));
                 }
 
                 let display_y = (i - cat_scroll) as i16;
+
                 cat_box.insert_text(
                     &text,
                     1,
@@ -1461,8 +1463,8 @@ pub fn settings_modal(
             }
             det_scroll[cat_selected] = current_det_scroll;
 
-            let max_det_len = right_w.saturating_sub(2) as usize;
-            let target_width = max_det_len.saturating_sub(2);
+            let max_det_len = right_w.saturating_sub(4) as usize;
+            let target_width = max_det_len;
             let max_name_len = current_settings
                 .iter()
                 .map(|s| s.name.chars().count() + 1)
@@ -1521,6 +1523,7 @@ pub fn settings_modal(
                 };
                 let pad_cus_l = " ".repeat(cus_l.chars().count());
 
+                let mut cursor_char_idx: Option<usize> = None;
                 let mut is_fancy_bool = false;
                 let mut bool_val = false;
 
@@ -1556,26 +1559,114 @@ pub fn settings_modal(
                             }
                             SettingType::Custom { value, .. } => {
                                 if edit_mode && is_selected && det_active {
-                                    let cursor_char = if last_blink { '_' } else { ' ' };
-                                    if config.settings_style == "inline" {
-                                        format!("{}{}{}", edit_buffer, cursor_char, cus_r)
-                                    } else if config.settings_style == "aligned" {
-                                        format!("{}{}{}{}", cus_l, edit_buffer, cursor_char, cus_r)
+                                    let cursor_buffer = edit_buffer.clone();
+
+                                    let suffix = if config.settings_style == "right" {
+                                        if edit_cursor == cursor_buffer.chars().count() {
+                                            " ".to_string()
+                                        } else {
+                                            String::new()
+                                        }
                                     } else {
-                                        format!("{}{}{}", cus_l, edit_buffer, cursor_char)
-                                    }
-                                } else if is_selected && det_active {
-                                    if config.settings_style == "inline" {
-                                        format!("{}{}", value, cus_r)
-                                    } else if config.settings_style == "aligned" {
-                                        format!("{}{}{}", cus_l, value, cus_r)
+                                        cus_r.to_string()
+                                    };
+                                    let suffix_len = suffix.chars().count();
+
+                                    let name_str = format!("{}:", setting.name);
+                                    let name_len = name_str.chars().count();
+
+                                    let val_prefix = if config.settings_style == "inline" {
+                                        String::new()
                                     } else {
-                                        format!("{}{}", cus_l, value)
+                                        cus_l.to_string()
+                                    };
+                                    let val_prefix_len = val_prefix.chars().count();
+
+                                    let name_total_len = if config.settings_style == "aligned" {
+                                        max_name_len.max(name_len)
+                                    } else {
+                                        name_len
+                                    };
+
+                                    let max_input_len = target_width
+                                        .saturating_sub(
+                                            name_total_len + 1 + val_prefix_len + suffix_len,
+                                        )
+                                        .max(1);
+
+                                    let mut display_buffer = cursor_buffer.clone();
+                                    let mut visual_cursor_pos = edit_cursor;
+
+                                    if display_buffer.chars().count() > max_input_len {
+                                        let skip = if edit_cursor == cursor_buffer.chars().count() {
+                                            edit_cursor.saturating_sub(max_input_len)
+                                        } else {
+                                            edit_cursor
+                                                .saturating_sub(max_input_len.saturating_sub(1))
+                                        };
+                                        display_buffer = display_buffer
+                                            .chars()
+                                            .skip(skip)
+                                            .take(max_input_len)
+                                            .collect();
+                                        visual_cursor_pos = edit_cursor.saturating_sub(skip);
                                     }
-                                } else if config.settings_style == "inline" {
-                                    format!("{}", value)
+
+                                    let full_val_len = val_prefix_len
+                                        + display_buffer.chars().count()
+                                        + suffix_len;
+
+                                    let prefix_to_buffer = if config.settings_style == "right" {
+                                        if name_len + 1 + full_val_len >= target_width {
+                                            format!("{} {}", name_str, val_prefix)
+                                        } else {
+                                            let spaces = target_width
+                                                .saturating_sub(name_len + full_val_len);
+                                            format!(
+                                                "{}{}{}",
+                                                name_str,
+                                                " ".repeat(spaces),
+                                                val_prefix
+                                            )
+                                        }
+                                    } else if config.settings_style == "aligned" {
+                                        let name_pad = max_name_len.saturating_sub(name_len);
+                                        format!(
+                                            "{}{} {}",
+                                            name_str,
+                                            " ".repeat(name_pad),
+                                            val_prefix
+                                        )
+                                    } else {
+                                        format!("{} {}", name_str, val_prefix)
+                                    };
+
+                                    cursor_char_idx =
+                                        Some(prefix_to_buffer.chars().count() + visual_cursor_pos);
+
+                                    if config.settings_style == "inline" {
+                                        format!("{}{}", display_buffer, suffix)
+                                    } else if config.settings_style == "aligned" {
+                                        format!("{}{}{}", val_prefix, display_buffer, suffix)
+                                    } else {
+                                        format!("{}{}{}", val_prefix, display_buffer, suffix)
+                                    }
                                 } else {
-                                    format!("{}{}", pad_cus_l, value)
+                                    if is_selected && det_active {
+                                        if config.settings_style == "inline" {
+                                            format!("{}{}", value, cus_r)
+                                        } else if config.settings_style == "aligned" {
+                                            format!("{}{}{}", cus_l, value, cus_r)
+                                        } else {
+                                            format!("{}{}", cus_l, value)
+                                        }
+                                    } else {
+                                        if config.settings_style == "inline" {
+                                            format!("{}", value)
+                                        } else {
+                                            format!("{}{}", pad_cus_l, value)
+                                        }
+                                    }
                                 }
                             }
                             SettingType::Action => unreachable!(),
@@ -1606,10 +1697,11 @@ pub fn settings_modal(
                 if char_count > max_det_len {
                     text = text.chars().take(max_det_len).collect();
                 } else {
-                    text.push_str(&" ".repeat(max_det_len.saturating_sub(char_count + 2)));
+                    text.push_str(&" ".repeat(max_det_len.saturating_sub(char_count)));
                 }
 
                 let display_y = (i - current_det_scroll) as i16;
+
                 det_box.insert_text(
                     &text,
                     1,
@@ -1619,6 +1711,29 @@ pub fn settings_modal(
                     bg_color,
                     Modifier::None,
                 );
+
+                if let Some(char_idx) = cursor_char_idx {
+                    let cursor_y_idx = (det_box.padding as i16 + display_y) as usize;
+                    let mut visual_cursor_offset = 0;
+                    for c in text.chars().take(char_idx) {
+                        visual_cursor_offset += crate::render::canvas::char_width(c) as usize;
+                    }
+
+                    let mut cursor_x_idx = det_box.padding as usize + 1 + visual_cursor_offset;
+
+                    let max_x = det_box
+                        .width
+                        .saturating_sub(det_box.padding)
+                        .saturating_sub(1) as usize;
+                    cursor_x_idx = cursor_x_idx.min(max_x);
+
+                    if cursor_x_idx < det_box.width as usize
+                        && cursor_y_idx < det_box.height as usize
+                    {
+                        let cell_idx = cursor_y_idx * det_box.width as usize + cursor_x_idx;
+                        det_box.grid[cell_idx].s.md = Modifier::Underline;
+                    }
+                }
 
                 if is_fancy_bool {
                     if let Some(dot_byte_idx) = text.rfind('▪') {
@@ -1774,7 +1889,111 @@ pub fn settings_modal(
                     dirty = true;
                 }
                 Key::Backspace => {
-                    edit_buffer.pop();
+                    if edit_cursor > 0 && !edit_buffer.is_empty() {
+                        edit_cursor -= 1;
+                        let byte_idx = edit_buffer
+                            .char_indices()
+                            .nth(edit_cursor)
+                            .map(|(i, _)| i)
+                            .unwrap();
+                        edit_buffer.remove(byte_idx);
+                    }
+                    dirty = true;
+                }
+                Key::CtrlBackspace | Key::Ctrl('w') | Key::Ctrl('h') => {
+                    if edit_cursor > 0 && !edit_buffer.is_empty() {
+                        let initial_cursor = edit_cursor;
+                        let chars: Vec<char> = edit_buffer.chars().collect();
+                        let mut i = edit_cursor;
+
+                        while i > 0 && chars[i - 1].is_whitespace() {
+                            i -= 1;
+                        }
+                        if i > 0 {
+                            let is_word = chars[i - 1].is_alphanumeric() || chars[i - 1] == '_';
+                            while i > 0 {
+                                let prev_is_word =
+                                    chars[i - 1].is_alphanumeric() || chars[i - 1] == '_';
+                                if chars[i - 1].is_whitespace() || prev_is_word != is_word {
+                                    break;
+                                }
+                                i -= 1;
+                            }
+                        }
+
+                        let delete_count = initial_cursor - i;
+                        if delete_count > 0 {
+                            let start_byte = edit_buffer
+                                .char_indices()
+                                .nth(i)
+                                .map(|(idx, _)| idx)
+                                .unwrap_or(edit_buffer.len());
+                            let end_byte = edit_buffer
+                                .char_indices()
+                                .nth(initial_cursor)
+                                .map(|(idx, _)| idx)
+                                .unwrap_or(edit_buffer.len());
+                            edit_buffer.drain(start_byte..end_byte);
+                            edit_cursor = i;
+                        }
+                    }
+                    dirty = true;
+                }
+                Key::Left => {
+                    if edit_cursor > 0 {
+                        edit_cursor -= 1;
+                    }
+                    dirty = true;
+                }
+                Key::CtrlLeft => {
+                    let chars: Vec<char> = edit_buffer.chars().collect();
+                    let mut i = edit_cursor;
+                    while i > 0 && chars[i - 1].is_whitespace() {
+                        i -= 1;
+                    }
+                    if i > 0 {
+                        let is_word = chars[i - 1].is_alphanumeric() || chars[i - 1] == '_';
+                        while i > 0 {
+                            let prev_is_word =
+                                chars[i - 1].is_alphanumeric() || chars[i - 1] == '_';
+                            if chars[i - 1].is_whitespace() || prev_is_word != is_word {
+                                break;
+                            }
+                            i -= 1;
+                        }
+                    }
+                    edit_cursor = i;
+                    dirty = true;
+                }
+                Key::Right => {
+                    if edit_cursor < edit_buffer.chars().count() {
+                        edit_cursor += 1;
+                    }
+                    dirty = true;
+                }
+                Key::CtrlRight => {
+                    let chars: Vec<char> = edit_buffer.chars().collect();
+                    let mut i = edit_cursor;
+                    let len = chars.len();
+
+                    if i < len && chars[i].is_whitespace() {
+                        while i < len && chars[i].is_whitespace() {
+                            i += 1;
+                        }
+                    } else if i < len {
+                        let is_word = chars[i].is_alphanumeric() || chars[i] == '_';
+                        while i < len {
+                            let curr_is_word = chars[i].is_alphanumeric() || chars[i] == '_';
+                            if chars[i].is_whitespace() || curr_is_word != is_word {
+                                break;
+                            }
+                            i += 1;
+                        }
+                        while i < len && chars[i].is_whitespace() {
+                            i += 1;
+                        }
+                    }
+                    edit_cursor = i;
                     dirty = true;
                 }
                 Key::Char('\x03') => {
@@ -1796,8 +2015,15 @@ pub fn settings_modal(
                         };
                         if is_char_type {
                             edit_buffer = c.to_ascii_lowercase().to_string();
+                            edit_cursor = 1;
                         } else {
-                            edit_buffer.push(c);
+                            let byte_idx = edit_buffer
+                                .char_indices()
+                                .nth(edit_cursor)
+                                .map(|(i, _)| i)
+                                .unwrap_or(edit_buffer.len());
+                            edit_buffer.insert(byte_idx, c);
+                            edit_cursor += 1;
                         }
                         dirty = true;
                     }
@@ -1822,8 +2048,15 @@ pub fn settings_modal(
                         };
                         if is_char_type {
                             edit_buffer = final_c.to_ascii_lowercase().to_string();
+                            edit_cursor = 1;
                         } else {
-                            edit_buffer.push(final_c);
+                            let byte_idx = edit_buffer
+                                .char_indices()
+                                .nth(edit_cursor)
+                                .map(|(i, _)| i)
+                                .unwrap_or(edit_buffer.len());
+                            edit_buffer.insert(byte_idx, final_c);
+                            edit_cursor += 1;
                         }
                         dirty = true;
                     }
@@ -1925,6 +2158,7 @@ pub fn settings_modal(
                                 SettingType::Custom { value, .. } => {
                                     edit_mode = true;
                                     edit_buffer = value.clone();
+                                    edit_cursor = edit_buffer.chars().count();
                                 }
                                 SettingType::Action => {
                                     let (msg, action_type) = match setting.key {
