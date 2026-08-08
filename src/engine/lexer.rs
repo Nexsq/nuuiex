@@ -41,6 +41,8 @@ pub enum TokenKind {
     Or,
     Not,
     Async,
+    Match,
+    FatArrow,
     Colon,
     DoubleColon,
     Indent,
@@ -299,6 +301,12 @@ impl<'a> Lexer<'a> {
                         self.advance();
                         return Token {
                             kind: TokenKind::EqEq,
+                            line: self.line,
+                        };
+                    } else if self.peek() == '>' {
+                        self.advance();
+                        return Token {
+                            kind: TokenKind::FatArrow,
                             line: self.line,
                         };
                     }
@@ -672,6 +680,7 @@ impl<'a> Lexer<'a> {
             "False" => TokenKind::False,
             "None" => TokenKind::NoneValue,
             "async" => TokenKind::Async,
+            "match" => TokenKind::Match,
             _ => TokenKind::Ident(text.to_string()),
         };
 

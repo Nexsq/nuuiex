@@ -35,6 +35,7 @@ pub enum Expr {
     Binary(Box<Expr>, BinaryOp, Box<Expr>, usize),
     Not(Box<Expr>, usize),
     Call(String, Vec<(Option<String>, Expr)>, usize),
+    Match(Box<Expr>, Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>, usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -90,6 +91,6 @@ pub enum Stmt {
     Continue(usize),
     Pass(usize),
     Fn(String, Vec<Param>, Vec<Stmt>, usize),
-    Return(Option<Expr>),
+    Return(Option<Expr>, usize),
     Async(Vec<Stmt>, usize),
 }

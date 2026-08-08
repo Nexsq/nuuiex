@@ -3327,6 +3327,7 @@ impl Editor {
                                     | "continue"
                                     | "pass"
                                     | "async"
+                                    | "match"
                             );
                             let is_op_word = matches!(word_str.as_str(), "and" | "or" | "not");
                             let is_bool = matches!(word_str.as_str(), "True" | "False");

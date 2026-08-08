@@ -28,7 +28,7 @@ impl Parser {
     pub fn parse(&mut self) -> Vec<Stmt> {
         let mut stmts = Vec::new();
         while !self.is_at_end() {
-            if self.check(&TokenKind::Newline) {
+            if self.check(&TokenKind::Newline) || self.check(&TokenKind::Dedent) {
                 self.advance();
                 continue;
             }
@@ -42,7 +42,10 @@ impl Parser {
     }
 
     fn check_statement_end(&self) -> bool {
-        self.check(&TokenKind::Newline) || self.is_at_end() || self.check(&TokenKind::Dedent)
+        self.check(&TokenKind::Newline)
+            || self.is_at_end()
+            || self.check(&TokenKind::Dedent)
+            || (self.current > 0 && self.previous().kind == TokenKind::Dedent)
     }
 
     fn consume_statement_end(&mut self) {
@@ -230,14 +233,14 @@ impl Parser {
     }
 
     fn parse_return(&mut self) -> Option<Stmt> {
-        self.advance();
+        let line = self.advance().line;
         let mut value = None;
         if !self.check_statement_end() {
             value = self.parse_expression();
         }
         if self.check_statement_end() {
             self.consume_statement_end();
-            Some(Stmt::Return(value))
+            Some(Stmt::Return(value, line))
         } else {
             self.error("Expected newline after return value");
             None
@@ -896,6 +899,94 @@ impl Parser {
                     self.error("Expected ']' after list items");
                     None
                 }
+            }
+            TokenKind::Match => {
+                let match_expr = self.parse_expression()?;
+                if !self.check(&TokenKind::Colon) {
+                    self.error("Expected ':' after match expression");
+                    return None;
+                }
+                self.advance();
+                if !self.check_statement_end() {
+                    self.error("Expected newline after ':'");
+                    return None;
+                }
+                self.consume_statement_end();
+
+                if !self.check(&TokenKind::Indent) {
+                    self.error("Expected indentation block for match");
+                    return None;
+                }
+                self.advance();
+
+                let mut branches = Vec::new();
+                let mut default_branch = None;
+
+                while !self.is_at_end() && !self.check(&TokenKind::Dedent) {
+                    if self.check(&TokenKind::Newline) {
+                        self.advance();
+                        continue;
+                    }
+
+                    let mut is_default = false;
+                    let mut pattern = None;
+
+                    if let TokenKind::Ident(ref n) = self.peek().kind {
+                        if n == "_" {
+                            is_default = true;
+                            self.advance();
+                        } else {
+                            pattern = self.parse_expression();
+                        }
+                    } else {
+                        pattern = self.parse_expression();
+                    }
+
+                    if !self.check(&TokenKind::FatArrow) {
+                        self.error("Expected '=>' after match pattern");
+                        return None;
+                    }
+                    self.advance();
+
+                    let mut body = Vec::new();
+
+                    if self.check_statement_end() {
+                        self.consume_statement_end();
+                        if let Some(b) = self.parse_block() {
+                            body = b;
+                        } else {
+                            return None;
+                        }
+                    } else {
+                        if let Some(stmt) = self.parse_statement() {
+                            body.push(stmt);
+                        } else {
+                            return None;
+                        }
+                    }
+
+                    if is_default {
+                        if default_branch.is_some() {
+                            self.error("Multiple default branches in match");
+                        }
+                        default_branch = Some(body);
+                    } else if let Some(p) = pattern {
+                        branches.push((p, body));
+                    }
+                }
+
+                if self.check(&TokenKind::Dedent) {
+                    self.advance();
+                } else {
+                    self.error("Expected dedent after match block");
+                }
+
+                Some(Expr::Match(
+                    Box::new(match_expr),
+                    branches,
+                    default_branch,
+                    line,
+                ))
             }
             TokenKind::Error(msg) => {
                 self.error(&msg);

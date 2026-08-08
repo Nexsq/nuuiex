@@ -125,6 +125,22 @@ else:
     println("Lesser")
 ```
 
+**Match:**
+```python
+let direction = "east"
+
+let result = match direction:
+    "north" => 1
+    "south" => 2
+    "east" =>
+        println("Going east!")
+        3
+    "west" => 4
+    _ => 0 # Default case
+
+println(result) # Outputs: 3
+```
+
 **Loops:**
 ```python
 # Infinite loop

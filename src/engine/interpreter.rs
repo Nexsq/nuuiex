@@ -3740,6 +3740,46 @@ impl Interpreter {
         }
     }
 
+    fn exec_match_block(&mut self, stmts: &[Stmt]) -> Result<Value, String> {
+        self.env.push();
+        let mut last_val = Value::Nil;
+
+        for stmt in stmts {
+            if self.should_exit || self.cancel_token.load(Ordering::Relaxed) {
+                self.should_exit = true;
+                break;
+            }
+            if let Stmt::Expr(expr) = stmt {
+                last_val = self.eval_expr(expr)?;
+                continue;
+            }
+
+            last_val = Value::Nil;
+            match self.execute_stmt(stmt) {
+                Ok(Signal::Break) => {
+                    self.env.pop();
+                    return Err("Cannot use 'break' inside a match expression block".into());
+                }
+                Ok(Signal::Continue) => {
+                    self.env.pop();
+                    return Err("Cannot use 'continue' inside a match expression block".into());
+                }
+                Ok(Signal::Return(_)) => {
+                    self.env.pop();
+                    return Err("Cannot use 'return' inside a match expression block".into());
+                }
+                Ok(Signal::Empty) => continue,
+                Err(err) => {
+                    self.env.pop();
+                    return Err(err);
+                }
+            }
+        }
+
+        self.env.pop();
+        Ok(last_val)
+    }
+
     fn send_output(&mut self) {
         let mut out_lock = self.output.lock().unwrap();
         let err_lock = self.errors.lock().unwrap();
@@ -4544,13 +4584,13 @@ impl Interpreter {
                 });
                 if let Err(e) = self
                     .env
-                    .define(name.clone(), Value::Function(func_def), false)
+                    .define(name.clone(), Value::Function(func_def), true)
                 {
                     return Err(format!("Line {}: {}", line, e));
                 }
                 Ok(Signal::Empty)
             }
-            Stmt::Return(expr) => {
+            Stmt::Return(expr, _) => {
                 let val = if let Some(e) = expr {
                     self.eval_expr(e)?
                 } else {
@@ -4750,7 +4790,7 @@ impl Interpreter {
                         if idx < vec.len() {
                             Ok(vec[idx].clone())
                         } else {
-                            Ok(Value::Nil)
+                            Err(format!("Line {}: Index out of bounds", line))
                         }
                     } else {
                         Err(format!("Line {}: List index must be a number", line))
@@ -4843,6 +4883,19 @@ impl Interpreter {
             Expr::Not(expr, _) => {
                 let val = self.eval_expr(expr)?;
                 Ok(Value::Bool(!val.is_truthy()))
+            }
+            Expr::Match(expr, branches, default_branch, _) => {
+                let match_val = self.eval_expr(expr)?;
+                for (pat_expr, body) in branches {
+                    let pat_val = self.eval_expr(pat_expr)?;
+                    if match_val == pat_val {
+                        return self.exec_match_block(body);
+                    }
+                }
+                if let Some(body) = default_branch {
+                    return self.exec_match_block(body);
+                }
+                Ok(Value::Nil)
             }
             Expr::Binary(left, op, right, line) => {
                 if *op == BinaryOp::And {

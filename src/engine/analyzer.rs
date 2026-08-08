@@ -1,26 +1,30 @@
 use super::ast::{Expr, Stmt, StringPart};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub struct Analyzer {
     pub errors: Vec<String>,
     pub error_lines: HashSet<usize>,
-    pub scopes: Vec<HashSet<String>>,
+    pub scopes: Vec<HashMap<String, bool>>,
     pub loop_depth: usize,
+    pub in_function_depth: usize,
+    pub in_match_expr_depth: usize,
 }
 
 impl Analyzer {
     pub fn new() -> Self {
-        let mut root_scope = HashSet::new();
-        root_scope.insert("Key".to_string());
-        root_scope.insert("Color".to_string());
-        root_scope.insert("Background".to_string());
-        root_scope.insert("Modifier".to_string());
-        root_scope.insert("Image".to_string());
+        let mut root_scope = HashMap::new();
+        root_scope.insert("Key".to_string(), true);
+        root_scope.insert("Color".to_string(), true);
+        root_scope.insert("Background".to_string(), true);
+        root_scope.insert("Modifier".to_string(), true);
+        root_scope.insert("Image".to_string(), true);
         Self {
             errors: Vec::new(),
             error_lines: HashSet::new(),
             scopes: vec![root_scope],
             loop_depth: 0,
+            in_function_depth: 0,
+            in_match_expr_depth: 0,
         }
     }
 
@@ -30,27 +34,39 @@ impl Analyzer {
     }
 
     fn push_scope(&mut self) {
-        self.scopes.push(HashSet::new());
+        self.scopes.push(HashMap::new());
     }
 
     fn pop_scope(&mut self) {
         self.scopes.pop();
     }
 
-    fn define(&mut self, name: &str, line: usize) {
-        if self.scopes.last().unwrap().contains(name) {
+    fn define(&mut self, name: &str, is_const: bool, line: usize) {
+        if self.scopes.last().unwrap().contains_key(name) {
             self.error(
                 line,
                 format!("Variable '{}' is already defined in this scope", name),
             );
         }
-        self.scopes.last_mut().unwrap().insert(name.to_string());
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .insert(name.to_string(), is_const);
     }
 
     fn is_defined(&self, name: &str) -> bool {
         for scope in self.scopes.iter().rev() {
-            if scope.contains(name) {
+            if scope.contains_key(name) {
                 return true;
+            }
+        }
+        false
+    }
+
+    fn is_const(&self, name: &str) -> bool {
+        for scope in self.scopes.iter().rev() {
+            if let Some(&is_const) = scope.get(name) {
+                return is_const;
             }
         }
         false
@@ -59,7 +75,7 @@ impl Analyzer {
     pub fn analyze(&mut self, stmts: &[Stmt]) {
         for stmt in stmts {
             if let Stmt::Fn(name, _, _, line) = stmt {
-                self.define(name, *line);
+                self.define(name, true, *line);
             }
         }
         for stmt in stmts {
@@ -72,9 +88,13 @@ impl Analyzer {
             Stmt::Expr(expr) => {
                 self.analyze_expr(expr);
             }
-            Stmt::Let(name, expr, line) | Stmt::Const(name, expr, line) => {
+            Stmt::Let(name, expr, line) => {
                 self.analyze_expr(expr);
-                self.define(name, *line);
+                self.define(name, false, *line);
+            }
+            Stmt::Const(name, expr, line) => {
+                self.analyze_expr(expr);
+                self.define(name, true, *line);
             }
             Stmt::Assign(target, expr, line) => {
                 self.analyze_expr(expr);
@@ -124,7 +144,7 @@ impl Analyzer {
                 self.analyze_expr(expr);
                 self.loop_depth += 1;
                 self.push_scope();
-                self.define(name, *line);
+                self.define(name, false, *line);
                 self.analyze(body);
                 self.pop_scope();
                 self.loop_depth -= 1;
@@ -135,12 +155,22 @@ impl Analyzer {
                 self.pop_scope();
             }
             Stmt::Break(line) => {
-                if self.loop_depth == 0 {
+                if self.in_match_expr_depth > 0 {
+                    self.error(
+                        *line,
+                        "Control flow 'break' is not allowed inside a match expression".into(),
+                    );
+                } else if self.loop_depth == 0 {
                     self.error(*line, "Break statement outside of a loop".into());
                 }
             }
             Stmt::Continue(line) => {
-                if self.loop_depth == 0 {
+                if self.in_match_expr_depth > 0 {
+                    self.error(
+                        *line,
+                        "Control flow 'continue' is not allowed inside a match expression".into(),
+                    );
+                } else if self.loop_depth == 0 {
                     self.error(*line, "Continue statement outside of a loop".into());
                 }
             }
@@ -152,13 +182,23 @@ impl Analyzer {
                     }
                 }
                 self.push_scope();
+                self.in_function_depth += 1;
                 for param in params {
-                    self.define(&param.name, *line);
+                    self.define(&param.name, false, *line);
                 }
                 self.analyze(body);
+                self.in_function_depth -= 1;
                 self.pop_scope();
             }
-            Stmt::Return(expr) => {
+            Stmt::Return(expr, line) => {
+                if self.in_match_expr_depth > 0 {
+                    self.error(
+                        *line,
+                        "Control flow 'return' is not allowed inside a match expression".into(),
+                    );
+                } else if self.in_function_depth == 0 {
+                    self.error(*line, "Return statement outside of a function".into());
+                }
                 if let Some(e) = expr {
                     self.analyze_expr(e);
                 }
@@ -326,6 +366,22 @@ impl Analyzer {
             Expr::Binary(left, _, right, _) => {
                 self.analyze_expr(left);
                 self.analyze_expr(right);
+            }
+            Expr::Match(expr, branches, default_branch, _) => {
+                self.analyze_expr(expr);
+                self.in_match_expr_depth += 1;
+                for (pat, body) in branches {
+                    self.analyze_expr(pat);
+                    self.push_scope();
+                    self.analyze(body);
+                    self.pop_scope();
+                }
+                if let Some(body) = default_branch {
+                    self.push_scope();
+                    self.analyze(body);
+                    self.pop_scope();
+                }
+                self.in_match_expr_depth -= 1;
             }
             Expr::Call(name, args, line) => {
                 if !self.is_defined(name) && !super::core::BUILTIN_FUNCS.contains(&name.as_str()) {
@@ -793,6 +849,8 @@ impl Analyzer {
             Expr::Ident(name, _) => {
                 if !self.is_defined(name) {
                     self.error(line, format!("Undefined variable '{}'", name));
+                } else if self.is_const(name) {
+                    self.error(line, format!("Cannot assign to constant '{}'", name));
                 }
             }
             Expr::Index(left, index, _) => {
