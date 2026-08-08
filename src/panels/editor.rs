@@ -282,6 +282,7 @@ pub struct Editor {
 
     pub last_text_inner_w: usize,
     pub last_text_inner_h: usize,
+    pub last_max_line_len: usize,
 
     pub last_key_select_all: bool,
     pub last_key_file_bounds: bool,
@@ -341,6 +342,7 @@ impl Editor {
             last_edited_path: None,
             last_text_inner_w: 0,
             last_text_inner_h: 0,
+            last_max_line_len: 0,
             last_key_select_all: false,
             last_key_file_bounds: false,
             last_key_delete: false,
@@ -556,6 +558,23 @@ impl Editor {
 
     fn push_undo(&mut self, action: EditAction) {
         let current_pos = (self.state.cursor_x, self.state.cursor_y);
+
+        let y = current_pos.1;
+        if self.folded_lines.contains(&y) {
+            let line = &self.state.lines[y];
+            let hash_pos = line
+                .chars()
+                .position(|c| c == '#')
+                .unwrap_or(line.chars().count());
+            let sel_start_x = self
+                .state
+                .selection_start
+                .map_or(current_pos.0, |s| if s.1 == y { s.0 } else { 0 });
+
+            if current_pos.0 <= hash_pos || sel_start_x <= hash_pos {
+                self.folded_lines.remove(&y);
+            }
+        }
 
         let mut contiguous = false;
         if let Some(pos) = self.last_edit_pos {
@@ -1410,7 +1429,12 @@ impl Editor {
         }
 
         if dx != 0 {
-            let new_scroll_x = (self.scroll_x as isize + dx).max(0) as usize;
+            let max_scroll_x = self
+                .last_max_line_len
+                .saturating_add(1)
+                .saturating_sub(self.last_text_inner_w);
+            let new_scroll_x =
+                (self.scroll_x as isize + dx).clamp(0, max_scroll_x as isize) as usize;
             self.scroll_x = new_scroll_x;
 
             if self.state.cursor_x < self.scroll_x {
@@ -2457,7 +2481,21 @@ impl Editor {
         let mut visual_target_x = 0;
         let mut target_j = 0;
         if !self.is_output && target_y < self.state.lines.len() {
-            let chars_vec: Vec<char> = self.state.lines[target_y].chars().collect();
+            let mut chars_vec: Vec<char> = self.state.lines[target_y].chars().collect();
+
+            if self.folded_lines.contains(&target_y) {
+                let hash_pos = chars_vec
+                    .iter()
+                    .position(|&c| c == '#')
+                    .unwrap_or(chars_vec.len());
+                if let Some(colon_pos) = chars_vec[..hash_pos].iter().rposition(|&c| c == ':') {
+                    chars_vec.remove(colon_pos);
+                    if target_x > colon_pos {
+                        target_x -= 1;
+                    }
+                }
+            }
+
             let mut i_char = 0;
             while i_char < chars_vec.len() && i_char < target_x {
                 if i_char + 6 <= chars_vec.len()
@@ -2587,9 +2625,21 @@ impl Editor {
             self.state
                 .lines
                 .iter()
-                .map(|l| {
+                .enumerate()
+                .map(|(line_idx, l)| {
                     let mut len = 0;
-                    let chars_vec: Vec<char> = l.chars().collect();
+                    let mut chars_vec: Vec<char> = l.chars().collect();
+                    if self.folded_lines.contains(&line_idx) {
+                        let hash_pos = chars_vec
+                            .iter()
+                            .position(|&c| c == '#')
+                            .unwrap_or(chars_vec.len());
+                        if let Some(colon_pos) =
+                            chars_vec[..hash_pos].iter().rposition(|&c| c == ':')
+                        {
+                            chars_vec.remove(colon_pos);
+                        }
+                    }
                     let mut i_char = 0;
                     while i_char < chars_vec.len() {
                         if i_char + 6 <= chars_vec.len()
@@ -2637,7 +2687,9 @@ impl Editor {
             }
         }
 
-        let max_scroll_x = max_line_len.saturating_sub(text_inner_w);
+        self.last_max_line_len = max_line_len;
+
+        let max_scroll_x = max_line_len.saturating_add(1).saturating_sub(text_inner_w);
         if self.scroll_x > max_scroll_x {
             self.scroll_x = max_scroll_x;
         }
@@ -2733,9 +2785,21 @@ impl Editor {
             let mut syntax_modifiers = Vec::with_capacity(128);
 
             let mut display_line = String::new();
+            let mut folded_colon_pos = None;
 
             if !self.is_output {
-                let chars_vec: Vec<char> = self.state.lines[i].chars().collect();
+                let mut chars_vec: Vec<char> = self.state.lines[i].chars().collect();
+                if self.folded_lines.contains(&i) {
+                    let hash_pos = chars_vec
+                        .iter()
+                        .position(|&c| c == '#')
+                        .unwrap_or(chars_vec.len());
+                    if let Some(colon_pos) = chars_vec[..hash_pos].iter().rposition(|&c| c == ':') {
+                        folded_colon_pos = Some(colon_pos);
+                        chars_vec.remove(colon_pos);
+                    }
+                }
+
                 let mut i_char = 0;
                 while i_char < chars_vec.len() {
                     if i_char + 6 <= chars_vec.len()
@@ -2773,12 +2837,7 @@ impl Editor {
                 display_line = self.state.lines[i].clone();
             }
 
-            let mut line_str = display_line.as_str();
-            if self.folded_lines.contains(&i) {
-                if let Some(pos) = line_str.rfind(':') {
-                    line_str = &line_str[..pos];
-                }
-            }
+            let line_str = display_line.as_str();
 
             if self.is_output {
                 let mut chars = line_str.chars().peekable();
@@ -3453,8 +3512,25 @@ impl Editor {
                     let display_x = (current_x.saturating_sub(self.scroll_x) + prefix_width) as i16;
 
                     let is_selected = if let Some((start, end)) = selection {
-                        let is_after_start = i > start.1 || (i == start.1 && j >= start.0);
-                        let is_before_end = i < end.1 || (i == end.1 && j < end.0);
+                        let mut adj_start_0 = start.0;
+                        if i == start.1 {
+                            if let Some(cp) = folded_colon_pos {
+                                if adj_start_0 > cp {
+                                    adj_start_0 -= 1;
+                                }
+                            }
+                        }
+                        let mut adj_end_0 = end.0;
+                        if i == end.1 {
+                            if let Some(cp) = folded_colon_pos {
+                                if adj_end_0 > cp {
+                                    adj_end_0 -= 1;
+                                }
+                            }
+                        }
+
+                        let is_after_start = i > start.1 || (i == start.1 && j >= adj_start_0);
+                        let is_before_end = i < end.1 || (i == end.1 && j < adj_end_0);
                         is_after_start && is_before_end
                     } else {
                         false
