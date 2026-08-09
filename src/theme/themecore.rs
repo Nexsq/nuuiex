@@ -327,9 +327,6 @@ pub fn parse_color(val: &str) -> Result<Color, String> {
     if val.eq_ignore_ascii_case("brightcyan") {
         return Ok(Color::BrightCyan);
     }
-    if val.eq_ignore_ascii_case("brightwhite") {
-        return Ok(Color::BrightWhite);
-    }
 
     let hex_str = val.trim_start_matches('#');
     if hex_str.len() == 6 {

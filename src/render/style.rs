@@ -71,7 +71,6 @@ pub enum Color {
     BrightBlue,
     BrightMagenta,
     BrightCyan,
-    BrightWhite,
     Rgb(u8, u8, u8),
 }
 
@@ -139,16 +138,15 @@ impl Color {
             Color::Blue => Some((36, 114, 200)),
             Color::Magenta => Some((188, 63, 188)),
             Color::Cyan => Some((17, 168, 205)),
-            Color::White => Some((229, 229, 229)),
             Color::Gray => Some((102, 102, 102)),
-            Color::BrightGray => Some((153, 153, 153)),
+            Color::BrightGray => Some((229, 229, 229)),
+            Color::White => Some((255, 255, 255)),
             Color::BrightRed => Some((241, 76, 76)),
             Color::BrightGreen => Some((35, 209, 139)),
             Color::BrightYellow => Some((245, 245, 67)),
             Color::BrightBlue => Some((59, 142, 234)),
             Color::BrightMagenta => Some((214, 112, 214)),
             Color::BrightCyan => Some((41, 184, 219)),
-            Color::BrightWhite => Some((255, 255, 255)),
             Color::Rgb(r, g, b) => Some((*r, *g, *b)),
         }
     }
@@ -182,16 +180,15 @@ impl Color {
             Color::Blue => buf.extend_from_slice(b"\x1b[34m"),
             Color::Magenta => buf.extend_from_slice(b"\x1b[35m"),
             Color::Cyan => buf.extend_from_slice(b"\x1b[36m"),
-            Color::White => buf.extend_from_slice(b"\x1b[37m"),
             Color::Gray => buf.extend_from_slice(b"\x1b[90m"),
             Color::BrightGray => buf.extend_from_slice(b"\x1b[37m"),
+            Color::White => buf.extend_from_slice(b"\x1b[97m"),
             Color::BrightRed => buf.extend_from_slice(b"\x1b[91m"),
             Color::BrightGreen => buf.extend_from_slice(b"\x1b[92m"),
             Color::BrightYellow => buf.extend_from_slice(b"\x1b[93m"),
             Color::BrightBlue => buf.extend_from_slice(b"\x1b[94m"),
             Color::BrightMagenta => buf.extend_from_slice(b"\x1b[95m"),
             Color::BrightCyan => buf.extend_from_slice(b"\x1b[96m"),
-            Color::BrightWhite => buf.extend_from_slice(b"\x1b[97m"),
             Color::Rgb(r, g, b) => {
                 buf.extend_from_slice(b"\x1b[38;2;");
                 push_num_u8(buf, *r);
@@ -214,16 +211,15 @@ impl Color {
             Color::Blue => buf.extend_from_slice(b"\x1b[44m"),
             Color::Magenta => buf.extend_from_slice(b"\x1b[45m"),
             Color::Cyan => buf.extend_from_slice(b"\x1b[46m"),
-            Color::White => buf.extend_from_slice(b"\x1b[47m"),
             Color::Gray => buf.extend_from_slice(b"\x1b[100m"),
             Color::BrightGray => buf.extend_from_slice(b"\x1b[47m"),
+            Color::White => buf.extend_from_slice(b"\x1b[107m"),
             Color::BrightRed => buf.extend_from_slice(b"\x1b[101m"),
             Color::BrightGreen => buf.extend_from_slice(b"\x1b[102m"),
             Color::BrightYellow => buf.extend_from_slice(b"\x1b[103m"),
             Color::BrightBlue => buf.extend_from_slice(b"\x1b[104m"),
             Color::BrightMagenta => buf.extend_from_slice(b"\x1b[105m"),
             Color::BrightCyan => buf.extend_from_slice(b"\x1b[106m"),
-            Color::BrightWhite => buf.extend_from_slice(b"\x1b[107m"),
             Color::Rgb(r, g, b) => {
                 buf.extend_from_slice(b"\x1b[48;2;");
                 push_num_u8(buf, *r);
