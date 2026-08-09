@@ -927,6 +927,30 @@ impl Editor {
                             }
                         }
                     }
+                    k if k == Key::Shift(config.bind_edit_fold) => {
+                        let mut fn_lines = Vec::new();
+                        for (y, line) in self.state.lines.iter().enumerate() {
+                            if line.trim_start().starts_with("fn ") {
+                                let end = self.get_block_end(y);
+                                if end > y {
+                                    fn_lines.push(y);
+                                }
+                            }
+                        }
+
+                        if !fn_lines.is_empty() {
+                            let all_folded = fn_lines.iter().all(|y| self.folded_lines.contains(y));
+                            if all_folded {
+                                for y in fn_lines {
+                                    self.folded_lines.remove(&y);
+                                }
+                            } else {
+                                for y in fn_lines {
+                                    self.folded_lines.insert(y);
+                                }
+                            }
+                        }
+                    }
                     k if k == Key::ShiftLeft || k == Key::Shift(config.bind_edit_left) => {
                         self.scroll_view(-1, 0);
                     }
@@ -1589,7 +1613,8 @@ impl Editor {
                 .chars()
                 .take_while(|c| c.is_whitespace())
                 .count();
-            if before_cursor.trim_end().ends_with(':') {
+            let trimmed = before_cursor.trim_end();
+            if trimmed.ends_with(':') || trimmed.ends_with("=>") {
                 indent_spaces += 4;
             }
         }
@@ -2712,7 +2737,7 @@ impl Editor {
                 if show_line_numbers {
                     let dot_str = ".".repeat(max_num_width);
                     let prefix_style = Style {
-                        fg: Color::DarkGray,
+                        fg: Color::Gray,
                         bg: Color::None,
                         md: Modifier::Dim,
                     };
@@ -2758,7 +2783,7 @@ impl Editor {
                 let prefix_str = format!("{:>w$}", i + 1, w = max_num_width);
 
                 let prefix_style = Style {
-                    fg: Color::DarkGray,
+                    fg: Color::Gray,
                     bg: Color::None,
                     md: Modifier::Dim,
                 };
@@ -3574,7 +3599,7 @@ impl Editor {
                             }
                         },
                         bg: if is_selected {
-                            Color::DarkGray
+                            Color::Gray
                         } else if error_bg {
                             theme.editor_errors.color_at(display_x as usize, inner_w)
                         } else if j < syntax_bg_colors.len() && syntax_bg_colors[j] != Color::None {

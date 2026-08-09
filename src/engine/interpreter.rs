@@ -4349,16 +4349,6 @@ impl Interpreter {
                         Err(format!("Line {}: 'round' expects 0 or 1 argument", line))
                     }
                 }
-                "pow" => {
-                    if args.len() != 1 {
-                        return Err(format!("Line {}: 'pow' expects 1 argument", line));
-                    }
-                    if let Value::Number(exp) = &args[0] {
-                        Ok((Value::Number(n.powf(*exp)), false))
-                    } else {
-                        Err(format!("Line {}: 'pow' expects a number", line))
-                    }
-                }
                 "sqrt" => {
                     if args.len() != 0 {
                         return Err(format!("Line {}: 'sqrt' expects 0 arguments", line));
@@ -4627,6 +4617,7 @@ impl Interpreter {
                         Ok(Value::Number(ln % rn))
                     }
                 }
+                BinaryOp::Pow => Ok(Value::Number(ln.powf(*rn))),
                 BinaryOp::EqEq => Ok(Value::Bool(ln == rn)),
                 BinaryOp::NotEq => Ok(Value::Bool(ln != rn)),
                 BinaryOp::Less => Ok(Value::Bool(ln < rn)),

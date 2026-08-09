@@ -78,7 +78,7 @@ A modal code editor, complete with an AST-based real-time syntax checker.
 * `u` / `r`: Undo / Redo.
 * `y` / `p`: Copy / Paste (Integrates with the system clipboard via `arboard`).
 * `d`: Delete char/selection.
-* `t`: Fold/Unfold function blocks.
+* `t`: Fold/Unfold function blocks (`Shift+t` to mass fold/unfold).
 * `s`: Save file.
 * `a`: Select All.
 * `g` / `Shift+g` / `Ctrl+g`: Jump to start / Jump to end / Open Line Search Mode.
@@ -104,7 +104,7 @@ NUUI uses its custom scripting language, called **NUUI Lang**. It is dynamically
 ```python
 let x = 10          # Mutable variable
 const PI = 3.14159  # Immutable constant
-x += 5              # Compound assignments supported (+, -, *, /, %)
+x += 5              # Compound assignments supported (+, -, *, /, %, **)
 ```
 
 **String Interpolation:**
@@ -200,7 +200,6 @@ Numbers are represented internally as 64-bit floats (`f64`).
 | `fract()` | Returns the fractional (decimal) part. |
 | `clamp(min, max)` | Constrains the number between `min` and `max`. |
 | `round(places?)` | Rounds the number (optionally to `places` decimal points). |
-| `pow(exp)` | Raises the number to the power of `exp`. |
 | `sqrt()` | Returns the square root. |
 | `clone()` | Returns the number itself. |
 
@@ -277,8 +276,8 @@ Represents keyboard and mouse inputs for automation functions (`isdown`, `keydow
 Used for terminal styling and pixel color comparisons. The `Background` enum shares the exact same variants and is used to apply background colors.
 
 * **Default Color:** Defined in theme, `Color:Default`. This one is not available for `Background`
-* **Standard Colors:** `None`, `Black`, `Red`, `Green`, `Yellow`, `Blue`, `Magenta`, `Cyan`, `White`, `DarkGray`
-* **Bright Colors:** `BrightRed`, `BrightGreen`, `BrightYellow`, `BrightBlue`, `BrightMagenta`, `BrightCyan`, `BrightWhite`
+* **Standard Colors:** `None`, `Black`, `Red`, `Green`, `Yellow`, `Blue`, `Magenta`, `Cyan`, `White`, `Gray`
+* **Bright Colors:** `BrightGray`, `BrightRed`, `BrightGreen`, `BrightYellow`, `BrightBlue`, `BrightMagenta`, `BrightCyan`, `BrightWhite`
 * **Custom Hex Colors:** You can use exact hex codes, e.g., `Color:ff0055` or `Background:00ff00`
 
 *(You can call `Color:00ff00::tostring()` to get its string representation).*
@@ -420,7 +419,7 @@ editor_functions = BrightBlue
 editor_strings = BrightGreen
 editor_numbers = BrightYellow
 editor_bool = Cyan
-editor_comments = DarkGray
+editor_comments = Gray
 editor_variables = White
 editor_operators = BrightCyan
 editor_brackets = White
@@ -436,8 +435,8 @@ monitor_mem_key = Blue
 monitor_mem_val = Magenta
 monitor_term_key = Blue
 monitor_term_val = Magenta
-monitor_divider = DarkGray
-monitor_bar_bounds = DarkGray
+monitor_divider = Gray
+monitor_bar_bounds = Gray
 
 clock_time_color = Green
 clock_date_color = Cyan

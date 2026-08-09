@@ -303,8 +303,11 @@ pub fn parse_color(val: &str) -> Result<Color, String> {
     if val.eq_ignore_ascii_case("white") {
         return Ok(Color::White);
     }
-    if val.eq_ignore_ascii_case("darkgray") {
-        return Ok(Color::DarkGray);
+    if val.eq_ignore_ascii_case("gray") {
+        return Ok(Color::Gray);
+    }
+    if val.eq_ignore_ascii_case("brightgray") {
+        return Ok(Color::BrightGray);
     }
     if val.eq_ignore_ascii_case("brightred") {
         return Ok(Color::BrightRed);

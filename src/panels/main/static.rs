@@ -48,7 +48,7 @@ pub fn refresh_tabs(
     tabs_box.put_cell(crate::Cell::new(tl, get_border_style(0)), 0, 0);
     tabs_box.put_cell(crate::Cell::new(h, get_border_style(1)), 1, 0);
 
-    let dark_gray = Gradient::Solid(Color::DarkGray);
+    let dark_gray = Gradient::Solid(Color::Gray);
 
     for i in 0..tabs_num {
         let y_num = 1 + i * 2;

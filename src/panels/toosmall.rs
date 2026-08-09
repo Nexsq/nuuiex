@@ -65,7 +65,7 @@ pub fn run(
 
             let base_fg = Gradient::Solid(Color::White);
             let base_bg = Gradient::Solid(Color::None);
-            let dark_bg = Gradient::Solid(Color::DarkGray);
+            let dark_bg = Gradient::Solid(Color::Gray);
             let incorrect_fg = Gradient::Solid(Color::Black);
             let incorrect_bg = warning_color.clone();
 

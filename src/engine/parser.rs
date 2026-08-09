@@ -121,6 +121,7 @@ impl Parser {
             || self.check(&TokenKind::StarEq)
             || self.check(&TokenKind::SlashEq)
             || self.check(&TokenKind::PercentEq)
+            || self.check(&TokenKind::StarStarEq)
         {
             let op_token = self.advance().clone();
             if matches!(expr, Expr::Ident(..) | Expr::Index(..)) {
@@ -136,6 +137,7 @@ impl Parser {
                             TokenKind::StarEq => BinaryOp::Mul,
                             TokenKind::SlashEq => BinaryOp::Div,
                             TokenKind::PercentEq => BinaryOp::Mod,
+                            TokenKind::StarStarEq => BinaryOp::Pow,
                             _ => unreachable!(),
                         };
                         return Some(Stmt::AssignOp(expr, bin_op, value, op_token.line));
@@ -556,7 +558,20 @@ impl Parser {
                 token.line,
             ));
         }
-        self.parse_call()
+        self.parse_power()
+    }
+
+    fn parse_power(&mut self) -> Option<Expr> {
+        let mut expr = self.parse_call()?;
+
+        if self.check(&TokenKind::StarStar) {
+            let token = self.advance().clone();
+            let op = BinaryOp::from_token(&token.kind).unwrap();
+            let right = self.parse_unary()?;
+            expr = Expr::Binary(Box::new(expr), op, Box::new(right), token.line);
+        }
+
+        Some(expr)
     }
 
     fn parse_call(&mut self) -> Option<Expr> {

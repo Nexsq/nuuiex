@@ -305,7 +305,6 @@ impl Analyzer {
                         | "fract"
                         | "clamp"
                         | "round"
-                        | "pow"
                         | "sqrt"
                         | "tostring"
                 );

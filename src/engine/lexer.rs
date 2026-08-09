@@ -11,12 +11,14 @@ pub enum TokenKind {
     Star,
     Slash,
     Percent,
+    StarStar,
     Eq,
     PlusEq,
     MinusEq,
     StarEq,
     SlashEq,
     PercentEq,
+    StarStarEq,
     EqEq,
     NotEq,
     Less,
@@ -255,6 +257,20 @@ impl<'a> Lexer<'a> {
                 }
                 '*' => {
                     self.advance();
+                    if self.peek() == '*' {
+                        self.advance();
+                        if self.peek() == '=' {
+                            self.advance();
+                            return Token {
+                                kind: TokenKind::StarStarEq,
+                                line: self.line,
+                            };
+                        }
+                        return Token {
+                            kind: TokenKind::StarStar,
+                            line: self.line,
+                        };
+                    }
                     if self.peek() == '=' {
                         self.advance();
                         return Token {
