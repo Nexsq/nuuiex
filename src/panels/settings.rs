@@ -13,7 +13,7 @@ enum ActiveSettingsPanel {
 pub enum CustomType {
     Text,
     Char,
-    Int,
+    IntRange(usize, usize),
     FloatRange(f32, f32),
     Gradient,
 }
@@ -214,199 +214,66 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
 
     categories.push(Category {
         name: "Deck",
-        settings: {
-            let mut s = vec![Setting {
+        settings: vec![
+            Setting {
+                name: "Deck",
+                key: "deck",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.deck { 0 } else { 1 },
+                ),
+            },
+            Setting {
                 name: "Deck Mode",
                 key: "deck_mode",
                 kind: SettingType::Choice(
                     vec![
-                        "none".to_string(),
                         "title".to_string(),
-                        "widget".to_string(),
+                        "keyvis".to_string(),
+                        "monitor".to_string(),
+                        "clock".to_string(),
+                        "macrostats".to_string(),
                     ],
                     match config.deck_mode.as_str() {
-                        "none" => 0,
-                        "title" => 1,
-                        _ => 2,
+                        "keyvis" => 1,
+                        "monitor" => 2,
+                        "clock" => 3,
+                        "macrostats" => 4,
+                        _ => 0,
                     },
                 ),
-            }];
-            if config.deck_mode == "widget" {
-                s.push(Setting {
-                    name: "Deck Widget",
-                    key: "deck_widget",
-                    kind: SettingType::Choice(
-                        vec![
-                            "keyvis".to_string(),
-                            "monitor".to_string(),
-                            "clock".to_string(),
-                            "macrostats".to_string(),
-                        ],
-                        match config.deck_widget.as_str() {
-                            "monitor" => 1,
-                            "clock" => 2,
-                            "macrostats" => 3,
-                            _ => 0,
-                        },
-                    ),
-                });
-            }
-            s.push(Setting {
+            },
+            Setting {
                 name: "Reset Deck",
                 key: "reset_deck",
                 kind: SettingType::Action,
-            });
-            s
-        },
+            },
+        ],
     });
 
-    if config.deck_mode == "widget" {
-        let mut widget_settings = Vec::new();
-        if config.deck_widget == "monitor" {
-            widget_settings.push(Setting {
-                name: "Monitor CPU",
-                key: "monitor_cpu",
-                kind: SettingType::Choice(
-                    vec![
-                        "off".to_string(),
-                        "pct".to_string(),
-                        "bar".to_string(),
-                        "graph".to_string(),
-                        "pctbar".to_string(),
-                        "pctgraph".to_string(),
-                    ],
-                    match config.monitor_cpu.as_str() {
-                        "pct" => 1,
-                        "bar" => 2,
-                        "graph" => 3,
-                        "pctbar" => 4,
-                        "pctgraph" => 5,
-                        _ => 0,
-                    },
-                ),
-            });
-            widget_settings.push(Setting {
-                name: "Monitor GPU",
-                key: "monitor_gpu",
-                kind: SettingType::Choice(
-                    vec![
-                        "off".to_string(),
-                        "pct".to_string(),
-                        "bar".to_string(),
-                        "graph".to_string(),
-                        "pctbar".to_string(),
-                        "pctgraph".to_string(),
-                    ],
-                    match config.monitor_gpu.as_str() {
-                        "pct" => 1,
-                        "bar" => 2,
-                        "graph" => 3,
-                        "pctbar" => 4,
-                        "pctgraph" => 5,
-                        _ => 0,
-                    },
-                ),
-            });
-            widget_settings.push(Setting {
-                name: "Monitor MEM",
-                key: "monitor_mem",
-                kind: SettingType::Choice(
-                    vec![
-                        "off".to_string(),
-                        "pct".to_string(),
-                        "used".to_string(),
-                        "bar".to_string(),
-                        "graph".to_string(),
-                        "pctbar".to_string(),
-                        "pctgraph".to_string(),
-                    ],
-                    match config.monitor_mem.as_str() {
-                        "pct" => 1,
-                        "used" => 2,
-                        "bar" => 3,
-                        "graph" => 4,
-                        "pctbar" => 5,
-                        "pctgraph" => 6,
-                        _ => 0,
-                    },
-                ),
-            });
-            widget_settings.push(Setting {
-                name: "Monitor TERM",
-                key: "monitor_term",
-                kind: SettingType::Choice(
-                    vec!["off".to_string(), "on".to_string()],
-                    match config.monitor_term.as_str() {
-                        "on" => 1,
-                        _ => 0,
-                    },
-                ),
-            });
-            widget_settings.push(Setting {
-                name: "Monitor Divider",
-                key: "monitor_divider",
-                kind: SettingType::Choice(
-                    vec!["show".to_string(), "hide".to_string()],
-                    match config.monitor_divider.as_str() {
-                        "hide" => 1,
-                        _ => 0,
-                    },
-                ),
-            });
-            widget_settings.push(Setting {
-                name: "Monitor Bar",
-                key: "monitor_bar_mode",
-                kind: SettingType::Choice(
-                    vec![
-                        "background".to_string(),
-                        "caps".to_string(),
-                        "clean".to_string(),
-                    ],
-                    match config.monitor_bar_mode.as_str() {
-                        "caps" => 1,
-                        "clean" => 2,
-                        _ => 0,
-                    },
-                ),
-            });
-            widget_settings.push(Setting {
-                name: "Monitor Bar Width",
-                key: "monitor_bar_width",
-                kind: SettingType::Custom {
-                    value: config.monitor_bar_width.to_string(),
-                    default: def.monitor_bar_width.to_string(),
-                    validation: CustomType::Int,
-                },
-            });
-            widget_settings.push(Setting {
-                name: "Monitor Icons",
-                key: "monitor_icons",
-                kind: SettingType::Choice(
-                    vec!["true".to_string(), "false".to_string()],
-                    if config.monitor_icons { 0 } else { 1 },
-                ),
-            });
-        } else if config.deck_widget == "keyvis" {
-            widget_settings.push(Setting {
-                name: "Keyvis Width",
+    categories.push(Category {
+        name: "Keyvis",
+        settings: vec![
+            Setting {
+                name: "Width",
                 key: "keyvis_width",
                 kind: SettingType::Custom {
                     value: config.keyvis_width.to_string(),
                     default: def.keyvis_width.to_string(),
-                    validation: CustomType::Int,
+                    validation: CustomType::IntRange(1, 1024),
                 },
-            });
-            widget_settings.push(Setting {
-                name: "Keyvis Height",
+            },
+            Setting {
+                name: "Height",
                 key: "keyvis_height",
                 kind: SettingType::Custom {
                     value: config.keyvis_height.to_string(),
                     default: def.keyvis_height.to_string(),
-                    validation: CustomType::Int,
+                    validation: CustomType::IntRange(2, 32),
                 },
-            });
-            widget_settings.push(Setting {
-                name: "Keyvis Steps",
+            },
+            Setting {
+                name: "Steps",
                 key: "keyvis_steps",
                 kind: SettingType::Choice(
                     vec![
@@ -417,55 +284,301 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     ],
                     config.keyvis_steps.clamp(1, 4).saturating_sub(1),
                 ),
-            });
-            widget_settings.push(Setting {
-                name: "Keyvis Spread",
+            },
+            Setting {
+                name: "Spread",
                 key: "keyvis_spread",
                 kind: SettingType::Custom {
                     value: config.keyvis_spread.to_string(),
                     default: def.keyvis_spread.to_string(),
-                    validation: CustomType::Int,
+                    validation: CustomType::IntRange(2, 32),
                 },
-            });
-            widget_settings.push(Setting {
-                name: "Keyvis Force",
+            },
+            Setting {
+                name: "Force",
                 key: "keyvis_force",
                 kind: SettingType::Custom {
                     value: config.keyvis_force.to_string(),
                     default: def.keyvis_force.to_string(),
                     validation: CustomType::FloatRange(0.1, 1.0),
                 },
-            });
-            widget_settings.push(Setting {
-                name: "Keyvis Gravity",
+            },
+            Setting {
+                name: "Gravity",
                 key: "keyvis_gravity",
                 kind: SettingType::Custom {
                     value: config.keyvis_gravity.to_string(),
                     default: def.keyvis_gravity.to_string(),
                     validation: CustomType::FloatRange(0.1, 1.0),
                 },
-            });
-            widget_settings.push(Setting {
-                name: "Keyvis Tension",
+            },
+            Setting {
+                name: "Tension",
                 key: "keyvis_tension",
                 kind: SettingType::Custom {
                     value: config.keyvis_tension.to_string(),
                     default: def.keyvis_tension.to_string(),
                     validation: CustomType::FloatRange(0.1, 1.0),
                 },
-            });
-            widget_settings.push(Setting {
-                name: "Keyvis Base",
+            },
+            Setting {
+                name: "Base",
                 key: "keyvis_base",
                 kind: SettingType::Choice(
                     vec!["true".to_string(), "false".to_string()],
                     if config.keyvis_base { 0 } else { 1 },
                 ),
-            });
-        } else if config.deck_widget == "macrostats" {
+            },
+            Setting {
+                name: "Reset Keyvis",
+                key: "reset_keyvis",
+                kind: SettingType::Action,
+            },
+        ],
+    });
+
+    categories.push(Category {
+        name: "Monitor",
+        settings: vec![
+            Setting {
+                name: "CPU",
+                key: "monitor_cpu",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.monitor_cpu { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "GPU",
+                key: "monitor_gpu",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.monitor_gpu { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "MEM",
+                key: "monitor_mem",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.monitor_mem { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "TERM",
+                key: "monitor_term",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.monitor_term { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Divider",
+                key: "monitor_divider",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.monitor_divider { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Monitor Bar",
+                key: "monitor_bar",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.monitor_bar { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Icons",
+                key: "monitor_icons",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.monitor_icons { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "CPU Style",
+                key: "monitor_cpu_style",
+                kind: SettingType::Choice(
+                    vec![
+                        "pct".to_string(),
+                        "bar".to_string(),
+                        "graph".to_string(),
+                        "pctbar".to_string(),
+                        "pctgraph".to_string(),
+                    ],
+                    match config.monitor_cpu_style.as_str() {
+                        "bar" => 1,
+                        "graph" => 2,
+                        "pctbar" => 3,
+                        "pctgraph" => 4,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "GPU Style",
+                key: "monitor_gpu_style",
+                kind: SettingType::Choice(
+                    vec![
+                        "pct".to_string(),
+                        "bar".to_string(),
+                        "graph".to_string(),
+                        "pctbar".to_string(),
+                        "pctgraph".to_string(),
+                    ],
+                    match config.monitor_gpu_style.as_str() {
+                        "bar" => 1,
+                        "graph" => 2,
+                        "pctbar" => 3,
+                        "pctgraph" => 4,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "MEM Style",
+                key: "monitor_mem_style",
+                kind: SettingType::Choice(
+                    vec![
+                        "pct".to_string(),
+                        "used".to_string(),
+                        "bar".to_string(),
+                        "graph".to_string(),
+                        "pctbar".to_string(),
+                        "pctgraph".to_string(),
+                    ],
+                    match config.monitor_mem_style.as_str() {
+                        "used" => 1,
+                        "bar" => 2,
+                        "graph" => 3,
+                        "pctbar" => 4,
+                        "pctgraph" => 5,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "Bar Style",
+                key: "monitor_bar_style",
+                kind: SettingType::Choice(
+                    vec![
+                        "background".to_string(),
+                        "caps".to_string(),
+                        "clean".to_string(),
+                    ],
+                    match config.monitor_bar_style.as_str() {
+                        "caps" => 1,
+                        "clean" => 2,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "Bar Width",
+                key: "monitor_bar_width",
+                kind: SettingType::Custom {
+                    value: config.monitor_bar_width.to_string(),
+                    default: def.monitor_bar_width.to_string(),
+                    validation: CustomType::IntRange(4, 16),
+                },
+            },
+            Setting {
+                name: "Reset Monitor",
+                key: "reset_monitor",
+                kind: SettingType::Action,
+            },
+        ],
+    });
+
+    categories.push(Category {
+        name: "Clock",
+        settings: vec![
+            Setting {
+                name: "Date",
+                key: "clock_date",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.clock_date { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Date Style",
+                key: "clock_date_style",
+                kind: SettingType::Choice(
+                    vec![
+                        "eu".to_string(),
+                        "us".to_string(),
+                        "clean".to_string(),
+                        "mon name".to_string(),
+                        "rfc 2822".to_string(),
+                    ],
+                    match config.clock_date_style.as_str() {
+                        "us" => 1,
+                        "clean" => 2,
+                        "mon name" => 3,
+                        "rfc 2822" => 4,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "Mode",
+                key: "clock_mode",
+                kind: SettingType::Choice(
+                    vec!["small".to_string(), "big".to_string()],
+                    match config.clock_mode.as_str() {
+                        "big" => 1,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "Position",
+                key: "clock_position",
+                kind: SettingType::Choice(
+                    vec!["left".to_string(), "mid".to_string(), "right".to_string()],
+                    match config.clock_position.as_str() {
+                        "mid" => 1,
+                        "right" => 2,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "Format",
+                key: "clock_format",
+                kind: SettingType::Choice(
+                    vec!["12h".to_string(), "24h".to_string()],
+                    match config.clock_format.as_str() {
+                        "12h" => 0,
+                        _ => 1,
+                    },
+                ),
+            },
+            Setting {
+                name: "Show Seconds",
+                key: "clock_seconds",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.clock_seconds { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Reset Clock",
+                key: "reset_clock",
+                kind: SettingType::Action,
+            },
+        ],
+    });
+
+    categories.push(Category {
+        name: "Macrostats",
+        settings: {
+            let mut s = Vec::new();
             macro_rules! add_bool {
                 ($name:expr, $key:expr, $val:expr) => {
-                    widget_settings.push(Setting {
+                    s.push(Setting {
                         name: $name,
                         key: $key,
                         kind: SettingType::Choice(
@@ -475,31 +588,25 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     });
                 };
             }
-
-            add_bool!(
-                "Macrostats Icons",
-                "macrostats_icons",
-                config.macrostats_icons
-            );
+            add_bool!("Icons", "macrostats_icons", config.macrostats_icons);
             add_bool!(
                 "Edit Show Name",
                 "macrostats_edit_name",
                 config.macrostats_edit_name
             );
-            widget_settings.push(Setting {
-                name: "Edit Errors",
-                key: "macrostats_edit_err",
+            add_bool!(
+                "Edit Errors",
+                "macrostats_edit_err",
+                config.macrostats_edit_err
+            );
+            s.push(Setting {
+                name: "Edit Errors Style",
+                key: "macrostats_edit_err_style",
                 kind: SettingType::Choice(
-                    vec![
-                        "off".to_string(),
-                        "text".to_string(),
-                        "chart".to_string(),
-                        "both".to_string(),
-                    ],
-                    match config.macrostats_edit_err.as_str() {
-                        "text" => 1,
-                        "chart" => 2,
-                        "both" => 3,
+                    vec!["text".to_string(), "chart".to_string(), "both".to_string()],
+                    match config.macrostats_edit_err_style.as_str() {
+                        "chart" => 1,
+                        "both" => 2,
                         _ => 0,
                     },
                 ),
@@ -554,14 +661,13 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 "macrostats_lib_status",
                 config.macrostats_lib_status
             );
-
-            widget_settings.push(Setting {
+            s.push(Setting {
                 name: "Err Chart Length",
                 key: "macrostats_err_chart_len",
                 kind: SettingType::Custom {
                     value: config.macrostats_err_chart_len.to_string(),
                     default: def.macrostats_err_chart_len.to_string(),
-                    validation: CustomType::Int,
+                    validation: CustomType::IntRange(4, 16),
                 },
             });
             add_bool!(
@@ -569,83 +675,14 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 "macrostats_err_chart_num",
                 config.macrostats_err_chart_num
             );
-        } else if config.deck_widget == "clock" {
-            widget_settings.push(Setting {
-                name: "Date",
-                key: "clock_date",
-                kind: SettingType::Choice(
-                    vec![
-                        "off".to_string(),
-                        "eu".to_string(),
-                        "us".to_string(),
-                        "clean".to_string(),
-                        "mon name".to_string(),
-                        "rfc 2822".to_string(),
-                    ],
-                    match config.clock_date.as_str() {
-                        "eu" => 1,
-                        "us" => 2,
-                        "clean" => 3,
-                        "mon name" => 4,
-                        "rfc 2822" => 5,
-                        _ => 0,
-                    },
-                ),
+            s.push(Setting {
+                name: "Reset Macrostats",
+                key: "reset_macrostats",
+                kind: SettingType::Action,
             });
-            widget_settings.push(Setting {
-                name: "Mode",
-                key: "clock_mode",
-                kind: SettingType::Choice(
-                    vec!["small".to_string(), "big".to_string()],
-                    match config.clock_mode.as_str() {
-                        "big" => 1,
-                        _ => 0,
-                    },
-                ),
-            });
-            widget_settings.push(Setting {
-                name: "Position",
-                key: "clock_position",
-                kind: SettingType::Choice(
-                    vec!["left".to_string(), "mid".to_string(), "right".to_string()],
-                    match config.clock_position.as_str() {
-                        "mid" => 1,
-                        "right" => 2,
-                        _ => 0,
-                    },
-                ),
-            });
-            widget_settings.push(Setting {
-                name: "Format",
-                key: "clock_format",
-                kind: SettingType::Choice(
-                    vec!["12h".to_string(), "24h".to_string()],
-                    match config.clock_format.as_str() {
-                        "12h" => 0,
-                        _ => 1,
-                    },
-                ),
-            });
-            widget_settings.push(Setting {
-                name: "Show Seconds",
-                key: "clock_seconds",
-                kind: SettingType::Choice(
-                    vec!["true".to_string(), "false".to_string()],
-                    if config.clock_seconds { 0 } else { 1 },
-                ),
-            });
-        }
-        widget_settings.push(Setting {
-            name: "Reset Widget",
-            key: "reset_widget",
-            kind: SettingType::Action,
-        });
-
-        categories.push(Category {
-            name: "Widget",
-            settings: widget_settings,
-        });
-    }
+            s
+        },
+    });
 
     categories.push(Category {
         name: "Library",
@@ -656,7 +693,7 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 kind: SettingType::Custom {
                     value: config.lib_width.to_string(),
                     default: def.lib_width.to_string(),
-                    validation: CustomType::Int,
+                    validation: CustomType::IntRange(16, 64),
                 },
             },
             Setting {
@@ -1085,8 +1122,8 @@ pub fn settings_modal(
     let mut prev_sorting = config.lib_sorting.clone();
     let mut prev_tabs_num = config.tabs_num;
     let mut prev_lib_width = config.lib_width;
+    let mut prev_deck = config.deck;
     let mut prev_deck_mode = config.deck_mode.clone();
-    let mut prev_deck_widget = config.deck_widget.clone();
     let mut dirty = true;
 
     let mut q_pressed_once = false;
@@ -1166,17 +1203,11 @@ pub fn settings_modal(
                 apply_setting!(config, set, choice "lib_sorting", lib_sorting);
                 apply_setting!(config, set, choice_offset "tabs_num", tabs_num, 1);
                 apply_setting!(config, set, parse_clamp "lib_width", lib_width, 16, 64);
+                apply_setting!(config, set, bool "deck", deck);
                 apply_setting!(config, set, choice "deck_mode", deck_mode);
-                apply_setting!(config, set, choice "deck_widget", deck_widget);
                 apply_setting!(config, set, bool "show_caret", show_caret);
 
-                apply_setting!(config, set, choice "clock_date", clock_date);
-                apply_setting!(config, set, choice "clock_mode", clock_mode);
-                apply_setting!(config, set, choice "clock_position", clock_position);
-                apply_setting!(config, set, choice "clock_format", clock_format);
-                apply_setting!(config, set, bool "clock_seconds", clock_seconds);
-
-                apply_setting!(config, set, parse "keyvis_width", keyvis_width);
+                apply_setting!(config, set, parse_clamp "keyvis_width", keyvis_width, 1, 1024);
                 apply_setting!(config, set, parse_clamp "keyvis_height", keyvis_height, 2, 32);
                 apply_setting!(config, set, choice_offset "keyvis_steps", keyvis_steps, 1);
                 apply_setting!(config, set, parse_clamp "keyvis_spread", keyvis_spread, 2, 32);
@@ -1185,20 +1216,30 @@ pub fn settings_modal(
                 apply_setting!(config, set, parse_clamp "keyvis_tension", keyvis_tension, 0.1, 1.0);
                 apply_setting!(config, set, bool "keyvis_base", keyvis_base);
 
-                apply_setting!(config, set, bool "double_q_exit", double_q_exit);
-
-                apply_setting!(config, set, choice "monitor_cpu", monitor_cpu);
-                apply_setting!(config, set, choice "monitor_gpu", monitor_gpu);
-                apply_setting!(config, set, choice "monitor_mem", monitor_mem);
-                apply_setting!(config, set, choice "monitor_term", monitor_term);
-                apply_setting!(config, set, choice "monitor_divider", monitor_divider);
-                apply_setting!(config, set, choice "monitor_bar_mode", monitor_bar_mode);
-                apply_setting!(config, set, parse_clamp "monitor_bar_width", monitor_bar_width, 4, 16);
+                apply_setting!(config, set, bool "monitor_cpu", monitor_cpu);
+                apply_setting!(config, set, bool "monitor_gpu", monitor_gpu);
+                apply_setting!(config, set, bool "monitor_mem", monitor_mem);
+                apply_setting!(config, set, bool "monitor_term", monitor_term);
+                apply_setting!(config, set, bool "monitor_divider", monitor_divider);
+                apply_setting!(config, set, bool "monitor_bar", monitor_bar);
                 apply_setting!(config, set, bool "monitor_icons", monitor_icons);
+                apply_setting!(config, set, choice "monitor_cpu_style", monitor_cpu_style);
+                apply_setting!(config, set, choice "monitor_gpu_style", monitor_gpu_style);
+                apply_setting!(config, set, choice "monitor_mem_style", monitor_mem_style);
+                apply_setting!(config, set, choice "monitor_bar_style", monitor_bar_style);
+                apply_setting!(config, set, parse_clamp "monitor_bar_width", monitor_bar_width, 4, 16);
+
+                apply_setting!(config, set, bool "clock_date", clock_date);
+                apply_setting!(config, set, choice "clock_date_style", clock_date_style);
+                apply_setting!(config, set, choice "clock_mode", clock_mode);
+                apply_setting!(config, set, choice "clock_position", clock_position);
+                apply_setting!(config, set, choice "clock_format", clock_format);
+                apply_setting!(config, set, bool "clock_seconds", clock_seconds);
 
                 apply_setting!(config, set, bool "macrostats_icons", macrostats_icons);
                 apply_setting!(config, set, bool "macrostats_edit_name", macrostats_edit_name);
-                apply_setting!(config, set, choice "macrostats_edit_err", macrostats_edit_err);
+                apply_setting!(config, set, bool "macrostats_edit_err", macrostats_edit_err);
+                apply_setting!(config, set, choice "macrostats_edit_err_style", macrostats_edit_err_style);
                 apply_setting!(config, set, bool "macrostats_edit_created", macrostats_edit_created);
                 apply_setting!(config, set, bool "macrostats_edit_lines", macrostats_edit_lines);
                 apply_setting!(config, set, bool "macrostats_edit_code", macrostats_edit_code);
@@ -1269,8 +1310,8 @@ pub fn settings_modal(
         }
 
         let mut bg_dirty = false;
-        if config.deck_mode == "widget" {
-            if config.deck_widget == "keyvis" {
+        if config.deck {
+            if config.deck_mode == "keyvis" {
                 if main_view.keyvis.tick(
                     config.keyvis_gravity,
                     config.keyvis_steps,
@@ -1279,17 +1320,17 @@ pub fn settings_modal(
                     main_view.refresh_static_boxes(config);
                     bg_dirty = true;
                 }
-            } else if config.deck_widget == "monitor" {
+            } else if config.deck_mode == "monitor" {
                 if main_view.monitor.tick(current_w, current_h) {
                     main_view.refresh_static_boxes(config);
                     bg_dirty = true;
                 }
-            } else if config.deck_widget == "clock" {
+            } else if config.deck_mode == "clock" {
                 if main_view.clock.tick(current_w, current_h, config) {
                     main_view.refresh_static_boxes(config);
                     bg_dirty = true;
                 }
-            } else if config.deck_widget == "macrostats" {
+            } else if config.deck_mode == "macrostats" {
                 let _ = main_view.monitor.tick(current_w, current_h);
                 let info = main_view.get_macrostats_info();
                 if main_view.macrostats.tick(&info) {
@@ -1802,7 +1843,7 @@ pub fn settings_modal(
         let mut needs_ui_refresh = false;
 
         let key = terminal.read_key(Duration::from_millis(16));
-        if key != Key::None && config.deck_mode == "widget" && config.deck_widget == "keyvis" {
+        if key != Key::None && config.deck && config.deck_mode == "keyvis" {
             main_view
                 .keyvis
                 .push_key(&key, config.keyvis_force, config.keyvis_spread);
@@ -1842,16 +1883,16 @@ pub fn settings_modal(
                                         do_apply = true;
                                     }
                                 }
-                                CustomType::Int => {
-                                    if edit_buffer.parse::<usize>().is_ok() {
+                                CustomType::IntRange(min, max) => {
+                                    if let Ok(v) = edit_buffer.parse::<usize>() {
+                                        edit_buffer = v.clamp(*min, *max).to_string();
                                         do_apply = true;
                                     }
                                 }
                                 CustomType::FloatRange(min, max) => {
                                     if let Ok(v) = edit_buffer.parse::<f32>() {
-                                        if v >= *min && v <= *max {
-                                            do_apply = true;
-                                        }
+                                        edit_buffer = v.clamp(*min, *max).to_string();
+                                        do_apply = true;
                                     }
                                 }
                                 CustomType::Gradient => {
@@ -2192,17 +2233,27 @@ pub fn settings_modal(
                                         "reset_editor" => {
                                             ("Reset editor settings to default\n\nAre you sure?", 8)
                                         }
-                                        "reset_widget" => (
-                                            "Reset current widget settings to default\n\nAre you sure?",
-                                            9,
+                                        "reset_keyvis" => {
+                                            ("Reset Keyvis settings to default\n\nAre you sure?", 9)
+                                        }
+                                        "reset_monitor" => (
+                                            "Reset Monitor settings to default\n\nAre you sure?",
+                                            10,
+                                        ),
+                                        "reset_clock" => {
+                                            ("Reset Clock settings to default\n\nAre you sure?", 11)
+                                        }
+                                        "reset_macrostats" => (
+                                            "Reset Macrostats settings to default\n\nAre you sure?",
+                                            12,
                                         ),
                                         "reset_library" => (
                                             "Reset library settings to default\n\nAre you sure?",
-                                            10,
+                                            13,
                                         ),
                                         "reset_settings_menu" => (
                                             "Reset settings menu configuration to default\n\nAre you sure?",
-                                            11,
+                                            14,
                                         ),
                                         _ => ("", 99),
                                     };
@@ -2243,10 +2294,16 @@ pub fn settings_modal(
                                         } else if action_type == 8 {
                                             config.reset_editor();
                                         } else if action_type == 9 {
-                                            config.reset_current_widget();
+                                            config.reset_keyvis();
                                         } else if action_type == 10 {
-                                            config.reset_library();
+                                            config.reset_monitor();
                                         } else if action_type == 11 {
+                                            config.reset_clock();
+                                        } else if action_type == 12 {
+                                            config.reset_macrostats();
+                                        } else if action_type == 13 {
+                                            config.reset_library();
+                                        } else if action_type == 14 {
                                             config.reset_settings_menu();
                                         }
                                         config.save();
@@ -2384,11 +2441,11 @@ pub fn settings_modal(
                 prev_lib_width = config.lib_width;
             }
 
-            if config.deck_mode != prev_deck_mode || config.deck_widget != prev_deck_widget {
+            if config.deck != prev_deck || config.deck_mode != prev_deck_mode {
                 let (term_w, term_h) = Terminal::size();
                 main_view.resize(term_w, term_h, config);
+                prev_deck = config.deck;
                 prev_deck_mode = config.deck_mode.clone();
-                prev_deck_widget = config.deck_widget.clone();
 
                 if cat_selected >= categories.len() {
                     cat_selected = categories.len().saturating_sub(1);

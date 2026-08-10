@@ -15,22 +15,43 @@ pub struct Config {
     pub lib_sorting: String,
     pub tabs_num: usize,
     pub lib_width: usize,
+    pub deck: bool,
     pub deck_mode: String,
-    pub deck_widget: String,
     pub show_caret: bool,
 
-    pub monitor_cpu: String,
-    pub monitor_gpu: String,
-    pub monitor_mem: String,
-    pub monitor_term: String,
-    pub monitor_divider: String,
-    pub monitor_bar_mode: String,
-    pub monitor_bar_width: usize,
+    pub keyvis_width: usize,
+    pub keyvis_height: usize,
+    pub keyvis_steps: usize,
+    pub keyvis_spread: usize,
+    pub keyvis_force: f32,
+    pub keyvis_gravity: f32,
+    pub keyvis_tension: f32,
+    pub keyvis_base: bool,
+
+    pub monitor_cpu: bool,
+    pub monitor_gpu: bool,
+    pub monitor_mem: bool,
+    pub monitor_term: bool,
+    pub monitor_divider: bool,
+    pub monitor_bar: bool,
     pub monitor_icons: bool,
+    pub monitor_cpu_style: String,
+    pub monitor_gpu_style: String,
+    pub monitor_mem_style: String,
+    pub monitor_bar_style: String,
+    pub monitor_bar_width: usize,
+
+    pub clock_date: bool,
+    pub clock_date_style: String,
+    pub clock_mode: String,
+    pub clock_position: String,
+    pub clock_format: String,
+    pub clock_seconds: bool,
 
     pub macrostats_icons: bool,
     pub macrostats_edit_name: bool,
-    pub macrostats_edit_err: String,
+    pub macrostats_edit_err: bool,
+    pub macrostats_edit_err_style: String,
     pub macrostats_edit_created: bool,
     pub macrostats_edit_lines: bool,
     pub macrostats_edit_code: bool,
@@ -43,21 +64,6 @@ pub struct Config {
     pub macrostats_lib_status: bool,
     pub macrostats_err_chart_len: usize,
     pub macrostats_err_chart_num: bool,
-
-    pub clock_date: String,
-    pub clock_mode: String,
-    pub clock_position: String,
-    pub clock_format: String,
-    pub clock_seconds: bool,
-
-    pub keyvis_width: usize,
-    pub keyvis_height: usize,
-    pub keyvis_steps: usize,
-    pub keyvis_spread: usize,
-    pub keyvis_force: f32,
-    pub keyvis_gravity: f32,
-    pub keyvis_tension: f32,
-    pub keyvis_base: bool,
 
     pub double_q_exit: bool,
 
@@ -111,22 +117,43 @@ impl Default for Config {
             lib_sorting: String::new(),
             tabs_num: 0,
             lib_width: 0,
+            deck: false,
             deck_mode: String::new(),
-            deck_widget: String::new(),
             show_caret: false,
 
-            monitor_cpu: String::new(),
-            monitor_gpu: String::new(),
-            monitor_mem: String::new(),
-            monitor_term: String::new(),
-            monitor_divider: String::new(),
-            monitor_bar_mode: String::new(),
-            monitor_bar_width: 0,
+            keyvis_width: 0,
+            keyvis_height: 0,
+            keyvis_steps: 0,
+            keyvis_spread: 0,
+            keyvis_force: 0.0,
+            keyvis_gravity: 0.0,
+            keyvis_tension: 0.0,
+            keyvis_base: false,
+
+            monitor_cpu: true,
+            monitor_gpu: true,
+            monitor_mem: true,
+            monitor_term: true,
+            monitor_divider: false,
+            monitor_bar: true,
             monitor_icons: false,
+            monitor_cpu_style: String::new(),
+            monitor_gpu_style: String::new(),
+            monitor_mem_style: String::new(),
+            monitor_bar_style: String::new(),
+            monitor_bar_width: 0,
+
+            clock_date: true,
+            clock_date_style: String::new(),
+            clock_mode: String::new(),
+            clock_position: String::new(),
+            clock_format: String::new(),
+            clock_seconds: false,
 
             macrostats_icons: false,
             macrostats_edit_name: false,
-            macrostats_edit_err: String::new(),
+            macrostats_edit_err: true,
+            macrostats_edit_err_style: String::new(),
             macrostats_edit_created: false,
             macrostats_edit_lines: false,
             macrostats_edit_code: false,
@@ -139,21 +166,6 @@ impl Default for Config {
             macrostats_lib_status: false,
             macrostats_err_chart_len: 0,
             macrostats_err_chart_num: false,
-
-            clock_date: String::new(),
-            clock_mode: String::new(),
-            clock_position: String::new(),
-            clock_format: String::new(),
-            clock_seconds: false,
-
-            keyvis_width: 0,
-            keyvis_height: 0,
-            keyvis_steps: 0,
-            keyvis_spread: 0,
-            keyvis_force: 0.0,
-            keyvis_gravity: 0.0,
-            keyvis_tension: 0.0,
-            keyvis_base: false,
 
             double_q_exit: false,
 
@@ -234,22 +246,62 @@ impl Config {
                     "lib_width" => {
                         self.lib_width = val.parse().unwrap_or(self.lib_width).clamp(16, 64)
                     }
+                    "deck" => self.deck = val.parse().unwrap_or(self.deck),
                     "deck_mode" => self.deck_mode = val.to_string(),
-                    "deck_widget" => self.deck_widget = val.to_string(),
                     "show_caret" => self.show_caret = val.parse().unwrap_or(self.show_caret),
 
-                    "monitor_cpu" => self.monitor_cpu = val.to_string(),
-                    "monitor_gpu" => self.monitor_gpu = val.to_string(),
-                    "monitor_mem" => self.monitor_mem = val.to_string(),
-                    "monitor_term" => self.monitor_term = val.to_string(),
-                    "monitor_divider" => self.monitor_divider = val.to_string(),
-                    "monitor_bar_mode" => self.monitor_bar_mode = val.to_string(),
+                    "keyvis_width" => {
+                        self.keyvis_width = val.parse().unwrap_or(self.keyvis_width).clamp(1, 1024)
+                    }
+                    "keyvis_height" => {
+                        self.keyvis_height = val.parse().unwrap_or(self.keyvis_height).clamp(2, 32)
+                    }
+                    "keyvis_steps" => {
+                        self.keyvis_steps = val.parse().unwrap_or(self.keyvis_steps).clamp(1, 4)
+                    }
+                    "keyvis_spread" => {
+                        self.keyvis_spread = val.parse().unwrap_or(self.keyvis_spread).clamp(2, 32)
+                    }
+                    "keyvis_force" => {
+                        self.keyvis_force = val.parse().unwrap_or(self.keyvis_force).clamp(0.1, 1.0)
+                    }
+                    "keyvis_gravity" => {
+                        self.keyvis_gravity =
+                            val.parse().unwrap_or(self.keyvis_gravity).clamp(0.1, 1.0)
+                    }
+                    "keyvis_tension" => {
+                        self.keyvis_tension =
+                            val.parse().unwrap_or(self.keyvis_tension).clamp(0.1, 1.0)
+                    }
+                    "keyvis_base" => self.keyvis_base = val.parse().unwrap_or(self.keyvis_base),
+
+                    "monitor_cpu" => self.monitor_cpu = val.parse().unwrap_or(self.monitor_cpu),
+                    "monitor_gpu" => self.monitor_gpu = val.parse().unwrap_or(self.monitor_gpu),
+                    "monitor_mem" => self.monitor_mem = val.parse().unwrap_or(self.monitor_mem),
+                    "monitor_term" => self.monitor_term = val.parse().unwrap_or(self.monitor_term),
+                    "monitor_divider" => {
+                        self.monitor_divider = val.parse().unwrap_or(self.monitor_divider)
+                    }
+                    "monitor_bar" => self.monitor_bar = val.parse().unwrap_or(self.monitor_bar),
+                    "monitor_icons" => {
+                        self.monitor_icons = val.parse().unwrap_or(self.monitor_icons)
+                    }
+                    "monitor_cpu_style" => self.monitor_cpu_style = val.to_string(),
+                    "monitor_gpu_style" => self.monitor_gpu_style = val.to_string(),
+                    "monitor_mem_style" => self.monitor_mem_style = val.to_string(),
+                    "monitor_bar_style" => self.monitor_bar_style = val.to_string(),
                     "monitor_bar_width" => {
                         self.monitor_bar_width =
                             val.parse().unwrap_or(self.monitor_bar_width).clamp(4, 16)
                     }
-                    "monitor_icons" => {
-                        self.monitor_icons = val.parse().unwrap_or(self.monitor_icons)
+
+                    "clock_date" => self.clock_date = val.parse().unwrap_or(self.clock_date),
+                    "clock_date_style" => self.clock_date_style = val.to_string(),
+                    "clock_mode" => self.clock_mode = val.to_string(),
+                    "clock_position" => self.clock_position = val.to_string(),
+                    "clock_format" => self.clock_format = val.to_string(),
+                    "clock_seconds" => {
+                        self.clock_seconds = val.parse().unwrap_or(self.clock_seconds)
                     }
 
                     "macrostats_icons" => {
@@ -258,7 +310,10 @@ impl Config {
                     "macrostats_edit_name" => {
                         self.macrostats_edit_name = val.parse().unwrap_or(self.macrostats_edit_name)
                     }
-                    "macrostats_edit_err" => self.macrostats_edit_err = val.to_string(),
+                    "macrostats_edit_err" => {
+                        self.macrostats_edit_err = val.parse().unwrap_or(self.macrostats_edit_err)
+                    }
+                    "macrostats_edit_err_style" => self.macrostats_edit_err_style = val.to_string(),
                     "macrostats_edit_created" => {
                         self.macrostats_edit_created =
                             val.parse().unwrap_or(self.macrostats_edit_created)
@@ -304,37 +359,6 @@ impl Config {
                         self.macrostats_err_chart_num =
                             val.parse().unwrap_or(self.macrostats_err_chart_num)
                     }
-
-                    "clock_date" => self.clock_date = val.to_string(),
-                    "clock_mode" => self.clock_mode = val.to_string(),
-                    "clock_position" => self.clock_position = val.to_string(),
-                    "clock_format" => self.clock_format = val.to_string(),
-                    "clock_seconds" => {
-                        self.clock_seconds = val.parse().unwrap_or(self.clock_seconds)
-                    }
-
-                    "keyvis_width" => self.keyvis_width = val.parse().unwrap_or(self.keyvis_width),
-                    "keyvis_height" => {
-                        self.keyvis_height = val.parse().unwrap_or(self.keyvis_height).clamp(2, 32)
-                    }
-                    "keyvis_steps" => {
-                        self.keyvis_steps = val.parse().unwrap_or(self.keyvis_steps).clamp(1, 4)
-                    }
-                    "keyvis_spread" => {
-                        self.keyvis_spread = val.parse().unwrap_or(self.keyvis_spread).clamp(2, 32)
-                    }
-                    "keyvis_force" => {
-                        self.keyvis_force = val.parse().unwrap_or(self.keyvis_force).clamp(0.1, 1.0)
-                    }
-                    "keyvis_gravity" => {
-                        self.keyvis_gravity =
-                            val.parse().unwrap_or(self.keyvis_gravity).clamp(0.1, 1.0)
-                    }
-                    "keyvis_tension" => {
-                        self.keyvis_tension =
-                            val.parse().unwrap_or(self.keyvis_tension).clamp(0.1, 1.0)
-                    }
-                    "keyvis_base" => self.keyvis_base = val.parse().unwrap_or(self.keyvis_base),
 
                     "double_q_exit" => {
                         self.double_q_exit = val.parse().unwrap_or(self.double_q_exit)
@@ -587,19 +611,54 @@ impl Config {
 
     pub fn reset_deck(&mut self) {
         let default = Config::default();
+        self.deck = default.deck;
         self.deck_mode = default.deck_mode;
-        self.deck_widget = default.deck_widget;
+    }
+
+    pub fn reset_keyvis(&mut self) {
+        let default = Config::default();
+        self.keyvis_width = default.keyvis_width;
+        self.keyvis_height = default.keyvis_height;
+        self.keyvis_steps = default.keyvis_steps;
+        self.keyvis_spread = default.keyvis_spread;
+        self.keyvis_force = default.keyvis_force;
+        self.keyvis_gravity = default.keyvis_gravity;
+        self.keyvis_tension = default.keyvis_tension;
+        self.keyvis_base = default.keyvis_base;
+    }
+
+    pub fn reset_monitor(&mut self) {
+        let default = Config::default();
         self.monitor_cpu = default.monitor_cpu;
         self.monitor_gpu = default.monitor_gpu;
         self.monitor_mem = default.monitor_mem;
         self.monitor_term = default.monitor_term;
         self.monitor_divider = default.monitor_divider;
-        self.monitor_bar_mode = default.monitor_bar_mode;
-        self.monitor_bar_width = default.monitor_bar_width;
+        self.monitor_bar = default.monitor_bar;
         self.monitor_icons = default.monitor_icons;
+        self.monitor_cpu_style = default.monitor_cpu_style;
+        self.monitor_gpu_style = default.monitor_gpu_style;
+        self.monitor_mem_style = default.monitor_mem_style;
+        self.monitor_bar_style = default.monitor_bar_style;
+        self.monitor_bar_width = default.monitor_bar_width;
+    }
+
+    pub fn reset_clock(&mut self) {
+        let default = Config::default();
+        self.clock_date = default.clock_date;
+        self.clock_date_style = default.clock_date_style;
+        self.clock_mode = default.clock_mode;
+        self.clock_position = default.clock_position;
+        self.clock_format = default.clock_format;
+        self.clock_seconds = default.clock_seconds;
+    }
+
+    pub fn reset_macrostats(&mut self) {
+        let default = Config::default();
         self.macrostats_icons = default.macrostats_icons;
         self.macrostats_edit_name = default.macrostats_edit_name;
         self.macrostats_edit_err = default.macrostats_edit_err;
+        self.macrostats_edit_err_style = default.macrostats_edit_err_style;
         self.macrostats_edit_created = default.macrostats_edit_created;
         self.macrostats_edit_lines = default.macrostats_edit_lines;
         self.macrostats_edit_code = default.macrostats_edit_code;
@@ -612,64 +671,6 @@ impl Config {
         self.macrostats_lib_status = default.macrostats_lib_status;
         self.macrostats_err_chart_len = default.macrostats_err_chart_len;
         self.macrostats_err_chart_num = default.macrostats_err_chart_num;
-        self.clock_date = default.clock_date;
-        self.clock_mode = default.clock_mode;
-        self.clock_position = default.clock_position;
-        self.clock_format = default.clock_format;
-        self.clock_seconds = default.clock_seconds;
-        self.keyvis_width = default.keyvis_width;
-        self.keyvis_height = default.keyvis_height;
-        self.keyvis_steps = default.keyvis_steps;
-        self.keyvis_spread = default.keyvis_spread;
-        self.keyvis_force = default.keyvis_force;
-        self.keyvis_gravity = default.keyvis_gravity;
-        self.keyvis_tension = default.keyvis_tension;
-        self.keyvis_base = default.keyvis_base;
-    }
-
-    pub fn reset_current_widget(&mut self) {
-        let default = Config::default();
-        if self.deck_widget == "monitor" {
-            self.monitor_cpu = default.monitor_cpu;
-            self.monitor_gpu = default.monitor_gpu;
-            self.monitor_mem = default.monitor_mem;
-            self.monitor_term = default.monitor_term;
-            self.monitor_divider = default.monitor_divider;
-            self.monitor_bar_mode = default.monitor_bar_mode;
-            self.monitor_bar_width = default.monitor_bar_width;
-            self.monitor_icons = default.monitor_icons;
-        } else if self.deck_widget == "macrostats" {
-            self.macrostats_icons = default.macrostats_icons;
-            self.macrostats_edit_name = default.macrostats_edit_name;
-            self.macrostats_edit_err = default.macrostats_edit_err;
-            self.macrostats_edit_created = default.macrostats_edit_created;
-            self.macrostats_edit_lines = default.macrostats_edit_lines;
-            self.macrostats_edit_code = default.macrostats_edit_code;
-            self.macrostats_run_name = default.macrostats_run_name;
-            self.macrostats_run_elapsed = default.macrostats_run_elapsed;
-            self.macrostats_run_cpu = default.macrostats_run_cpu;
-            self.macrostats_lib_name = default.macrostats_lib_name;
-            self.macrostats_lib_created = default.macrostats_lib_created;
-            self.macrostats_lib_size = default.macrostats_lib_size;
-            self.macrostats_lib_status = default.macrostats_lib_status;
-            self.macrostats_err_chart_len = default.macrostats_err_chart_len;
-            self.macrostats_err_chart_num = default.macrostats_err_chart_num;
-        } else if self.deck_widget == "clock" {
-            self.clock_date = default.clock_date;
-            self.clock_mode = default.clock_mode;
-            self.clock_position = default.clock_position;
-            self.clock_format = default.clock_format;
-            self.clock_seconds = default.clock_seconds;
-        } else if self.deck_widget == "keyvis" {
-            self.keyvis_width = default.keyvis_width;
-            self.keyvis_height = default.keyvis_height;
-            self.keyvis_steps = default.keyvis_steps;
-            self.keyvis_spread = default.keyvis_spread;
-            self.keyvis_force = default.keyvis_force;
-            self.keyvis_gravity = default.keyvis_gravity;
-            self.keyvis_tension = default.keyvis_tension;
-            self.keyvis_base = default.keyvis_base;
-        }
     }
 
     pub fn reset_library(&mut self) {
@@ -800,16 +801,62 @@ impl Config {
                         writeln!(&mut output, "{} = {}{}", key_str, self.lib_width, comment)
                             .unwrap()
                     }
+                    "deck" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.deck, comment).unwrap()
+                    }
                     "deck_mode" => {
                         writeln!(&mut output, "{} = {}{}", key_str, self.deck_mode, comment)
                             .unwrap()
                     }
-                    "deck_widget" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.deck_widget, comment)
-                            .unwrap()
-                    }
                     "show_caret" => {
                         writeln!(&mut output, "{} = {}{}", key_str, self.show_caret, comment)
+                            .unwrap()
+                    }
+
+                    "keyvis_width" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_width, comment
+                    )
+                    .unwrap(),
+                    "keyvis_height" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_height, comment
+                    )
+                    .unwrap(),
+                    "keyvis_steps" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_steps, comment
+                    )
+                    .unwrap(),
+                    "keyvis_spread" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_spread, comment
+                    )
+                    .unwrap(),
+                    "keyvis_force" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_force, comment
+                    )
+                    .unwrap(),
+                    "keyvis_gravity" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_gravity, comment
+                    )
+                    .unwrap(),
+                    "keyvis_tension" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.keyvis_tension, comment
+                    )
+                    .unwrap(),
+                    "keyvis_base" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.keyvis_base, comment)
                             .unwrap()
                     }
 
@@ -837,10 +884,38 @@ impl Config {
                         key_str, self.monitor_divider, comment
                     )
                     .unwrap(),
-                    "monitor_bar_mode" => writeln!(
+                    "monitor_bar" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.monitor_bar, comment)
+                            .unwrap()
+                    }
+                    "monitor_icons" => writeln!(
                         &mut output,
                         "{} = {}{}",
-                        key_str, self.monitor_bar_mode, comment
+                        key_str, self.monitor_icons, comment
+                    )
+                    .unwrap(),
+                    "monitor_cpu_style" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.monitor_cpu_style, comment
+                    )
+                    .unwrap(),
+                    "monitor_gpu_style" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.monitor_gpu_style, comment
+                    )
+                    .unwrap(),
+                    "monitor_mem_style" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.monitor_mem_style, comment
+                    )
+                    .unwrap(),
+                    "monitor_bar_style" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.monitor_bar_style, comment
                     )
                     .unwrap(),
                     "monitor_bar_width" => writeln!(
@@ -849,10 +924,37 @@ impl Config {
                         key_str, self.monitor_bar_width, comment
                     )
                     .unwrap(),
-                    "monitor_icons" => writeln!(
+
+                    "clock_date" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.clock_date, comment)
+                            .unwrap()
+                    }
+                    "clock_date_style" => writeln!(
                         &mut output,
                         "{} = {}{}",
-                        key_str, self.monitor_icons, comment
+                        key_str, self.clock_date_style, comment
+                    )
+                    .unwrap(),
+                    "clock_mode" => {
+                        writeln!(&mut output, "{} = {}{}", key_str, self.clock_mode, comment)
+                            .unwrap()
+                    }
+                    "clock_position" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.clock_position, comment
+                    )
+                    .unwrap(),
+                    "clock_format" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.clock_format, comment
+                    )
+                    .unwrap(),
+                    "clock_seconds" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.clock_seconds, comment
                     )
                     .unwrap(),
 
@@ -872,6 +974,12 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.macrostats_edit_err, comment
+                    )
+                    .unwrap(),
+                    "macrostats_edit_err_style" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.macrostats_edit_err_style, comment
                     )
                     .unwrap(),
                     "macrostats_edit_created" => writeln!(
@@ -946,80 +1054,6 @@ impl Config {
                         key_str, self.macrostats_err_chart_num, comment
                     )
                     .unwrap(),
-
-                    "clock_date" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.clock_date, comment)
-                            .unwrap()
-                    }
-                    "clock_mode" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.clock_mode, comment)
-                            .unwrap()
-                    }
-                    "clock_position" => writeln!(
-                        &mut output,
-                        "{} = {}{}",
-                        key_str, self.clock_position, comment
-                    )
-                    .unwrap(),
-                    "clock_format" => writeln!(
-                        &mut output,
-                        "{} = {}{}",
-                        key_str, self.clock_format, comment
-                    )
-                    .unwrap(),
-                    "clock_seconds" => writeln!(
-                        &mut output,
-                        "{} = {}{}",
-                        key_str, self.clock_seconds, comment
-                    )
-                    .unwrap(),
-
-                    "keyvis_width" => writeln!(
-                        &mut output,
-                        "{} = {}{}",
-                        key_str, self.keyvis_width, comment
-                    )
-                    .unwrap(),
-                    "keyvis_height" => writeln!(
-                        &mut output,
-                        "{} = {}{}",
-                        key_str, self.keyvis_height, comment
-                    )
-                    .unwrap(),
-                    "keyvis_steps" => writeln!(
-                        &mut output,
-                        "{} = {}{}",
-                        key_str, self.keyvis_steps, comment
-                    )
-                    .unwrap(),
-                    "keyvis_spread" => writeln!(
-                        &mut output,
-                        "{} = {}{}",
-                        key_str, self.keyvis_spread, comment
-                    )
-                    .unwrap(),
-                    "keyvis_force" => writeln!(
-                        &mut output,
-                        "{} = {}{}",
-                        key_str, self.keyvis_force, comment
-                    )
-                    .unwrap(),
-                    "keyvis_gravity" => writeln!(
-                        &mut output,
-                        "{} = {}{}",
-                        key_str, self.keyvis_gravity, comment
-                    )
-                    .unwrap(),
-                    "keyvis_tension" => writeln!(
-                        &mut output,
-                        "{} = {}{}",
-                        key_str, self.keyvis_tension, comment
-                    )
-                    .unwrap(),
-                    "keyvis_base" => {
-                        writeln!(&mut output, "{} = {}{}", key_str, self.keyvis_base, comment)
-                            .unwrap()
-                    }
 
                     "double_q_exit" => writeln!(
                         &mut output,

@@ -1,12 +1,12 @@
 add macos support?
 
 monitor widget settings:
-- change CPU, GPU, MEM and TERM to have true / false and then separate option for the type
+- change CPU, GPU, MEM and TERM to have true / false settings and then separate setrting for the type
 - same with monitor bar
-- monitor divider to true / false
+- change monitor divider setting to true / false
 
 clock widget settings:
-- change date to have true / false and then separate option for the type
+- change date to have true / false and then separate setting for the type
 
 macrostats widget settings:
-- change edit errors to have true / false and then separate option for the type
+- change edit errors to have true / false and then separate setting for the type

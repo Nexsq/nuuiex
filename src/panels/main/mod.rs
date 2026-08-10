@@ -153,16 +153,14 @@ impl MainView {
 
     pub fn get_layout_heights(&self, config: &Config) -> (u16, u16) {
         let header_h = self.theme.title.len().max(1) as u16;
-        let deck_h = if config.deck_mode == "widget" {
-            match config.deck_widget.as_str() {
+        let deck_h = if !config.deck {
+            0
+        } else {
+            match config.deck_mode.as_str() {
                 "keyvis" => config.keyvis_height as u16,
                 "monitor" | "clock" | "macrostats" => 3,
                 _ => header_h,
             }
-        } else if config.deck_mode == "none" {
-            0
-        } else {
-            header_h
         };
         (header_h, deck_h)
     }
@@ -177,8 +175,8 @@ impl MainView {
     ) -> bool {
         cvs.clean();
         let mut anim = false;
-        if config.deck_mode == "widget" {
-            if config.deck_widget == "keyvis" {
+        if config.deck {
+            if config.deck_mode == "keyvis" {
                 if *k != Key::None {
                     self.keyvis
                         .push_key(k, config.keyvis_force, config.keyvis_spread);
@@ -191,12 +189,12 @@ impl MainView {
                     self.refresh_static_boxes(config);
                     anim = true;
                 }
-            } else if config.deck_widget == "monitor" {
+            } else if config.deck_mode == "monitor" {
                 if self.monitor.tick(w, h) {
                     self.refresh_static_boxes(config);
                     anim = true;
                 }
-            } else if config.deck_widget == "clock" {
+            } else if config.deck_mode == "clock" {
                 if self.clock.tick(w, h, config) {
                     self.refresh_static_boxes(config);
                     anim = true;
@@ -434,7 +432,7 @@ impl MainView {
             header_h,
             deck_h,
             config.tabs_num,
-            &config.deck_mode,
+            config.deck,
             config.lib_width as u16,
         );
 
@@ -576,8 +574,7 @@ impl MainView {
         let (_, deck_h) = self.get_layout_heights(config);
 
         self.monitor.set_active(
-            config.deck_mode == "widget"
-                && (config.deck_widget == "monitor" || config.deck_widget == "macrostats"),
+            config.deck && (config.deck_mode == "monitor" || config.deck_mode == "macrostats"),
         );
 
         let macro_info = self.get_macrostats_info();

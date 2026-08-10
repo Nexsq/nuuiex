@@ -201,10 +201,12 @@ pub fn draw(
                 push_text(&mut line0, name, val_color, &bg_none, Modifier::None);
             }
 
-            let show_err_text =
-                config.macrostats_edit_err == "text" || config.macrostats_edit_err == "both";
-            let show_err_chart =
-                config.macrostats_edit_err == "chart" || config.macrostats_edit_err == "both";
+            let show_err_text = config.macrostats_edit_err
+                && (config.macrostats_edit_err_style == "text"
+                    || config.macrostats_edit_err_style == "both");
+            let show_err_chart = config.macrostats_edit_err
+                && (config.macrostats_edit_err_style == "chart"
+                    || config.macrostats_edit_err_style == "both");
 
             let push_chart = |target_line: &mut Vec<(char, Style)>| {
                 let chart_len = config.macrostats_err_chart_len.clamp(4, 16);
@@ -330,7 +332,7 @@ pub fn draw(
                 );
             }
 
-            if config.macrostats_edit_err == "both" {
+            if config.macrostats_edit_err && config.macrostats_edit_err_style == "both" {
                 for _ in 0..line0.len() {
                     line1.push((
                         ' ',
@@ -390,7 +392,7 @@ pub fn draw(
                     return;
                 }
                 if !line0.is_empty() {
-                    let sep = if config.monitor_divider == "show" {
+                    let sep = if config.monitor_divider {
                         "  |  "
                     } else {
                         "   "

@@ -97,7 +97,7 @@ pub fn refresh_tabs(
 
 pub fn refresh_title(theme: &Theme, config: &Config, term_w: u16) -> Box {
     let header_h = theme.title.len().max(1) as u16;
-    let width = if config.deck_mode == "title" {
+    let width = if config.deck && config.deck_mode == "title" {
         term_w
     } else {
         TABS_W + config.lib_width as u16
@@ -154,7 +154,7 @@ pub fn refresh_deck(
     macrostats: &crate::panels::widgets::macrostats::MacrostatsState,
     macro_info: &crate::panels::widgets::macrostats::MacroInfo,
 ) -> Box {
-    if config.deck_mode != "widget" {
+    if !config.deck || config.deck_mode == "title" {
         return Box::new(
             0,
             0,
@@ -166,23 +166,19 @@ pub fn refresh_deck(
         );
     }
 
-    let border = if config.deck_mode == "widget" {
-        crate::Border::None
-    } else {
-        config.get_border()
-    };
+    let border = crate::Border::None;
 
     let mut deck_box = Box::new(
         term_w.saturating_sub(TABS_W + config.lib_width as u16 - 1),
         deck_h,
-        if border == crate::Border::None { 0 } else { 1 },
+        0,
         border,
         theme.deck_box.clone(),
         Gradient::Solid(Color::None),
         Modifier::None,
     );
 
-    if config.deck_widget == "monitor" {
+    if config.deck_mode == "monitor" {
         crate::panels::widgets::monitor::draw(
             monitor,
             &mut deck_box,
@@ -191,9 +187,9 @@ pub fn refresh_deck(
             term_w,
             term_h,
         );
-    } else if config.deck_widget == "clock" {
+    } else if config.deck_mode == "clock" {
         crate::panels::widgets::clock::draw(clock, &mut deck_box, config, theme);
-    } else if config.deck_widget == "macrostats" {
+    } else if config.deck_mode == "macrostats" {
         crate::panels::widgets::macrostats::draw(
             macrostats,
             macro_info,

@@ -213,8 +213,8 @@ fn main() {
         main_view.update_macro_focus(true);
 
         let mut anim_dirty = false;
-        if config.deck_mode == "widget" {
-            if config.deck_widget == "keyvis" {
+        if config.deck {
+            if config.deck_mode == "keyvis" {
                 if key != Key::None {
                     main_view
                         .keyvis
@@ -228,17 +228,17 @@ fn main() {
                     main_view.refresh_static_boxes(&config);
                     anim_dirty = true;
                 }
-            } else if config.deck_widget == "monitor" {
+            } else if config.deck_mode == "monitor" {
                 if main_view.monitor.tick(term_w, term_h) {
                     main_view.refresh_static_boxes(&config);
                     anim_dirty = true;
                 }
-            } else if config.deck_widget == "clock" {
+            } else if config.deck_mode == "clock" {
                 if main_view.clock.tick(term_w, term_h, &config) {
                     main_view.refresh_static_boxes(&config);
                     anim_dirty = true;
                 }
-            } else if config.deck_widget == "macrostats" {
+            } else if config.deck_mode == "macrostats" {
                 let _ = main_view.monitor.tick(term_w, term_h);
                 let info = main_view.get_macrostats_info();
                 if main_view.macrostats.tick(&info) {

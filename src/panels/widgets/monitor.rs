@@ -753,7 +753,7 @@ pub fn draw(
     };
     let bar_w = config.monitor_bar_width.clamp(4, 16);
 
-    if config.monitor_cpu != "off" {
+    if config.monitor_cpu {
         let mut g = Vec::new();
         push_text(
             &mut g,
@@ -762,8 +762,9 @@ pub fn draw(
             &bg_none,
             Modifier::Bold,
         );
-        if config.monitor_cpu == "pct" || config.monitor_cpu.starts_with("pct") {
-            let spacing = if config.monitor_cpu.starts_with("pct") {
+        let cpu_style = &config.monitor_cpu_style;
+        if cpu_style == "pct" || cpu_style.starts_with("pct") {
+            let spacing = if cpu_style.starts_with("pct") {
                 " "
             } else {
                 ""
@@ -776,17 +777,17 @@ pub fn draw(
                 Modifier::None,
             );
         }
-        if config.monitor_cpu == "bar" || config.monitor_cpu == "pctbar" {
+        if (cpu_style == "bar" || cpu_style == "pctbar") && config.monitor_bar {
             push_bar(
                 &mut g,
                 state.last_cpu,
                 bar_w,
                 &theme.monitor_cpu_val,
                 &theme.monitor_bar_bounds,
-                &config.monitor_bar_mode,
+                &config.monitor_bar_style,
             );
         }
-        if config.monitor_cpu == "graph" || config.monitor_cpu == "pctgraph" {
+        if cpu_style == "graph" || cpu_style == "pctgraph" {
             let hist = state.cpu_hist.lock().unwrap().clone();
             push_graph(
                 &mut g,
@@ -794,13 +795,13 @@ pub fn draw(
                 bar_w,
                 &theme.monitor_cpu_val,
                 &theme.monitor_bar_bounds,
-                &config.monitor_bar_mode,
+                &config.monitor_bar_style,
             );
         }
         groups.push(g);
     }
 
-    if config.monitor_gpu != "off" {
+    if config.monitor_gpu {
         let mut g = Vec::new();
         push_text(
             &mut g,
@@ -809,8 +810,9 @@ pub fn draw(
             &bg_none,
             Modifier::Bold,
         );
-        if config.monitor_gpu == "pct" || config.monitor_gpu.starts_with("pct") {
-            let spacing = if config.monitor_gpu.starts_with("pct") {
+        let gpu_style = &config.monitor_gpu_style;
+        if gpu_style == "pct" || gpu_style.starts_with("pct") {
+            let spacing = if gpu_style.starts_with("pct") {
                 " "
             } else {
                 ""
@@ -823,17 +825,17 @@ pub fn draw(
                 Modifier::None,
             );
         }
-        if config.monitor_gpu == "bar" || config.monitor_gpu == "pctbar" {
+        if (gpu_style == "bar" || gpu_style == "pctbar") && config.monitor_bar {
             push_bar(
                 &mut g,
                 state.last_gpu,
                 bar_w,
                 &theme.monitor_gpu_val,
                 &theme.monitor_bar_bounds,
-                &config.monitor_bar_mode,
+                &config.monitor_bar_style,
             );
         }
-        if config.monitor_gpu == "graph" || config.monitor_gpu == "pctgraph" {
+        if gpu_style == "graph" || gpu_style == "pctgraph" {
             let hist = state.gpu_hist.lock().unwrap().clone();
             push_graph(
                 &mut g,
@@ -841,13 +843,13 @@ pub fn draw(
                 bar_w,
                 &theme.monitor_gpu_val,
                 &theme.monitor_bar_bounds,
-                &config.monitor_bar_mode,
+                &config.monitor_bar_style,
             );
         }
         groups.push(g);
     }
 
-    if config.monitor_mem != "off" {
+    if config.monitor_mem {
         let mut g = Vec::new();
         push_text(
             &mut g,
@@ -865,7 +867,9 @@ pub fn draw(
             0
         };
 
-        if config.monitor_mem == "used" {
+        let mem_style = &config.monitor_mem_style;
+
+        if mem_style == "used" {
             let s = if total > 0.0 {
                 format!("{:.1}/{:.1} GB", used, total)
             } else {
@@ -873,8 +877,8 @@ pub fn draw(
             };
             push_text(&mut g, &s, &theme.monitor_mem_val, &bg_none, Modifier::None);
         } else {
-            if config.monitor_mem == "pct" || config.monitor_mem.starts_with("pct") {
-                let spacing = if config.monitor_mem.starts_with("pct") {
+            if mem_style == "pct" || mem_style.starts_with("pct") {
+                let spacing = if mem_style.starts_with("pct") {
                     " "
                 } else {
                     ""
@@ -887,17 +891,17 @@ pub fn draw(
                     Modifier::None,
                 );
             }
-            if config.monitor_mem == "bar" || config.monitor_mem == "pctbar" {
+            if (mem_style == "bar" || mem_style == "pctbar") && config.monitor_bar {
                 push_bar(
                     &mut g,
                     mem_pct,
                     bar_w,
                     &theme.monitor_mem_val,
                     &theme.monitor_bar_bounds,
-                    &config.monitor_bar_mode,
+                    &config.monitor_bar_style,
                 );
             }
-            if config.monitor_mem == "graph" || config.monitor_mem == "pctgraph" {
+            if mem_style == "graph" || mem_style == "pctgraph" {
                 let hist = state.mem_hist.lock().unwrap().clone();
                 push_graph(
                     &mut g,
@@ -905,14 +909,14 @@ pub fn draw(
                     bar_w,
                     &theme.monitor_mem_val,
                     &theme.monitor_bar_bounds,
-                    &config.monitor_bar_mode,
+                    &config.monitor_bar_style,
                 );
             }
         }
         groups.push(g);
     }
 
-    if config.monitor_term == "on" {
+    if config.monitor_term {
         let mut g = Vec::new();
         push_text(
             &mut g,
@@ -932,7 +936,7 @@ pub fn draw(
     }
 
     let mut final_cells = Vec::new();
-    let show_div = config.monitor_divider == "show";
+    let show_div = config.monitor_divider;
 
     for (i, mut g) in groups.into_iter().enumerate() {
         if i > 0 {

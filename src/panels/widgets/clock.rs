@@ -42,13 +42,17 @@ impl ClockState {
             (true, false) => now.format("%H:%M:%S").to_string(),
             (false, false) => now.format("%H:%M").to_string(),
         };
-        let date_str = match config.clock_date.as_str() {
-            "eu" => now.format("%d/%m/%Y").to_string(),
-            "us" => now.format("%m/%d/%Y").to_string(),
-            "clean" => now.format("%d %m %Y").to_string(),
-            "mon name" => now.format("%b %d, %Y").to_string(),
-            "rfc 2822" => now.format("%a, %d %b %Y").to_string(),
-            _ => String::new(),
+        let date_str = if config.clock_date {
+            match config.clock_date_style.as_str() {
+                "eu" => now.format("%d/%m/%Y").to_string(),
+                "us" => now.format("%m/%d/%Y").to_string(),
+                "clean" => now.format("%d %m %Y").to_string(),
+                "mon name" => now.format("%b %d, %Y").to_string(),
+                "rfc 2822" => now.format("%a, %d %b %Y").to_string(),
+                _ => String::new(),
+            }
+        } else {
+            String::new()
         };
 
         if self.last_time != time_str
