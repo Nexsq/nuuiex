@@ -365,38 +365,6 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 ),
             },
             Setting {
-                name: "TERM",
-                key: "monitor_term",
-                kind: SettingType::Choice(
-                    vec!["true".to_string(), "false".to_string()],
-                    if config.monitor_term { 0 } else { 1 },
-                ),
-            },
-            Setting {
-                name: "Divider",
-                key: "monitor_divider",
-                kind: SettingType::Choice(
-                    vec!["true".to_string(), "false".to_string()],
-                    if config.monitor_divider { 0 } else { 1 },
-                ),
-            },
-            Setting {
-                name: "Monitor Bar",
-                key: "monitor_bar",
-                kind: SettingType::Choice(
-                    vec!["true".to_string(), "false".to_string()],
-                    if config.monitor_bar { 0 } else { 1 },
-                ),
-            },
-            Setting {
-                name: "Icons",
-                key: "monitor_icons",
-                kind: SettingType::Choice(
-                    vec!["true".to_string(), "false".to_string()],
-                    if config.monitor_icons { 0 } else { 1 },
-                ),
-            },
-            Setting {
                 name: "CPU Style",
                 key: "monitor_cpu_style",
                 kind: SettingType::Choice(
@@ -459,17 +427,28 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 ),
             },
             Setting {
+                name: "TERM",
+                key: "monitor_term",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.monitor_term { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Bar",
+                key: "monitor_bar",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.monitor_bar { 0 } else { 1 },
+                ),
+            },
+            Setting {
                 name: "Bar Style",
                 key: "monitor_bar_style",
                 kind: SettingType::Choice(
-                    vec![
-                        "background".to_string(),
-                        "caps".to_string(),
-                        "clean".to_string(),
-                    ],
+                    vec!["background".to_string(), "caps".to_string()],
                     match config.monitor_bar_style.as_str() {
                         "caps" => 1,
-                        "clean" => 2,
                         _ => 0,
                     },
                 ),
@@ -482,6 +461,22 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     default: def.monitor_bar_width.to_string(),
                     validation: CustomType::IntRange(4, 16),
                 },
+            },
+            Setting {
+                name: "Divider",
+                key: "monitor_divider",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.monitor_divider { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Icons",
+                key: "monitor_icons",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.monitor_icons { 0 } else { 1 },
+                ),
             },
             Setting {
                 name: "Reset Monitor",
@@ -1253,6 +1248,8 @@ pub fn settings_modal(
                 apply_setting!(config, set, parse_clamp "macrostats_err_chart_len", macrostats_err_chart_len, 4, 16);
                 apply_setting!(config, set, bool "macrostats_err_chart_num", macrostats_err_chart_num);
 
+                apply_setting!(config, set, bool "double_q_exit", double_q_exit);
+
                 apply_setting!(config, set, bool "edit_tab_backspace", edit_tab_backspace);
                 apply_setting!(config, set, bool "edit_auto_indent", edit_auto_indent);
                 apply_setting!(config, set, bool "edit_auto_bracket", edit_auto_bracket);
@@ -1281,6 +1278,7 @@ pub fn settings_modal(
 
                 apply_setting!(config, set, char "bind_lib_new_file", bind_lib_new_file);
                 apply_setting!(config, set, char "bind_lib_new_folder", bind_lib_new_folder);
+                apply_setting!(config, set, char "bind_lib_edit", bind_lib_edit);
                 apply_setting!(config, set, char "bind_lib_rename", bind_lib_rename);
                 apply_setting!(config, set, char "bind_lib_delete", bind_lib_delete);
                 apply_setting!(config, set, char "bind_lib_move_up", bind_lib_move_up);

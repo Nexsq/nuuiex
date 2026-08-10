@@ -753,6 +753,12 @@ pub fn draw(
     };
     let bar_w = config.monitor_bar_width.clamp(4, 16);
 
+    let effective_bar_style = if config.monitor_bar {
+        config.monitor_bar_style.as_str()
+    } else {
+        "clean"
+    };
+
     if config.monitor_cpu {
         let mut g = Vec::new();
         push_text(
@@ -777,14 +783,14 @@ pub fn draw(
                 Modifier::None,
             );
         }
-        if (cpu_style == "bar" || cpu_style == "pctbar") && config.monitor_bar {
+        if cpu_style == "bar" || cpu_style == "pctbar" {
             push_bar(
                 &mut g,
                 state.last_cpu,
                 bar_w,
                 &theme.monitor_cpu_val,
                 &theme.monitor_bar_bounds,
-                &config.monitor_bar_style,
+                effective_bar_style,
             );
         }
         if cpu_style == "graph" || cpu_style == "pctgraph" {
@@ -795,7 +801,7 @@ pub fn draw(
                 bar_w,
                 &theme.monitor_cpu_val,
                 &theme.monitor_bar_bounds,
-                &config.monitor_bar_style,
+                effective_bar_style,
             );
         }
         groups.push(g);
@@ -825,14 +831,14 @@ pub fn draw(
                 Modifier::None,
             );
         }
-        if (gpu_style == "bar" || gpu_style == "pctbar") && config.monitor_bar {
+        if gpu_style == "bar" || gpu_style == "pctbar" {
             push_bar(
                 &mut g,
                 state.last_gpu,
                 bar_w,
                 &theme.monitor_gpu_val,
                 &theme.monitor_bar_bounds,
-                &config.monitor_bar_style,
+                effective_bar_style,
             );
         }
         if gpu_style == "graph" || gpu_style == "pctgraph" {
@@ -843,7 +849,7 @@ pub fn draw(
                 bar_w,
                 &theme.monitor_gpu_val,
                 &theme.monitor_bar_bounds,
-                &config.monitor_bar_style,
+                effective_bar_style,
             );
         }
         groups.push(g);
@@ -891,14 +897,14 @@ pub fn draw(
                     Modifier::None,
                 );
             }
-            if (mem_style == "bar" || mem_style == "pctbar") && config.monitor_bar {
+            if mem_style == "bar" || mem_style == "pctbar" {
                 push_bar(
                     &mut g,
                     mem_pct,
                     bar_w,
                     &theme.monitor_mem_val,
                     &theme.monitor_bar_bounds,
-                    &config.monitor_bar_style,
+                    effective_bar_style,
                 );
             }
             if mem_style == "graph" || mem_style == "pctgraph" {
@@ -909,7 +915,7 @@ pub fn draw(
                     bar_w,
                     &theme.monitor_mem_val,
                     &theme.monitor_bar_bounds,
-                    &config.monitor_bar_style,
+                    effective_bar_style,
                 );
             }
         }
