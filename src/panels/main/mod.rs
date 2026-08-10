@@ -536,11 +536,12 @@ impl MainView {
                 MacroInfo::Running {
                     name,
                     start_time,
-                    cpu_usage: self
-                        .monitor
-                        .process_cpu
-                        .load(std::sync::atomic::Ordering::Relaxed)
-                        .min(100),
+                    cpu_usage: f32::from_bits(
+                        self.monitor
+                            .process_cpu
+                            .load(std::sync::atomic::Ordering::Relaxed),
+                    )
+                    .min(100.0),
                 }
             } else if self.editors[tab].is_editing {
                 let editor = &self.editors[tab];

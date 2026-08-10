@@ -20,7 +20,7 @@ pub enum MacroInfo {
     Running {
         name: String,
         start_time: Instant,
-        cpu_usage: u8,
+        cpu_usage: f32,
     },
 }
 
@@ -117,7 +117,7 @@ impl MacrostatsState {
                 name.hash(&mut hasher);
                 current_sec = start_time.elapsed().as_secs();
                 current_sec.hash(&mut hasher);
-                cpu_usage.hash(&mut hasher);
+                cpu_usage.to_bits().hash(&mut hasher);
             }
         }
 
@@ -499,7 +499,7 @@ pub fn draw(
                         } else {
                             "CPU: "
                         },
-                        &format!("{}%", cpu_usage),
+                        &format!("{:.1}%", cpu_usage),
                         config.macrostats_run_cpu,
                     );
                 }
