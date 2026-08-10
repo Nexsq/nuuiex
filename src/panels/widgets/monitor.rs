@@ -65,7 +65,7 @@ impl MonitorState {
                 mut prev_proc_user,
             ) = (0u64, 0u64, 0u64, 0u64, 0u64);
 
-            let gpu_rx = start_gpu_monitor();
+            let gpu_rx = start_gpu_monitor(c_running.clone());
             let mut last_gpu_val = 0;
 
             while c_running.load(Ordering::Relaxed) {
@@ -357,32 +357,50 @@ fn get_windows_metrics(
 }
 
 #[cfg(target_os = "windows")]
-fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
+fn start_gpu_monitor(c_running: Arc<AtomicBool>) -> std::sync::mpsc::Receiver<u8> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         use std::io::BufRead;
         use std::os::windows::process::CommandExt;
 
-        let mut cmd = std::process::Command::new("nvidia-smi");
-        cmd.args(&[
-            "--query-gpu=utilization.gpu",
-            "--format=csv,noheader,nounits",
-            "-l",
-            "1",
-        ]);
-        cmd.creation_flags(0x08000000);
-        cmd.stdout(std::process::Stdio::piped());
-
-        if let Ok(mut child) = cmd.spawn() {
-            if let Some(stdout) = child.stdout.take() {
-                let reader = std::io::BufReader::new(stdout);
-                for line in reader.lines().filter_map(Result::ok) {
-                    if let Ok(usage) = line.trim().parse::<u8>() {
-                        let _ = tx.send(usage);
+        if std::process::Command::new("nvidia-smi")
+            .arg("--help")
+            .creation_flags(0x08000000)
+            .output()
+            .is_ok()
+        {
+            while c_running.load(Ordering::Relaxed) {
+                if let Ok(out) = std::process::Command::new("nvidia-smi")
+                    .args(&[
+                        "--query-gpu=utilization.gpu",
+                        "--format=csv,noheader,nounits",
+                    ])
+                    .creation_flags(0x08000000)
+                    .output()
+                {
+                    if let Ok(s) = String::from_utf8(out.stdout) {
+                        let mut max_usage: u8 = 0;
+                        let mut found = false;
+                        for line in s.lines() {
+                            if let Ok(usage) = line.trim().parse::<u8>() {
+                                max_usage = max_usage.max(usage);
+                                found = true;
+                            }
+                        }
+                        if found {
+                            if tx.send(max_usage).is_err() {
+                                return;
+                            }
+                        }
                     }
                 }
+                std::thread::sleep(std::time::Duration::from_secs(1));
             }
-            let _ = child.wait();
+            return;
+        }
+
+        if !c_running.load(Ordering::Relaxed) {
+            return;
         }
 
         let mut cmd = std::process::Command::new("powershell");
@@ -399,12 +417,18 @@ fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
             if let Some(stdout) = child.stdout.take() {
                 let reader = std::io::BufReader::new(stdout);
                 for line in reader.lines().filter_map(Result::ok) {
+                    if !c_running.load(Ordering::Relaxed) {
+                        break;
+                    }
                     if let Ok(usage) = line.trim().parse::<f64>() {
                         let u = (usage.round() as u32).min(100) as u8;
-                        let _ = tx.send(u);
+                        if tx.send(u).is_err() {
+                            break;
+                        }
                     }
                 }
             }
+            let _ = child.kill();
             let _ = child.wait();
         }
     });
@@ -412,30 +436,45 @@ fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
 }
 
 #[cfg(target_os = "linux")]
-fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
+fn start_gpu_monitor(c_running: Arc<AtomicBool>) -> std::sync::mpsc::Receiver<u8> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        use std::io::BufRead;
-
-        let mut cmd = std::process::Command::new("nvidia-smi");
-        cmd.args(&[
-            "--query-gpu=utilization.gpu",
-            "--format=csv,noheader,nounits",
-            "-l",
-            "1",
-        ]);
-        cmd.stdout(std::process::Stdio::piped());
-
-        if let Ok(mut child) = cmd.spawn() {
-            if let Some(stdout) = child.stdout.take() {
-                let reader = std::io::BufReader::new(stdout);
-                for line in reader.lines().filter_map(Result::ok) {
-                    if let Ok(usage) = line.trim().parse::<u8>() {
-                        let _ = tx.send(usage);
+        if std::process::Command::new("nvidia-smi")
+            .arg("--help")
+            .output()
+            .is_ok()
+        {
+            while c_running.load(Ordering::Relaxed) {
+                if let Ok(out) = std::process::Command::new("nvidia-smi")
+                    .args(&[
+                        "--query-gpu=utilization.gpu",
+                        "--format=csv,noheader,nounits",
+                    ])
+                    .output()
+                {
+                    if let Ok(s) = String::from_utf8(out.stdout) {
+                        let mut max_usage: u8 = 0;
+                        let mut found = false;
+                        for line in s.lines() {
+                            if let Ok(usage) = line.trim().parse::<u8>() {
+                                max_usage = max_usage.max(usage);
+                                found = true;
+                            }
+                        }
+                        if found {
+                            if tx.send(max_usage).is_err() {
+                                return;
+                            }
+                        }
                     }
                 }
+                std::thread::sleep(std::time::Duration::from_secs(1));
             }
-            let _ = child.wait();
+            return;
+        }
+
+        if !c_running.load(Ordering::Relaxed) {
+            return;
         }
 
         let mut prev_busy: std::collections::HashMap<std::path::PathBuf, u64> =
@@ -443,7 +482,7 @@ fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
         let mut prev_time: std::collections::HashMap<std::path::PathBuf, std::time::Instant> =
             std::collections::HashMap::new();
 
-        loop {
+        while c_running.load(Ordering::Relaxed) {
             let mut max_usage: u8 = 0;
             if let Ok(entries) = std::fs::read_dir("/sys/class/drm") {
                 for entry in entries.filter_map(Result::ok) {
@@ -521,7 +560,9 @@ fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
                     }
                 }
             }
-            let _ = tx.send(max_usage);
+            if tx.send(max_usage).is_err() {
+                break;
+            }
             std::thread::sleep(Duration::from_secs(1));
         }
     });
@@ -529,11 +570,13 @@ fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-fn start_gpu_monitor() -> std::sync::mpsc::Receiver<u8> {
+fn start_gpu_monitor(c_running: Arc<AtomicBool>) -> std::sync::mpsc::Receiver<u8> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        loop {
-            let _ = tx.send(0);
+        while c_running.load(Ordering::Relaxed) {
+            if tx.send(0).is_err() {
+                break;
+            }
             std::thread::sleep(Duration::from_secs(1));
         }
     });
