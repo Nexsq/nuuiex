@@ -1233,7 +1233,7 @@ fn variant_to_key_str(v: &Value) -> Result<String, String> {
             match variant.as_str() {
                 "Char" => {
                     if let Some(inner_val) = inner {
-                        if let Value::String(s) = &**inner_val {
+                        if let Value::String(ref s) = **inner_val {
                             if s.chars().count() == 1 {
                                 return Ok(s.clone());
                             }
@@ -1247,7 +1247,7 @@ fn variant_to_key_str(v: &Value) -> Result<String, String> {
                 }
                 "Shift" => {
                     if let Some(inner_val) = inner {
-                        if let Value::String(s) = &**inner_val {
+                        if let Value::String(ref s) = **inner_val {
                             if s.chars().count() == 1 {
                                 return Ok(s.to_uppercase());
                             }
@@ -1275,7 +1275,7 @@ fn variant_to_key_str(v: &Value) -> Result<String, String> {
                 }
                 "F" => {
                     if let Some(inner_val) = inner {
-                        if let Value::Number(n) = &**inner_val {
+                        if let Value::Number(ref n) = **inner_val {
                             return Ok(format!("f{}", n));
                         }
                     }
@@ -3663,34 +3663,148 @@ impl Interpreter {
         let mut out = self.output.lock().unwrap();
         let mut caret = self.caret.lock().unwrap();
 
-        for c in text.chars() {
+        let mut chars = text.chars().peekable();
+        while let Some(c) = chars.next() {
             if c == '\n' {
                 caret.0 = 0;
                 caret.1 += 1;
-            } else {
-                while out.len() <= caret.1 {
-                    out.push(String::new());
-                }
-                let line = &mut out[caret.1];
-                let char_count = line.chars().count();
-                if caret.0 < char_count {
-                    let byte_idx = line.char_indices().nth(caret.0).unwrap().0;
-                    let next_byte_idx = line
-                        .char_indices()
-                        .nth(caret.0 + 1)
-                        .map(|x| x.0)
-                        .unwrap_or(line.len());
-                    let mut buf = [0; 4];
-                    line.replace_range(byte_idx..next_byte_idx, c.encode_utf8(&mut buf));
-                } else {
-                    let spaces = caret.0 - char_count;
-                    for _ in 0..spaces {
-                        line.push(' ');
-                    }
-                    line.push(c);
-                }
-                caret.0 += 1;
+                continue;
             }
+
+            while out.len() <= caret.1 {
+                out.push(String::new());
+            }
+            let line = &mut out[caret.1];
+
+            if c == '{' {
+                let mut lookahead = chars.clone();
+                let mut tag = String::new();
+                let mut valid = false;
+                while let Some(nc) = lookahead.next() {
+                    if nc == '}' {
+                        valid = true;
+                        break;
+                    }
+                    tag.push(nc);
+                }
+
+                if valid {
+                    let is_tag = if let Some(rest) = tag.strip_prefix("Color:") {
+                        crate::theme::themecore::parse_color(rest).is_ok()
+                    } else if let Some(rest) = tag.strip_prefix("Background:") {
+                        crate::theme::themecore::parse_color(rest).is_ok()
+                    } else if let Some(rest) = tag.strip_prefix("Modifier:") {
+                        matches!(
+                            rest,
+                            "None"
+                                | "Bold"
+                                | "Dim"
+                                | "Italic"
+                                | "Underline"
+                                | "Reverse"
+                                | "Strikethrough"
+                        )
+                    } else {
+                        false
+                    };
+
+                    if is_tag {
+                        let mut visual_idx = 0;
+                        let mut insert_byte_idx = line.len();
+
+                        let mut line_chars = line.char_indices().peekable();
+                        while let Some((i, lch)) = line_chars.next() {
+                            if lch == '{' {
+                                let mut l_lookahead = line_chars.clone();
+                                let mut l_tag = String::new();
+                                let mut l_valid = false;
+                                while let Some((_, lnc)) = l_lookahead.next() {
+                                    if lnc == '}' {
+                                        l_valid = true;
+                                        break;
+                                    }
+                                    l_tag.push(lnc);
+                                }
+                                if l_valid
+                                    && (l_tag.starts_with("Color:")
+                                        || l_tag.starts_with("Background:")
+                                        || l_tag.starts_with("Modifier:"))
+                                {
+                                    line_chars = l_lookahead;
+                                    continue;
+                                }
+                            }
+                            if visual_idx == caret.0 {
+                                insert_byte_idx = i;
+                                break;
+                            }
+                            visual_idx += 1;
+                        }
+
+                        if visual_idx < caret.0 {
+                            let pad = caret.0 - visual_idx;
+                            line.push_str(&" ".repeat(pad));
+                            insert_byte_idx = line.len();
+                        }
+
+                        let full_tag = format!("{{{}}}", tag);
+                        line.insert_str(insert_byte_idx, &full_tag);
+
+                        for _ in 0..=tag.len() {
+                            chars.next();
+                        }
+                        continue;
+                    }
+                }
+            }
+
+            let mut visual_idx = 0;
+            let mut target_byte_start = None;
+            let mut target_byte_end = None;
+
+            let mut line_chars = line.char_indices().peekable();
+            while let Some((i, ch)) = line_chars.next() {
+                if ch == '{' {
+                    let mut lookahead = line_chars.clone();
+                    let mut tag = String::new();
+                    let mut valid = false;
+                    while let Some((_, nc)) = lookahead.next() {
+                        if nc == '}' {
+                            valid = true;
+                            break;
+                        }
+                        tag.push(nc);
+                    }
+
+                    if valid
+                        && (tag.starts_with("Color:")
+                            || tag.starts_with("Background:")
+                            || tag.starts_with("Modifier:"))
+                    {
+                        line_chars = lookahead;
+                        continue;
+                    }
+                }
+
+                if visual_idx == caret.0 {
+                    target_byte_start = Some(i);
+                    target_byte_end = Some(i + ch.len_utf8());
+                    break;
+                }
+                visual_idx += 1;
+            }
+
+            if let (Some(start), Some(end)) = (target_byte_start, target_byte_end) {
+                let mut buf = [0; 4];
+                line.replace_range(start..end, c.encode_utf8(&mut buf));
+            } else {
+                let pad = caret.0.saturating_sub(visual_idx);
+                for _ in 0..pad {
+                    line.push(' ');
+                }
+                line.push(c);
+            }
+            caret.0 += 1;
         }
     }
 
