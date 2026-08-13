@@ -152,6 +152,7 @@ pub fn refresh_deck(
     monitor: &crate::panels::widgets::monitor::MonitorState,
     clock: &crate::panels::widgets::clock::ClockState,
     macrostats: &crate::panels::widgets::macrostats::MacrostatsState,
+    matrix: &crate::panels::widgets::matrix::MatrixState,
     macro_info: &crate::panels::widgets::macrostats::MacroInfo,
 ) -> Box {
     if !config.deck || config.deck_mode == "title" {
@@ -197,6 +198,8 @@ pub fn refresh_deck(
             config,
             theme,
         );
+    } else if config.deck_mode == "matrix" {
+        crate::panels::widgets::matrix::draw(matrix, &mut deck_box, config, theme);
     } else {
         crate::panels::widgets::keyvis::draw(keyvis, &mut deck_box, config, theme);
     }

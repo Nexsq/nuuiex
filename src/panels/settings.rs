@@ -233,12 +233,14 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                         "monitor".to_string(),
                         "clock".to_string(),
                         "macrostats".to_string(),
+                        "matrix".to_string(),
                     ],
                     match config.deck_mode.as_str() {
                         "keyvis" => 1,
                         "monitor" => 2,
                         "clock" => 3,
                         "macrostats" => 4,
+                        "matrix" => 5,
                         _ => 0,
                     },
                 ),
@@ -332,6 +334,89 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
             Setting {
                 name: "Reset Keyvis",
                 key: "reset_keyvis",
+                kind: SettingType::Action,
+            },
+        ],
+    });
+
+    categories.push(Category {
+        name: "Matrix",
+        settings: vec![
+            Setting {
+                name: "Height",
+                key: "matrix_height",
+                kind: SettingType::Custom {
+                    value: config.matrix_height.to_string(),
+                    default: def.matrix_height.to_string(),
+                    validation: CustomType::IntRange(2, 32),
+                },
+            },
+            Setting {
+                name: "Density",
+                key: "matrix_density",
+                kind: SettingType::Custom {
+                    value: config.matrix_density.to_string(),
+                    default: def.matrix_density.to_string(),
+                    validation: CustomType::IntRange(1, 200),
+                },
+            },
+            Setting {
+                name: "Dim Ratio",
+                key: "matrix_dim_ratio",
+                kind: SettingType::Custom {
+                    value: config.matrix_dim_ratio.to_string(),
+                    default: def.matrix_dim_ratio.to_string(),
+                    validation: CustomType::IntRange(0, 100),
+                },
+            },
+            Setting {
+                name: "Speed",
+                key: "matrix_speed",
+                kind: SettingType::Custom {
+                    value: config.matrix_speed.to_string(),
+                    default: def.matrix_speed.to_string(),
+                    validation: CustomType::FloatRange(0.1, 5.0),
+                },
+            },
+            Setting {
+                name: "Direction",
+                key: "matrix_direction",
+                kind: SettingType::Choice(
+                    vec![
+                        "down".to_string(),
+                        "up".to_string(),
+                        "left".to_string(),
+                        "right".to_string(),
+                    ],
+                    match config.matrix_direction.as_str() {
+                        "up" => 1,
+                        "left" => 2,
+                        "right" => 3,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "Min Length",
+                key: "matrix_min_length",
+                kind: SettingType::Custom {
+                    value: config.matrix_min_length.to_string(),
+                    default: def.matrix_min_length.to_string(),
+                    validation: CustomType::IntRange(2, 64),
+                },
+            },
+            Setting {
+                name: "Max Length",
+                key: "matrix_max_length",
+                kind: SettingType::Custom {
+                    value: config.matrix_max_length.to_string(),
+                    default: def.matrix_max_length.to_string(),
+                    validation: CustomType::IntRange(2, 64),
+                },
+            },
+            Setting {
+                name: "Reset Matrix",
+                key: "reset_matrix",
                 kind: SettingType::Action,
             },
         ],
@@ -1210,6 +1295,14 @@ pub fn settings_modal(
                 apply_setting!(config, set, parse_clamp "keyvis_gravity", keyvis_gravity, 0.1, 1.0);
                 apply_setting!(config, set, parse_clamp "keyvis_tension", keyvis_tension, 0.1, 1.0);
                 apply_setting!(config, set, bool "keyvis_base", keyvis_base);
+
+                apply_setting!(config, set, parse_clamp "matrix_height", matrix_height, 2, 32);
+                apply_setting!(config, set, parse_clamp "matrix_density", matrix_density, 1, 200);
+                apply_setting!(config, set, parse_clamp "matrix_dim_ratio", matrix_dim_ratio, 0, 100);
+                apply_setting!(config, set, parse_clamp "matrix_speed", matrix_speed, 0.1, 5.0);
+                apply_setting!(config, set, choice "matrix_direction", matrix_direction);
+                apply_setting!(config, set, parse_clamp "matrix_min_length", matrix_min_length, 2, 64);
+                apply_setting!(config, set, parse_clamp "matrix_max_length", matrix_max_length, 2, 64);
 
                 apply_setting!(config, set, bool "monitor_cpu", monitor_cpu);
                 apply_setting!(config, set, bool "monitor_gpu", monitor_gpu);
@@ -2253,6 +2346,10 @@ pub fn settings_modal(
                                             "Reset settings menu configuration to default\n\nAre you sure?",
                                             14,
                                         ),
+                                        "reset_matrix" => (
+                                            "Reset Matrix settings to default\n\nAre you sure?",
+                                            15,
+                                        ),
                                         _ => ("", 99),
                                     };
 
@@ -2303,6 +2400,8 @@ pub fn settings_modal(
                                             config.reset_library();
                                         } else if action_type == 14 {
                                             config.reset_settings_menu();
+                                        } else if action_type == 15 {
+                                            config.reset_matrix();
                                         }
                                         config.save();
 

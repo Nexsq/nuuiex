@@ -444,6 +444,9 @@ clock_date_color = Cyan
 macrostats_key = Blue
 macrostats_val = Magenta
 macrostats_err = Green Yellow Red
+
+matrix_head_color = White
+matrix_body_color = BrightGreen Green
 ```
 
 ### 2. Config (`config.conf`)

@@ -1,3 +1,1 @@
 add macos support?
-
-add matrix and aquarium widgets (crazy ideas ikr)

@@ -28,6 +28,14 @@ pub struct Config {
     pub keyvis_tension: f32,
     pub keyvis_base: bool,
 
+    pub matrix_height: usize,
+    pub matrix_density: usize,
+    pub matrix_dim_ratio: usize,
+    pub matrix_speed: f32,
+    pub matrix_direction: String,
+    pub matrix_min_length: usize,
+    pub matrix_max_length: usize,
+
     pub monitor_cpu: bool,
     pub monitor_gpu: bool,
     pub monitor_mem: bool,
@@ -129,6 +137,14 @@ impl Default for Config {
             keyvis_gravity: 0.0,
             keyvis_tension: 0.0,
             keyvis_base: false,
+
+            matrix_height: 0,
+            matrix_density: 0,
+            matrix_dim_ratio: 0,
+            matrix_speed: 0.0,
+            matrix_direction: String::new(),
+            matrix_min_length: 0,
+            matrix_max_length: 0,
 
             monitor_cpu: false,
             monitor_gpu: false,
@@ -274,6 +290,30 @@ impl Config {
                             val.parse().unwrap_or(self.keyvis_tension).clamp(0.1, 1.0)
                     }
                     "keyvis_base" => self.keyvis_base = val.parse().unwrap_or(self.keyvis_base),
+
+                    "matrix_height" => {
+                        self.matrix_height = val.parse().unwrap_or(self.matrix_height).clamp(2, 32)
+                    }
+                    "matrix_density" => {
+                        self.matrix_density =
+                            val.parse().unwrap_or(self.matrix_density).clamp(1, 200)
+                    }
+                    "matrix_dim_ratio" => {
+                        self.matrix_dim_ratio =
+                            val.parse().unwrap_or(self.matrix_dim_ratio).clamp(0, 100)
+                    }
+                    "matrix_speed" => {
+                        self.matrix_speed = val.parse().unwrap_or(self.matrix_speed).clamp(0.1, 5.0)
+                    }
+                    "matrix_direction" => self.matrix_direction = val.to_string(),
+                    "matrix_min_length" => {
+                        self.matrix_min_length =
+                            val.parse().unwrap_or(self.matrix_min_length).clamp(2, 64)
+                    }
+                    "matrix_max_length" => {
+                        self.matrix_max_length =
+                            val.parse().unwrap_or(self.matrix_max_length).clamp(2, 64)
+                    }
 
                     "monitor_cpu" => self.monitor_cpu = val.parse().unwrap_or(self.monitor_cpu),
                     "monitor_gpu" => self.monitor_gpu = val.parse().unwrap_or(self.monitor_gpu),
@@ -627,6 +667,17 @@ impl Config {
         self.keyvis_base = default.keyvis_base;
     }
 
+    pub fn reset_matrix(&mut self) {
+        let default = Config::default();
+        self.matrix_height = default.matrix_height;
+        self.matrix_density = default.matrix_density;
+        self.matrix_dim_ratio = default.matrix_dim_ratio;
+        self.matrix_speed = default.matrix_speed;
+        self.matrix_direction = default.matrix_direction;
+        self.matrix_min_length = default.matrix_min_length;
+        self.matrix_max_length = default.matrix_max_length;
+    }
+
     pub fn reset_monitor(&mut self) {
         let default = Config::default();
         self.monitor_cpu = default.monitor_cpu;
@@ -859,6 +910,49 @@ impl Config {
                         writeln!(&mut output, "{} = {}{}", key_str, self.keyvis_base, comment)
                             .unwrap()
                     }
+
+                    "matrix_height" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.matrix_height, comment
+                    )
+                    .unwrap(),
+                    "matrix_density" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.matrix_density, comment
+                    )
+                    .unwrap(),
+                    "matrix_dim_ratio" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.matrix_dim_ratio, comment
+                    )
+                    .unwrap(),
+                    "matrix_speed" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.matrix_speed, comment
+                    )
+                    .unwrap(),
+                    "matrix_direction" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.matrix_direction, comment
+                    )
+                    .unwrap(),
+                    "matrix_min_length" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.matrix_min_length, comment
+                    )
+                    .unwrap(),
+                    "matrix_max_length" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.matrix_max_length, comment
+                    )
+                    .unwrap(),
 
                     "monitor_cpu" => {
                         writeln!(&mut output, "{} = {}{}", key_str, self.monitor_cpu, comment)

@@ -68,6 +68,7 @@ pub struct MainView {
     pub monitor: crate::panels::widgets::monitor::MonitorState,
     pub clock: crate::panels::widgets::clock::ClockState,
     pub macrostats: crate::panels::widgets::macrostats::MacrostatsState,
+    pub matrix: crate::panels::widgets::matrix::MatrixState,
 
     pub theme: Theme,
     pub list_input: ListInputMode,
@@ -140,6 +141,7 @@ impl MainView {
             monitor: crate::panels::widgets::monitor::MonitorState::new(),
             clock: crate::panels::widgets::clock::ClockState::new(),
             macrostats: crate::panels::widgets::macrostats::MacrostatsState::new(),
+            matrix: crate::panels::widgets::matrix::MatrixState::new(),
             theme,
             list_input: ListInputMode::None,
             list_input_cursor: 0,
@@ -158,6 +160,7 @@ impl MainView {
         } else {
             match config.deck_mode.as_str() {
                 "keyvis" => config.keyvis_height as u16,
+                "matrix" => config.matrix_height as u16,
                 "monitor" | "clock" | "macrostats" => 3,
                 _ => header_h,
             }
@@ -196,6 +199,14 @@ impl MainView {
                 }
             } else if config.deck_mode == "clock" {
                 if self.clock.tick(w, h, config) {
+                    self.refresh_static_boxes(config);
+                    anim = true;
+                }
+            } else if config.deck_mode == "matrix" {
+                if self
+                    .matrix
+                    .tick(self.deck_box.width, self.deck_box.height, config)
+                {
                     self.refresh_static_boxes(config);
                     anim = true;
                 }
@@ -592,6 +603,7 @@ impl MainView {
             &self.monitor,
             &self.clock,
             &self.macrostats,
+            &self.matrix,
             &macro_info,
         );
     }

@@ -80,6 +80,9 @@ pub struct Theme {
     pub macrostats_key: Gradient,
     pub macrostats_val: Gradient,
     pub macrostats_err: Gradient,
+
+    pub matrix_head_color: Gradient,
+    pub matrix_body_color: Gradient,
 }
 
 impl Theme {
@@ -144,6 +147,9 @@ impl Theme {
             macrostats_key: Gradient::default(),
             macrostats_val: Gradient::default(),
             macrostats_err: Gradient::default(),
+
+            matrix_head_color: Gradient::default(),
+            matrix_body_color: Gradient::default(),
         }
     }
 }
@@ -471,6 +477,9 @@ fn apply_theme_value(theme: &mut Theme, key: &str, val: &str) -> Result<(), Stri
         "macrostats_key" => theme.macrostats_key = parse_gradient(val)?,
         "macrostats_val" => theme.macrostats_val = parse_gradient(val)?,
         "macrostats_err" => theme.macrostats_err = parse_gradient(val)?,
+
+        "matrix_head_color" => theme.matrix_head_color = parse_gradient(val)?,
+        "matrix_body_color" => theme.matrix_body_color = parse_gradient(val)?,
         _ => {}
     }
     Ok(())
