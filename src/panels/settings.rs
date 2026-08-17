@@ -1428,6 +1428,15 @@ pub fn settings_modal(
                     main_view.refresh_static_boxes(config);
                     bg_dirty = true;
                 }
+            } else if config.deck_mode == "matrix" {
+                if main_view.matrix.tick(
+                    main_view.deck_box.width,
+                    main_view.deck_box.height,
+                    config,
+                ) {
+                    main_view.refresh_static_boxes(config);
+                    bg_dirty = true;
+                }
             }
         }
 

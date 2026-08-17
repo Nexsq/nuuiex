@@ -202,6 +202,13 @@ impl MainView {
                     self.refresh_static_boxes(config);
                     anim = true;
                 }
+            } else if config.deck_mode == "macrostats" {
+                let _ = self.monitor.tick(w, h);
+                let info = self.get_macrostats_info();
+                if self.macrostats.tick(&info) {
+                    self.refresh_static_boxes(config);
+                    anim = true;
+                }
             } else if config.deck_mode == "matrix" {
                 if self
                     .matrix
