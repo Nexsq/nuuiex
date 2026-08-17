@@ -1,1 +1,3 @@
 add macos support?
+
+matrix doesnt update in settings
