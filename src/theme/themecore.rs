@@ -50,6 +50,7 @@ pub struct Theme {
     pub editor_vis: Gradient,
     pub editor_fnd: Gradient,
     pub editor_lne: Gradient,
+    pub editor_trailing_spaces: Gradient,
     pub editor_fnd_bg: Gradient,
 
     pub editor_keywords: Gradient,
@@ -117,6 +118,7 @@ impl Theme {
             editor_vis: Gradient::default(),
             editor_fnd: Gradient::default(),
             editor_lne: Gradient::default(),
+            editor_trailing_spaces: Gradient::default(),
             editor_fnd_bg: Gradient::default(),
 
             editor_keywords: Gradient::default(),
@@ -447,6 +449,7 @@ fn apply_theme_value(theme: &mut Theme, key: &str, val: &str) -> Result<(), Stri
         "editor_vis" => theme.editor_vis = parse_gradient(val)?,
         "editor_fnd" => theme.editor_fnd = parse_gradient(val)?,
         "editor_lne" => theme.editor_lne = parse_gradient(val)?,
+        "editor_trailing_spaces" => theme.editor_trailing_spaces = parse_gradient(val)?,
         "editor_fnd_bg" => theme.editor_fnd_bg = parse_gradient(val)?,
 
         "editor_keywords" => theme.editor_keywords = parse_gradient(val)?,

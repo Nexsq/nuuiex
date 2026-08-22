@@ -1,2 +1,1 @@
 add macos support?
-highlight lone spaces

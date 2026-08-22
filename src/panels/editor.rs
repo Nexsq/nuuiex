@@ -3519,6 +3519,21 @@ impl Editor {
                         idx += 1;
                     }
                 }
+
+                if config.highlight_trailing_spaces {
+                    let mut tr_idx = line_chars.len();
+                    while tr_idx > 0 && line_chars[tr_idx - 1].is_whitespace() {
+                        tr_idx -= 1;
+                    }
+                    let trailing_len = line_chars.len() - tr_idx;
+                    if trailing_len > 0 {
+                        for k in tr_idx..line_chars.len() {
+                            syntax_bg_colors[k] = theme
+                                .editor_trailing_spaces
+                                .color_at(k - tr_idx, trailing_len);
+                        }
+                    }
+                }
             }
 
             let mut current_x = 0;

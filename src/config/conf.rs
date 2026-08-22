@@ -18,6 +18,7 @@ pub struct Config {
     pub deck: bool,
     pub deck_mode: String,
     pub show_caret: bool,
+    pub highlight_trailing_spaces: bool,
 
     pub keyvis_width: usize,
     pub keyvis_height: usize,
@@ -128,6 +129,7 @@ impl Default for Config {
             deck: false,
             deck_mode: String::new(),
             show_caret: false,
+            highlight_trailing_spaces: false,
 
             keyvis_width: 0,
             keyvis_height: 0,
@@ -265,6 +267,10 @@ impl Config {
                     "deck" => self.deck = val.parse().unwrap_or(self.deck),
                     "deck_mode" => self.deck_mode = val.to_string(),
                     "show_caret" => self.show_caret = val.parse().unwrap_or(self.show_caret),
+                    "highlight_trailing_spaces" => {
+                        self.highlight_trailing_spaces =
+                            val.parse().unwrap_or(self.highlight_trailing_spaces)
+                    }
 
                     "keyvis_width" => {
                         self.keyvis_width = val.parse().unwrap_or(self.keyvis_width).clamp(1, 1024)
@@ -639,6 +645,7 @@ impl Config {
         self.tabs_num = default.tabs_num;
         self.lib_width = default.lib_width;
         self.show_caret = default.show_caret;
+        self.highlight_trailing_spaces = default.highlight_trailing_spaces;
     }
 
     pub fn reset_settings_menu(&mut self) {
@@ -863,6 +870,12 @@ impl Config {
                         writeln!(&mut output, "{} = {}{}", key_str, self.show_caret, comment)
                             .unwrap()
                     }
+                    "highlight_trailing_spaces" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.highlight_trailing_spaces, comment
+                    )
+                    .unwrap(),
 
                     "keyvis_width" => writeln!(
                         &mut output,

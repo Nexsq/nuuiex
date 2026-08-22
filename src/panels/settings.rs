@@ -123,6 +123,18 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 ),
             },
             Setting {
+                name: "Highlight Trailing Spaces",
+                key: "highlight_trailing_spaces",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.highlight_trailing_spaces {
+                        0
+                    } else {
+                        1
+                    },
+                ),
+            },
+            Setting {
                 name: "Tabs",
                 key: "tabs_num",
                 kind: SettingType::Choice(
@@ -1286,6 +1298,7 @@ pub fn settings_modal(
                 apply_setting!(config, set, bool "deck", deck);
                 apply_setting!(config, set, choice "deck_mode", deck_mode);
                 apply_setting!(config, set, bool "show_caret", show_caret);
+                apply_setting!(config, set, bool "highlight_trailing_spaces", highlight_trailing_spaces);
 
                 apply_setting!(config, set, parse_clamp "keyvis_width", keyvis_width, 1, 1024);
                 apply_setting!(config, set, parse_clamp "keyvis_height", keyvis_height, 2, 32);
