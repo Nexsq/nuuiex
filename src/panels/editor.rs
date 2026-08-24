@@ -977,8 +977,7 @@ impl Editor {
                     }
                     k if k == Key::CtrlLeft
                         || k == Key::Ctrl(config.bind_edit_left)
-                        || k == Key::Char(config.bind_edit_word_prev)
-                        || k == Key::CtrlBackspace =>
+                        || k == Key::Char(config.bind_edit_word_prev) =>
                     {
                         self.jump_word_backward(self.visual_mode)
                     }
