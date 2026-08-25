@@ -565,11 +565,29 @@ impl Analyzer {
                             }
                         }
                         "imgsearch" => {
-                            if args.len() < 1 || args.len() > 2 {
-                                self.error(*line, format!("'{}' expects 1 or 2 arguments", name));
+                            if args.len() < 5 || args.len() > 6 {
+                                self.error(*line, format!("'{}' expects 5 or 6 arguments", name));
                             } else {
+                                for i in 0..4 {
+                                    if matches!(
+                                        args[i].1,
+                                        Expr::String(_)
+                                            | Expr::Bool(_)
+                                            | Expr::List(_)
+                                            | Expr::Dict(_)
+                                            | Expr::FormatString(_)
+                                    ) {
+                                        self.error(
+                                            *line,
+                                            format!(
+                                                "'{}' expects coordinate arguments to be Numbers",
+                                                name
+                                            ),
+                                        );
+                                    }
+                                }
                                 if matches!(
-                                    args[0].1,
+                                    args[4].1,
                                     Expr::String(_)
                                         | Expr::Number(_)
                                         | Expr::Bool(_)
@@ -579,23 +597,23 @@ impl Analyzer {
                                 ) {
                                     self.error(
                                         *line,
-                                        format!("'{}' expects an Image enum for argument 1", name),
+                                        format!("'{}' expects an Image enum for argument 5", name),
                                     );
                                 }
-                                if args.len() == 2
-                                    && matches!(
-                                        args[1].1,
+                                if args.len() == 6 {
+                                    if matches!(
+                                        args[5].1,
                                         Expr::String(_)
                                             | Expr::Bool(_)
                                             | Expr::List(_)
                                             | Expr::Dict(_)
                                             | Expr::FormatString(_)
-                                    )
-                                {
-                                    self.error(
-                                        *line,
-                                        format!("'{}' expects tolerance to be a Number", name),
-                                    );
+                                    ) {
+                                        self.error(
+                                            *line,
+                                            format!("'{}' expects tolerance to be a Number", name),
+                                        );
+                                    }
                                 }
                             }
                         }

@@ -2084,13 +2084,22 @@ fn decode_base64(encoded: &str) -> Result<Vec<u8>, String> {
 
 #[cfg(windows)]
 fn search_screen_image(
+    rx: i32,
+    ry: i32,
+    rw: i32,
+    rh: i32,
     img_rgba: &[u8],
     img_w: i32,
     img_h: i32,
     tol: u8,
 ) -> Result<Option<(i32, i32)>, String> {
-    let (sw, sh) = get_screen_size()?;
-    if sw < img_w || sh < img_h {
+    let (screen_w, screen_h) = get_screen_size()?;
+    let sx = rx.clamp(0, screen_w - 1);
+    let sy = ry.clamp(0, screen_h - 1);
+    let sw = (rx + rw).clamp(0, screen_w) - sx;
+    let sh = (ry + rh).clamp(0, screen_h) - sy;
+
+    if sw < img_w || sh < img_h || sw <= 0 || sh <= 0 {
         return Ok(None);
     }
 
@@ -2171,7 +2180,7 @@ fn search_screen_image(
         }
 
         let old_obj = SelectObject(hdc_mem, hbm);
-        BitBlt(hdc_mem, 0, 0, sw, sh, hdc_screen, 0, 0, 0x00CC0020);
+        BitBlt(hdc_mem, 0, 0, sw, sh, hdc_screen, sx, sy, 0x00CC0020);
 
         let mut bmi: BITMAPINFO = std::mem::zeroed();
         bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
@@ -2267,7 +2276,7 @@ fn search_screen_image(
                     }
                 }
                 if matches {
-                    return Ok(Some((col, row)));
+                    return Ok(Some((sx + col, sy + row)));
                 }
             }
         }
@@ -2277,16 +2286,15 @@ fn search_screen_image(
 
 #[cfg(target_os = "linux")]
 fn search_screen_image(
+    rx: i32,
+    ry: i32,
+    rw: i32,
+    rh: i32,
     img_rgba: &[u8],
     img_w: i32,
     img_h: i32,
     tol: u8,
 ) -> Result<Option<(i32, i32)>, String> {
-    let (sw, sh) = get_screen_size()?;
-    if sw < img_w || sh < img_h {
-        return Ok(None);
-    }
-
     if is_wayland_session() {
         return Err("imgsearch is not supported on Wayland".to_string());
     }
@@ -2366,22 +2374,19 @@ fn search_screen_image(
                     return Err("Failed to get root window attributes".into());
                 }
 
-                let safe_w = attr.width;
-                let safe_h = attr.height;
-                if safe_w < img_w || safe_h < img_h {
+                let screen_w = attr.width;
+                let screen_h = attr.height;
+                let sx = rx.clamp(0, screen_w - 1);
+                let sy = ry.clamp(0, screen_h - 1);
+                let sw = (rx + rw).clamp(0, screen_w) - sx;
+                let sh = (ry + rh).clamp(0, screen_h) - sy;
+
+                if sw < img_w || sh < img_h || sw <= 0 || sh <= 0 {
                     return Ok(None);
                 }
 
-                let image = (x11.xgetimage)(
-                    x11.display,
-                    x11.root,
-                    0,
-                    0,
-                    safe_w as u32,
-                    safe_h as u32,
-                    !0,
-                    2,
-                );
+                let image =
+                    (x11.xgetimage)(x11.display, x11.root, sx, sy, sw as u32, sh as u32, !0, 2);
                 if image.is_null() {
                     return Err("Failed to get image from X11".into());
                 }
@@ -2446,9 +2451,9 @@ fn search_screen_image(
 
                 let tp0 = ordered_t_offsets[0];
 
-                for row in 0..=(safe_h - img_h) {
+                for row in 0..=(sh - img_h) {
                     let row_bpl = row * bpl;
-                    for col in 0..=(safe_w - img_w) {
+                    for col in 0..=(sw - img_w) {
                         let p0 = if bpp == 32 {
                             let offset = (row_bpl + col * 4 + tp0.0) as isize;
                             std::ptr::read_unaligned(data_ptr.offset(offset) as *const u32)
@@ -2516,7 +2521,7 @@ fn search_screen_image(
                         }
                         if matches {
                             ((*image).f.destroy_image)(image);
-                            return Ok(Some((col, row)));
+                            return Ok(Some((sx + col, sy + row)));
                         }
                     }
                 }
@@ -2530,6 +2535,10 @@ fn search_screen_image(
 
 #[cfg(not(any(windows, target_os = "linux")))]
 fn search_screen_image(
+    rx: i32,
+    ry: i32,
+    rw: i32,
+    rh: i32,
     img_rgba: &[u8],
     img_w: i32,
     img_h: i32,
@@ -5794,31 +5803,53 @@ impl Interpreter {
                         return Ok(Value::EnumVariant("Image".to_string(), b64, None));
                     }
                     "imgsearch" => {
-                        if eval_args.len() < 1 || eval_args.len() > 2 {
+                        if eval_args.len() < 5 || eval_args.len() > 6 {
                             return Err(format!(
-                                "Line {}: 'imgsearch' expects 1 or 2 arguments",
+                                "Line {}: 'imgsearch' expects 5 or 6 arguments",
                                 line
                             ));
                         }
-                        let b64 = if let Value::EnumVariant(enum_name, variant, _) = &eval_args[0].1
+
+                        let get_num = |val: &Value, arg_num: usize| -> Result<i32, String> {
+                            if let Value::Number(n) = val {
+                                Ok(*n as i32)
+                            } else {
+                                Err(format!(
+                                    "Line {}: 'imgsearch' argument {} must be a number",
+                                    line, arg_num
+                                ))
+                            }
+                        };
+
+                        let x1 = get_num(&eval_args[0].1, 1)?;
+                        let y1 = get_num(&eval_args[1].1, 2)?;
+                        let x2 = get_num(&eval_args[2].1, 3)?;
+                        let y2 = get_num(&eval_args[3].1, 4)?;
+
+                        let b64 = if let Value::EnumVariant(enum_name, variant, _) = &eval_args[4].1
                         {
                             if enum_name == "Image" {
                                 variant.clone()
                             } else {
                                 return Err(format!(
-                                    "Line {}: 'imgsearch' expects an Image enum",
+                                    "Line {}: 'imgsearch' expects an Image enum for argument 5",
                                     line
                                 ));
                             }
                         } else {
                             return Err(format!(
-                                "Line {}: 'imgsearch' expects an Image enum",
+                                "Line {}: 'imgsearch' expects an Image enum for argument 5",
                                 line
                             ));
                         };
 
-                        let tol = if eval_args.len() == 2 {
-                            if let Value::Number(n) = eval_args[1].1 {
+                        let start_x = x1.min(x2);
+                        let start_y = y1.min(y2);
+                        let w = (x1 - x2).abs() + 1;
+                        let h = (y1 - y2).abs() + 1;
+
+                        let tol = if eval_args.len() == 6 {
+                            if let Value::Number(n) = eval_args[5].1 {
                                 n.clamp(0.0, 255.0) as u8
                             } else {
                                 return Err(format!(
@@ -5839,7 +5870,9 @@ impl Interpreter {
                         let img_h = rgba.height() as i32;
                         let img_data = rgba.into_raw();
 
-                        match search_screen_image(&img_data, img_w, img_h, tol) {
+                        match search_screen_image(
+                            start_x, start_y, w, h, &img_data, img_w, img_h, tol,
+                        ) {
                             Ok(Some((x, y))) => {
                                 return Ok(Value::List(Arc::new(Mutex::new(vec![
                                     Value::Number(x as f64),
