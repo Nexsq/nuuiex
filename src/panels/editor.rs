@@ -909,6 +909,7 @@ impl Editor {
                             self.state.selection_start = None;
                         } else {
                             self.visual_mode = true;
+                            self.snap_cursor_image_blocks(0);
                             self.state.selection_start =
                                 Some((self.state.cursor_x, self.state.cursor_y));
                         }
@@ -1523,20 +1524,40 @@ impl Editor {
                 }
 
                 if end_img - (start_img + 6) > 10 {
-                    let hidden_start = start_img + 8;
-                    let hidden_end = end_img - 2;
+                    if self.visual_mode {
+                        let base64_start = start_img + 6;
+                        if self.state.cursor_x > base64_start && self.state.cursor_x < end_img {
+                            if dx > 0 {
+                                self.state.cursor_x = end_img;
+                            } else if dx < 0 {
+                                self.state.cursor_x = base64_start;
+                            } else {
+                                if self.state.cursor_x - base64_start
+                                    < end_img - self.state.cursor_x
+                                {
+                                    self.state.cursor_x = base64_start;
+                                } else {
+                                    self.state.cursor_x = end_img;
+                                }
+                            }
+                        }
+                    } else {
+                        let hidden_start = start_img + 8;
+                        let hidden_end = end_img - 2;
 
-                    if self.state.cursor_x > hidden_start && self.state.cursor_x < hidden_end {
-                        if dx > 0 {
-                            self.state.cursor_x = hidden_end;
-                        } else if dx < 0 {
-                            self.state.cursor_x = hidden_start;
-                        } else {
-                            if self.state.cursor_x - hidden_start < hidden_end - self.state.cursor_x
-                            {
+                        if self.state.cursor_x > hidden_start && self.state.cursor_x < hidden_end {
+                            if dx > 0 {
+                                self.state.cursor_x = hidden_end;
+                            } else if dx < 0 {
                                 self.state.cursor_x = hidden_start;
                             } else {
-                                self.state.cursor_x = hidden_end;
+                                if self.state.cursor_x - hidden_start
+                                    < hidden_end - self.state.cursor_x
+                                {
+                                    self.state.cursor_x = hidden_start;
+                                } else {
+                                    self.state.cursor_x = hidden_end;
+                                }
                             }
                         }
                     }
