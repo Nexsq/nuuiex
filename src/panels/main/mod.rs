@@ -1678,6 +1678,9 @@ pub fn handle_list_action(
                     view.clear_editor_for_path(&path);
 
                     view.reload_library_tree(config);
+                    if config.lib_sorting == "custom" {
+                        view.save_custom_order();
+                    }
                     view.auto_load();
                     view.refresh_list(config);
                     view.refresh_main(config);
@@ -1751,6 +1754,9 @@ pub fn handle_list_action(
                 view.clear_editor_for_path(&path);
 
                 view.reload_library_tree(config);
+                if config.lib_sorting == "custom" {
+                    view.save_custom_order();
+                }
                 view.auto_load();
                 view.refresh_list(config);
                 view.refresh_main(config);

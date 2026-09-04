@@ -82,6 +82,9 @@ impl Parser {
         if self.check(&TokenKind::Async) {
             return self.parse_async();
         }
+        if self.check(&TokenKind::Try) {
+            return self.parse_try();
+        }
         if self.check(&TokenKind::Break) {
             let token = self.advance().clone();
             if self.check_statement_end() {
@@ -354,6 +357,42 @@ impl Parser {
 
         let body = self.parse_block()?;
         Some(Stmt::For(name, iterable, body, token.line))
+    }
+
+    fn parse_try(&mut self) -> Option<Stmt> {
+        self.advance();
+        if !self.check(&TokenKind::Colon) {
+            self.error("Expected ':' after 'try'");
+            return None;
+        }
+        self.advance();
+        if !self.check_statement_end() {
+            self.error("Expected newline after ':'");
+            return None;
+        }
+        self.consume_statement_end();
+
+        let try_body = self.parse_block()?;
+
+        if !self.check(&TokenKind::Catch) {
+            self.error("Expected 'catch' block after 'try'");
+            return None;
+        }
+        self.advance();
+        if !self.check(&TokenKind::Colon) {
+            self.error("Expected ':' after 'catch'");
+            return None;
+        }
+        self.advance();
+        if !self.check_statement_end() {
+            self.error("Expected newline after ':'");
+            return None;
+        }
+        self.consume_statement_end();
+
+        let catch_body = self.parse_block()?;
+
+        Some(Stmt::Try(try_body, catch_body))
     }
 
     fn parse_async(&mut self) -> Option<Stmt> {

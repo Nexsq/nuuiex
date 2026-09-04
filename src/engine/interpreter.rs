@@ -3628,6 +3628,7 @@ pub struct Interpreter {
     display_size: Arc<AtomicU32>,
     rng_state: u64,
     macro_rel_path: String,
+    pub try_depth: usize,
 }
 
 #[derive(PartialEq)]
@@ -3665,6 +3666,7 @@ impl Interpreter {
             display_size,
             rng_state,
             macro_rel_path,
+            try_depth: 0,
         }
     }
 
@@ -3979,11 +3981,16 @@ impl Interpreter {
                 }
                 Ok(Signal::Empty) => continue,
                 Err(err) => {
-                    self.errors.lock().unwrap().push(err);
-                    self.should_exit = true;
-                    self.cancel_token.store(true, Ordering::Relaxed);
-                    res = Ok(Signal::Empty);
-                    break;
+                    if self.try_depth > 0 {
+                        self.env.pop();
+                        return Err(err);
+                    } else {
+                        self.errors.lock().unwrap().push(err);
+                        self.should_exit = true;
+                        self.cancel_token.store(true, Ordering::Relaxed);
+                        res = Ok(Signal::Empty);
+                        break;
+                    }
                 }
             }
         }
@@ -4053,6 +4060,43 @@ impl Interpreter {
                 )),
                 _ => Ok((val.clone(), false)),
             };
+        }
+
+        if method == "tostr" {
+            if args.len() != 0 {
+                return Err(format!("Line {}: 'tostr' expects 0 arguments", line));
+            }
+            if let Value::EnumVariant(enum_name, variant, _) = val {
+                if enum_name == "Image" {
+                    return Ok((Value::String(variant.clone()), false));
+                } else if enum_name == "Color" || enum_name == "Background" {
+                    let mut s = variant.clone();
+                    if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) {
+                        s = s.to_lowercase();
+                    }
+                    return Ok((Value::String(s), false));
+                } else {
+                    return Ok((Value::String(variant.clone()), false));
+                }
+            }
+            return Ok((Value::String(val.to_string()), false));
+        }
+
+        if method == "tonum" {
+            if args.len() != 0 {
+                return Err(format!("Line {}: 'tonum' expects 0 arguments", line));
+            }
+            match val {
+                Value::Number(n) => return Ok((Value::Number(*n), false)),
+                Value::String(s) => {
+                    return match s.trim().parse::<f64>() {
+                        Ok(num) => Ok((Value::Number(num), false)),
+                        Err(_) => Ok((Value::Nil, false)),
+                    };
+                }
+                Value::Bool(b) => return Ok((Value::Number(if *b { 1.0 } else { 0.0 }), false)),
+                _ => return Err(format!("Line {}: Cannot convert value to number", line)),
+            }
         }
 
         if let Value::List(vec_arc) = val {
@@ -4395,15 +4439,6 @@ impl Interpreter {
                         Err(format!("Line {}: 'endswith' expects a string", line))
                     }
                 }
-                "asnum" => {
-                    if args.len() != 0 {
-                        return Err(format!("Line {}: 'asnum' expects 0 arguments", line));
-                    }
-                    match s.trim().parse::<f64>() {
-                        Ok(num) => Ok((Value::Number(num), false)),
-                        Err(_) => Ok((Value::Nil, false)),
-                    }
-                }
                 _ => Err(format!(
                     "Line {}: Undefined string method '{}'",
                     line, method
@@ -4483,27 +4518,11 @@ impl Interpreter {
                     line, method
                 )),
             }
-        } else if let Value::EnumVariant(enum_name, variant, _) = val {
-            if (enum_name == "Color" || enum_name == "Background" || enum_name == "Image")
-                && method == "tostring"
-            {
-                if args.len() != 0 {
-                    return Err(format!("Line {}: 'tostring' expects 0 arguments", line));
-                }
-                if enum_name == "Image" {
-                    return Ok((Value::String(variant.clone()), false));
-                }
-                let mut s = variant.clone();
-                if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) {
-                    s = s.to_lowercase();
-                }
-                return Ok((Value::String(s), false));
-            } else {
-                return Err(format!(
-                    "Line {}: Undefined method '{}' for enum variant",
-                    line, method
-                ));
-            }
+        } else if let Value::EnumVariant(_, _, _) = val {
+            return Err(format!(
+                "Line {}: Undefined method '{}' for enum variant",
+                line, method
+            ));
         } else {
             Err(format!("Line {}: Method call on an invalid value", line))
         }
@@ -4632,18 +4651,33 @@ impl Interpreter {
                         break;
                     }
                     let _ = self.env.assign(name, item);
-                    match self.exec_block(body)? {
-                        Signal::Break => break,
-                        Signal::Continue => continue,
-                        Signal::Return(v) => {
+                    let block_res = self.exec_block(body);
+                    match block_res {
+                        Ok(Signal::Break) => break,
+                        Ok(Signal::Continue) => continue,
+                        Ok(Signal::Return(v)) => {
                             self.env.pop();
                             return Ok(Signal::Return(v));
                         }
-                        Signal::Empty => continue,
+                        Ok(Signal::Empty) => continue,
+                        Err(e) => {
+                            self.env.pop();
+                            return Err(e);
+                        }
                     }
                 }
                 self.env.pop();
                 Ok(Signal::Empty)
+            }
+            Stmt::Try(try_b, catch_b) => {
+                self.try_depth += 1;
+                let res = self.exec_block(try_b);
+                self.try_depth -= 1;
+
+                match res {
+                    Ok(signal) => Ok(signal),
+                    Err(_) => self.exec_block(catch_b),
+                }
             }
             Stmt::Async(body, _) => {
                 let async_env = Environment {
@@ -4678,6 +4712,7 @@ impl Interpreter {
                         display_size: display_size_clone,
                         rng_state: next_rng_state,
                         macro_rel_path: macro_rel_path_clone,
+                        try_depth: 0,
                     };
 
                     let _ = async_interp.exec_block(&body_clone);
@@ -6298,11 +6333,12 @@ impl Interpreter {
                         let _ = self.env.define(param.name.clone(), val, false);
                     }
 
-                    let res = match self.exec_block(&func_def.body)? {
+                    let exec_result = self.exec_block(&func_def.body);
+                    self.env.pop();
+                    let res = match exec_result? {
                         Signal::Return(v) => v,
                         _ => Value::Nil,
                     };
-                    self.env.pop();
                     return Ok(res);
                 } else {
                     return Err(format!("Line {}: '{}' is not callable", line, name));

@@ -166,6 +166,10 @@ pub fn analyze_code(source: &str) -> (usize, HashSet<usize>, HashSet<String>) {
                 | ast::Stmt::Async(b, _) => {
                     extract_funcs(b, funcs);
                 }
+                ast::Stmt::Try(try_b, catch_b) => {
+                    extract_funcs(try_b, funcs);
+                    extract_funcs(catch_b, funcs);
+                }
                 _ => {}
             }
         }

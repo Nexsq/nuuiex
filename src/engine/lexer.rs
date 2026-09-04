@@ -44,6 +44,8 @@ pub enum TokenKind {
     Not,
     Async,
     Match,
+    Try,
+    Catch,
     FatArrow,
     Colon,
     DoubleColon,
@@ -697,6 +699,8 @@ impl<'a> Lexer<'a> {
             "None" => TokenKind::NoneValue,
             "async" => TokenKind::Async,
             "match" => TokenKind::Match,
+            "try" => TokenKind::Try,
+            "catch" => TokenKind::Catch,
             _ => TokenKind::Ident(text.to_string()),
         };
 

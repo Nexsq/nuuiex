@@ -3432,6 +3432,8 @@ impl Editor {
                                     | "pass"
                                     | "async"
                                     | "match"
+                                    | "try"
+                                    | "catch"
                             );
                             let is_op_word = matches!(word_str.as_str(), "and" | "or" | "not");
                             let is_bool = matches!(word_str.as_str(), "True" | "False");
@@ -3478,7 +3480,7 @@ impl Editor {
                                     | "replace"
                                     | "startswith"
                                     | "endswith"
-                                    | "asnum"
+                                    | "tonum"
                                     | "abs"
                                     | "neg"
                                     | "floor"
@@ -3487,9 +3489,8 @@ impl Editor {
                                     | "fract"
                                     | "clamp"
                                     | "round"
-                                    | "pow"
                                     | "sqrt"
-                                    | "tostring"
+                                    | "tostr"
                             );
 
                             let is_func = skip_idx < line_chars.len()

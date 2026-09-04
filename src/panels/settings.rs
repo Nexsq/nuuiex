@@ -123,18 +123,6 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 ),
             },
             Setting {
-                name: "Highlight Trailing Spaces",
-                key: "highlight_trailing_spaces",
-                kind: SettingType::Choice(
-                    vec!["true".to_string(), "false".to_string()],
-                    if config.highlight_trailing_spaces {
-                        0
-                    } else {
-                        1
-                    },
-                ),
-            },
-            Setting {
                 name: "Tabs",
                 key: "tabs_num",
                 kind: SettingType::Choice(
@@ -346,89 +334,6 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
             Setting {
                 name: "Reset Keyvis",
                 key: "reset_keyvis",
-                kind: SettingType::Action,
-            },
-        ],
-    });
-
-    categories.push(Category {
-        name: "Matrix",
-        settings: vec![
-            Setting {
-                name: "Height",
-                key: "matrix_height",
-                kind: SettingType::Custom {
-                    value: config.matrix_height.to_string(),
-                    default: def.matrix_height.to_string(),
-                    validation: CustomType::IntRange(2, 32),
-                },
-            },
-            Setting {
-                name: "Density",
-                key: "matrix_density",
-                kind: SettingType::Custom {
-                    value: config.matrix_density.to_string(),
-                    default: def.matrix_density.to_string(),
-                    validation: CustomType::IntRange(1, 200),
-                },
-            },
-            Setting {
-                name: "Dim Ratio",
-                key: "matrix_dim_ratio",
-                kind: SettingType::Custom {
-                    value: config.matrix_dim_ratio.to_string(),
-                    default: def.matrix_dim_ratio.to_string(),
-                    validation: CustomType::IntRange(0, 100),
-                },
-            },
-            Setting {
-                name: "Speed",
-                key: "matrix_speed",
-                kind: SettingType::Custom {
-                    value: config.matrix_speed.to_string(),
-                    default: def.matrix_speed.to_string(),
-                    validation: CustomType::FloatRange(0.1, 5.0),
-                },
-            },
-            Setting {
-                name: "Direction",
-                key: "matrix_direction",
-                kind: SettingType::Choice(
-                    vec![
-                        "down".to_string(),
-                        "up".to_string(),
-                        "left".to_string(),
-                        "right".to_string(),
-                    ],
-                    match config.matrix_direction.as_str() {
-                        "up" => 1,
-                        "left" => 2,
-                        "right" => 3,
-                        _ => 0,
-                    },
-                ),
-            },
-            Setting {
-                name: "Min Length",
-                key: "matrix_min_length",
-                kind: SettingType::Custom {
-                    value: config.matrix_min_length.to_string(),
-                    default: def.matrix_min_length.to_string(),
-                    validation: CustomType::IntRange(2, 64),
-                },
-            },
-            Setting {
-                name: "Max Length",
-                key: "matrix_max_length",
-                kind: SettingType::Custom {
-                    value: config.matrix_max_length.to_string(),
-                    default: def.matrix_max_length.to_string(),
-                    validation: CustomType::IntRange(2, 64),
-                },
-            },
-            Setting {
-                name: "Reset Matrix",
-                key: "reset_matrix",
                 kind: SettingType::Action,
             },
         ],
@@ -666,32 +571,32 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
 
     categories.push(Category {
         name: "Macrostats",
-        settings: {
-            let mut s = Vec::new();
-            macro_rules! add_bool {
-                ($name:expr, $key:expr, $val:expr) => {
-                    s.push(Setting {
-                        name: $name,
-                        key: $key,
-                        kind: SettingType::Choice(
-                            vec!["true".to_string(), "false".to_string()],
-                            if $val { 0 } else { 1 },
-                        ),
-                    });
-                };
-            }
-            add_bool!("Icons", "macrostats_icons", config.macrostats_icons);
-            add_bool!(
-                "Edit Show Name",
-                "macrostats_edit_name",
-                config.macrostats_edit_name
-            );
-            add_bool!(
-                "Edit Errors",
-                "macrostats_edit_err",
-                config.macrostats_edit_err
-            );
-            s.push(Setting {
+        settings: vec![
+            Setting {
+                name: "Icons",
+                key: "macrostats_icons",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_icons { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Edit Show Name",
+                key: "macrostats_edit_name",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_edit_name { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Edit Errors",
+                key: "macrostats_edit_err",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_edit_err { 0 } else { 1 },
+                ),
+            },
+            Setting {
                 name: "Edit Errors Style",
                 key: "macrostats_edit_err_style",
                 kind: SettingType::Choice(
@@ -702,58 +607,88 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                         _ => 0,
                     },
                 ),
-            });
-            add_bool!(
-                "Edit Show Created",
-                "macrostats_edit_created",
-                config.macrostats_edit_created
-            );
-            add_bool!(
-                "Edit Show Lines",
-                "macrostats_edit_lines",
-                config.macrostats_edit_lines
-            );
-            add_bool!(
-                "Edit Show Code",
-                "macrostats_edit_code",
-                config.macrostats_edit_code
-            );
-            add_bool!(
-                "Run Show Name",
-                "macrostats_run_name",
-                config.macrostats_run_name
-            );
-            add_bool!(
-                "Run Show Elapsed",
-                "macrostats_run_elapsed",
-                config.macrostats_run_elapsed
-            );
-            add_bool!(
-                "Run Show CPU",
-                "macrostats_run_cpu",
-                config.macrostats_run_cpu
-            );
-            add_bool!(
-                "Lib Show Name",
-                "macrostats_lib_name",
-                config.macrostats_lib_name
-            );
-            add_bool!(
-                "Lib Show Created",
-                "macrostats_lib_created",
-                config.macrostats_lib_created
-            );
-            add_bool!(
-                "Lib Show Size",
-                "macrostats_lib_size",
-                config.macrostats_lib_size
-            );
-            add_bool!(
-                "Lib Show Status",
-                "macrostats_lib_status",
-                config.macrostats_lib_status
-            );
-            s.push(Setting {
+            },
+            Setting {
+                name: "Edit Show Created",
+                key: "macrostats_edit_created",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_edit_created { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Edit Show Lines",
+                key: "macrostats_edit_lines",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_edit_lines { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Edit Show Code",
+                key: "macrostats_edit_code",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_edit_code { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Run Show Name",
+                key: "macrostats_run_name",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_run_name { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Run Show Elapsed",
+                key: "macrostats_run_elapsed",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_run_elapsed { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Run Show CPU",
+                key: "macrostats_run_cpu",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_run_cpu { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Lib Show Name",
+                key: "macrostats_lib_name",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_lib_name { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Lib Show Created",
+                key: "macrostats_lib_created",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_lib_created { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Lib Show Size",
+                key: "macrostats_lib_size",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_lib_size { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Lib Show Status",
+                key: "macrostats_lib_status",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_lib_status { 0 } else { 1 },
+                ),
+            },
+            Setting {
                 name: "Err Chart Length",
                 key: "macrostats_err_chart_len",
                 kind: SettingType::Custom {
@@ -761,19 +696,108 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                     default: def.macrostats_err_chart_len.to_string(),
                     validation: CustomType::IntRange(4, 16),
                 },
-            });
-            add_bool!(
-                "Err Chart Numbers",
-                "macrostats_err_chart_num",
-                config.macrostats_err_chart_num
-            );
-            s.push(Setting {
+            },
+            Setting {
+                name: "Err Chart Numbers",
+                key: "macrostats_err_chart_num",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.macrostats_err_chart_num {
+                        0
+                    } else {
+                        1
+                    },
+                ),
+            },
+            Setting {
                 name: "Reset Macrostats",
                 key: "reset_macrostats",
                 kind: SettingType::Action,
-            });
-            s
-        },
+            },
+        ],
+    });
+
+    categories.push(Category {
+        name: "Matrix",
+        settings: vec![
+            Setting {
+                name: "Height",
+                key: "matrix_height",
+                kind: SettingType::Custom {
+                    value: config.matrix_height.to_string(),
+                    default: def.matrix_height.to_string(),
+                    validation: CustomType::IntRange(2, 32),
+                },
+            },
+            Setting {
+                name: "Density",
+                key: "matrix_density",
+                kind: SettingType::Custom {
+                    value: config.matrix_density.to_string(),
+                    default: def.matrix_density.to_string(),
+                    validation: CustomType::IntRange(1, 200),
+                },
+            },
+            Setting {
+                name: "Dim Ratio",
+                key: "matrix_dim_ratio",
+                kind: SettingType::Custom {
+                    value: config.matrix_dim_ratio.to_string(),
+                    default: def.matrix_dim_ratio.to_string(),
+                    validation: CustomType::IntRange(0, 100),
+                },
+            },
+            Setting {
+                name: "Speed",
+                key: "matrix_speed",
+                kind: SettingType::Custom {
+                    value: config.matrix_speed.to_string(),
+                    default: def.matrix_speed.to_string(),
+                    validation: CustomType::FloatRange(0.1, 5.0),
+                },
+            },
+            Setting {
+                name: "Direction",
+                key: "matrix_direction",
+                kind: SettingType::Choice(
+                    vec![
+                        "down".to_string(),
+                        "up".to_string(),
+                        "left".to_string(),
+                        "right".to_string(),
+                    ],
+                    match config.matrix_direction.as_str() {
+                        "up" => 1,
+                        "left" => 2,
+                        "right" => 3,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "Min Length",
+                key: "matrix_min_length",
+                kind: SettingType::Custom {
+                    value: config.matrix_min_length.to_string(),
+                    default: def.matrix_min_length.to_string(),
+                    validation: CustomType::IntRange(2, 64),
+                },
+            },
+            Setting {
+                name: "Max Length",
+                key: "matrix_max_length",
+                kind: SettingType::Custom {
+                    value: config.matrix_max_length.to_string(),
+                    default: def.matrix_max_length.to_string(),
+                    validation: CustomType::IntRange(2, 64),
+                },
+            },
+            Setting {
+                name: "Reset Matrix",
+                key: "reset_matrix",
+                kind: SettingType::Action,
+            },
+        ],
     });
 
     categories.push(Category {
@@ -934,6 +958,18 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 kind: SettingType::Choice(
                     vec!["true".to_string(), "false".to_string()],
                     if config.edit_auto_bracket { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Highlight Trailing Spaces",
+                key: "highlight_trailing_spaces",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.highlight_trailing_spaces {
+                        0
+                    } else {
+                        1
+                    },
                 ),
             },
             Setting {

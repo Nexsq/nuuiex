@@ -154,6 +154,15 @@ impl Analyzer {
                 self.analyze(body);
                 self.pop_scope();
             }
+            Stmt::Try(try_b, catch_b) => {
+                self.push_scope();
+                self.analyze(try_b);
+                self.pop_scope();
+
+                self.push_scope();
+                self.analyze(catch_b);
+                self.pop_scope();
+            }
             Stmt::Break(line) => {
                 if self.in_match_expr_depth > 0 {
                     self.error(
@@ -296,7 +305,7 @@ impl Analyzer {
                         | "replace"
                         | "startswith"
                         | "endswith"
-                        | "asnum"
+                        | "tonum"
                         | "abs"
                         | "neg"
                         | "floor"
@@ -306,7 +315,7 @@ impl Analyzer {
                         | "clamp"
                         | "round"
                         | "sqrt"
-                        | "tostring"
+                        | "tostr"
                 );
 
                 if !is_valid_method {

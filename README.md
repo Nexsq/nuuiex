@@ -141,6 +141,15 @@ let result = match direction:
 println(result) # Outputs: 3
 ```
 
+**Try / Catch:**
+```python
+try:
+    let arr = [1, 2, 3]
+    println(arr[5]) # Throws an out-of-bounds error
+catch:
+    println("An error occurred!")
+```
+
 **Loops:**
 ```python
 # Infinite loop
@@ -202,6 +211,7 @@ Numbers are represented internally as 64-bit floats (`f64`).
 | `round(places?)` | Rounds the number (optionally to `places` decimal points). |
 | `sqrt()` | Returns the square root. |
 | `clone()` | Returns the number itself. |
+| `tostr()` | Converts the number to a String. |
 
 ### 2. Strings
 
@@ -219,7 +229,7 @@ Numbers are represented internally as 64-bit floats (`f64`).
 | `replace(old, new)`| Replaces all instances of `old` with `new`. |
 | `startswith(s)` | Returns `True` if the string starts with `s`. |
 | `endswith(s)` | Returns `True` if the string ends with `s`. |
-| `asnum()` | Parses the string into a Number, or `None` if invalid. |
+| `tonum()` | Parses the string into a Number, or `None` if invalid. |
 | `clone()` | Returns the string itself. |
 
 ### 3. Lists
@@ -237,6 +247,7 @@ Lists are dynamically sized arrays: `let arr = [1, "two", False]`
 | `count(val)` | Returns the number of `val` occurrences. |
 | `clear()` | Empties the list. |
 | `clone()` | Returns a detached, shallow copy of the list. |
+| `tostr()` | Returns a string representation of the list. |
 
 ### 4. Dictionaries
 Dictionaries are HashMaps with dynamic keys and values: `let dict = {"key": "value"}`
@@ -252,6 +263,7 @@ Dictionaries are HashMaps with dynamic keys and values: `let dict = {"key": "val
 | `pop(key?)` | Removes and returns the value for `key`, or a random `[key, value]` pair. |
 | `clear()` | Empties the dictionary. |
 | `clone()` | Returns a detached, shallow copy of the dictionary. |
+| `tostr()` | Returns a string representation of the dictionary. |
 
 ---
 
@@ -280,7 +292,7 @@ Used for terminal styling and pixel color comparisons. The `Background` enum sha
 * **Bright Colors:** `BrightGray`, `BrightRed`, `BrightGreen`, `BrightYellow`, `BrightBlue`, `BrightMagenta`, `BrightCyan`, `BrightWhite`
 * **Custom Hex Colors:** You can use exact hex codes, e.g., `Color:ff0055` or `Background:00ff00`
 
-*(You can call `Color:00ff00::tostring()` to get its string representation).*
+*(You can call `Color:00ff00::tostr()` to get its string representation).*
 
 ### 3. Modifier Enum
 Used to apply ANSI text modifiers in the terminal.

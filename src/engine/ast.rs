@@ -95,4 +95,5 @@ pub enum Stmt {
     Fn(String, Vec<Param>, Vec<Stmt>, usize),
     Return(Option<Expr>, usize),
     Async(Vec<Stmt>, usize),
+    Try(Vec<Stmt>, Vec<Stmt>),
 }
