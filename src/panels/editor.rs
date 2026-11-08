@@ -2471,11 +2471,13 @@ impl Editor {
         let inner_w = width.saturating_sub(2) as usize;
         let inner_h = height.saturating_sub(2) as usize;
 
-        let text_inner_h = if self.mode == Mode::Search {
-            inner_h.saturating_sub(1)
-        } else {
-            inner_h
-        };
+        let d_lines = self.get_display_lines();
+        let mut eff_len = d_lines.len();
+        if self.is_output && !config.show_caret && !self.is_waiting_for_input {
+            if eff_len > 0 && self.state.lines.last().map_or(false, |l| l.is_empty()) {
+                eff_len -= 1;
+            }
+        }
 
         let show_line_numbers = self.file_path.is_some();
         let line_count = self.state.lines.len();
@@ -2498,12 +2500,153 @@ impl Editor {
             0
         };
 
-        let text_inner_w = inner_w.saturating_sub(prefix_width);
+        let mut max_line_len = if self.is_output {
+            self.state
+                .lines
+                .iter()
+                .map(|l| {
+                    let mut len = 0;
+                    let mut chars = l.chars().peekable();
+                    while let Some(c) = chars.next() {
+                        if c == '{' {
+                            let mut valid = false;
+                            let mut lookahead = chars.clone();
+                            let mut tag = String::new();
+                            while let Some(nc) = lookahead.next() {
+                                if nc == '}' {
+                                    valid = true;
+                                    break;
+                                }
+                                tag.push(nc);
+                            }
+                            if valid
+                                && (tag.starts_with("Color:")
+                                    || tag.starts_with("Modifier:")
+                                    || tag.starts_with("Background:"))
+                            {
+                                for _ in 0..=tag.len() {
+                                    chars.next();
+                                }
+                                continue;
+                            }
+                        }
+                        len += 1;
+                    }
+                    len
+                })
+                .max()
+                .unwrap_or(0)
+        } else {
+            self.state
+                .lines
+                .iter()
+                .enumerate()
+                .map(|(line_idx, l)| {
+                    let mut len = 0;
+                    let mut chars_vec: Vec<char> = l.chars().collect();
+                    if self.folded_lines.contains(&line_idx) {
+                        let hash_pos = chars_vec
+                            .iter()
+                            .position(|&c| c == '#')
+                            .unwrap_or(chars_vec.len());
+                        if let Some(colon_pos) =
+                            chars_vec[..hash_pos].iter().rposition(|&c| c == ':')
+                        {
+                            chars_vec.remove(colon_pos);
+                        }
+                    }
+                    let mut i_char = 0;
+                    while i_char < chars_vec.len() {
+                        if i_char + 6 <= chars_vec.len()
+                            && chars_vec[i_char..i_char + 6].iter().collect::<String>() == "Image:"
+                        {
+                            let mut end_img = i_char + 6;
+                            while end_img < chars_vec.len()
+                                && (chars_vec[end_img].is_ascii_alphanumeric()
+                                    || chars_vec[end_img] == '+'
+                                    || chars_vec[end_img] == '/'
+                                    || chars_vec[end_img] == '=')
+                            {
+                                end_img += 1;
+                            }
+                            if end_img - (i_char + 6) > 10 {
+                                len += 12;
+                                i_char = end_img;
+                                continue;
+                            }
+                        }
 
-        self.last_text_inner_w = text_inner_w;
-        self.last_text_inner_h = text_inner_h;
+                        let mut cluster =
+                            crate::render::canvas::CharCluster::new(chars_vec[i_char]);
+                        let mut k = i_char + 1;
+                        while k < chars_vec.len()
+                            && crate::render::canvas::is_combining(chars_vec[k])
+                        {
+                            cluster.push(chars_vec[k]);
+                            k += 1;
+                        }
+                        len += cluster.width as usize;
+                        i_char = k;
+                    }
+                    len
+                })
+                .max()
+                .unwrap_or(0)
+        };
 
-        let d_lines = self.get_display_lines();
+        if self.is_output && self.is_waiting_for_input {
+            let input_len = self.input_buffer.chars().count() + 1;
+            let cursor_line_len = self.state.cursor_x + input_len;
+            if cursor_line_len > max_line_len {
+                max_line_len = cursor_line_len;
+            }
+        }
+        self.last_max_line_len = max_line_len;
+
+        let mut render_w = inner_w;
+        let mut render_h = inner_h;
+        let mut start_x_offset = 1;
+        let mut start_y_offset = 1;
+
+        if self.mode == Mode::Search {
+            render_h = render_h.saturating_sub(1);
+        }
+
+        let mut v_scroll_visible = false;
+        let mut h_scroll_visible = false;
+
+        if config.scrollbar_vertical && eff_len > render_h {
+            v_scroll_visible = true;
+            if config.scrollbar_vertical_mode == "left" {
+                start_x_offset += 1;
+                render_w = render_w.saturating_sub(1);
+            } else if config.scrollbar_vertical_mode == "right" {
+                render_w = render_w.saturating_sub(1);
+            }
+        }
+
+        if config.scrollbar_horizontal && max_line_len > render_w.saturating_sub(prefix_width) {
+            h_scroll_visible = true;
+            if config.scrollbar_horizontal_mode == "up" {
+                start_y_offset += 1;
+                render_h = render_h.saturating_sub(1);
+            } else if config.scrollbar_horizontal_mode == "down" {
+                render_h = render_h.saturating_sub(1);
+            }
+
+            if config.scrollbar_vertical && !v_scroll_visible && eff_len > render_h {
+                v_scroll_visible = true;
+                if config.scrollbar_vertical_mode == "left" {
+                    start_x_offset += 1;
+                    render_w = render_w.saturating_sub(1);
+                } else if config.scrollbar_vertical_mode == "right" {
+                    render_w = render_w.saturating_sub(1);
+                }
+            }
+        }
+
+        self.last_text_inner_w = render_w.saturating_sub(prefix_width);
+        self.last_text_inner_h = render_h;
 
         let mut target_y = self.state.cursor_y;
         let mut target_x = self.state.cursor_x;
@@ -2609,130 +2752,33 @@ impl Editor {
 
         if cursor_d_idx < self.scroll_y {
             self.scroll_y = cursor_d_idx;
-        } else if cursor_d_idx >= self.scroll_y + text_inner_h && text_inner_h > 0 {
-            self.scroll_y = cursor_d_idx - text_inner_h + 1;
+        } else if cursor_d_idx >= self.scroll_y + render_h && render_h > 0 {
+            self.scroll_y = cursor_d_idx - render_h + 1;
         }
 
-        let mut eff_len = d_lines.len();
-        if self.is_output && !config.show_caret && !self.is_waiting_for_input {
-            if eff_len > 0 && self.state.lines.last().map_or(false, |l| l.is_empty()) {
-                eff_len -= 1;
-            }
-        }
-        let max_scroll_y = eff_len.saturating_sub(text_inner_h);
+        let max_scroll_y = eff_len.saturating_sub(render_h);
         if self.scroll_y > max_scroll_y {
             self.scroll_y = max_scroll_y;
         }
 
-        if visual_target_x < self.scroll_x {
-            self.scroll_x = visual_target_x;
-        } else if visual_target_x >= self.scroll_x + text_inner_w && text_inner_w > 0 {
-            self.scroll_x = visual_target_x - text_inner_w + 1;
-        }
+        let text_inner_w = self.last_text_inner_w;
 
-        let mut max_line_len = if self.is_output {
-            self.state
-                .lines
-                .iter()
-                .map(|l| {
-                    let mut len = 0;
-                    let mut chars = l.chars().peekable();
-                    while let Some(c) = chars.next() {
-                        if c == '{' {
-                            let mut valid = false;
-                            let mut lookahead = chars.clone();
-                            let mut tag = String::new();
-                            while let Some(nc) = lookahead.next() {
-                                if nc == '}' {
-                                    valid = true;
-                                    break;
-                                }
-                                tag.push(nc);
-                            }
-                            if valid
-                                && (tag.starts_with("Color:")
-                                    || tag.starts_with("Modifier:")
-                                    || tag.starts_with("Background:"))
-                            {
-                                for _ in 0..=tag.len() {
-                                    chars.next();
-                                }
-                                continue;
-                            }
-                        }
-                        len += 1;
-                    }
-                    len
-                })
-                .max()
-                .unwrap_or(0)
+        let cursor_char_w = if target_y < self.state.lines.len() {
+            self.state.lines[target_y]
+                .chars()
+                .nth(target_x)
+                .map(|c| crate::render::canvas::char_width(c) as usize)
+                .unwrap_or(1)
         } else {
-            self.state
-                .lines
-                .iter()
-                .enumerate()
-                .map(|(line_idx, l)| {
-                    let mut len = 0;
-                    let mut chars_vec: Vec<char> = l.chars().collect();
-                    if self.folded_lines.contains(&line_idx) {
-                        let hash_pos = chars_vec
-                            .iter()
-                            .position(|&c| c == '#')
-                            .unwrap_or(chars_vec.len());
-                        if let Some(colon_pos) =
-                            chars_vec[..hash_pos].iter().rposition(|&c| c == ':')
-                        {
-                            chars_vec.remove(colon_pos);
-                        }
-                    }
-                    let mut i_char = 0;
-                    while i_char < chars_vec.len() {
-                        if i_char + 6 <= chars_vec.len()
-                            && chars_vec[i_char..i_char + 6].iter().collect::<String>() == "Image:"
-                        {
-                            let mut end_img = i_char + 6;
-                            while end_img < chars_vec.len()
-                                && (chars_vec[end_img].is_ascii_alphanumeric()
-                                    || chars_vec[end_img] == '+'
-                                    || chars_vec[end_img] == '/'
-                                    || chars_vec[end_img] == '=')
-                            {
-                                end_img += 1;
-                            }
-                            if end_img - (i_char + 6) > 10 {
-                                len += 12;
-                                i_char = end_img;
-                                continue;
-                            }
-                        }
-
-                        let mut cluster =
-                            crate::render::canvas::CharCluster::new(chars_vec[i_char]);
-                        let mut k = i_char + 1;
-                        while k < chars_vec.len()
-                            && crate::render::canvas::is_combining(chars_vec[k])
-                        {
-                            cluster.push(chars_vec[k]);
-                            k += 1;
-                        }
-                        len += cluster.width as usize;
-                        i_char = k;
-                    }
-                    len
-                })
-                .max()
-                .unwrap_or(0)
+            1
         };
 
-        if self.is_output && self.is_waiting_for_input {
-            let input_len = self.input_buffer.chars().count() + 1;
-            let cursor_line_len = self.state.cursor_x + input_len;
-            if cursor_line_len > max_line_len {
-                max_line_len = cursor_line_len;
-            }
+        if visual_target_x < self.scroll_x {
+            self.scroll_x = visual_target_x;
+        } else if visual_target_x + cursor_char_w > self.scroll_x + text_inner_w && text_inner_w > 0
+        {
+            self.scroll_x = visual_target_x + cursor_char_w - text_inner_w;
         }
-
-        self.last_max_line_len = max_line_len;
 
         let max_scroll_x = max_line_len.saturating_add(1).saturating_sub(text_inner_w);
         if self.scroll_x > max_scroll_x {
@@ -2749,7 +2795,7 @@ impl Editor {
             .iter()
             .enumerate()
             .skip(self.scroll_y)
-            .take(text_inner_h)
+            .take(render_h)
         {
             let display_y = (display_idx - self.scroll_y) as i16;
 
@@ -2762,11 +2808,11 @@ impl Editor {
                         md: Modifier::Dim,
                     };
                     for (idx, c) in dot_str.chars().enumerate() {
-                        if idx < inner_w {
+                        if idx < render_w {
                             b.put_cell(
                                 crate::Cell::new(c, prefix_style),
-                                idx as u16 + 1,
-                                display_y as u16 + 1,
+                                idx as u16 + start_x_offset as u16,
+                                display_y as u16 + start_y_offset as u16,
                             );
                         }
                     }
@@ -2809,13 +2855,17 @@ impl Editor {
                 };
 
                 for (idx, c) in prefix_str.chars().enumerate() {
-                    if idx < inner_w {
+                    if idx < render_w {
                         let mut s = prefix_style;
                         if is_lne_highlight {
                             s.fg = theme.editor_lne.color_at(idx, max_num_width);
                             s.md = Modifier::Bold;
                         }
-                        b.put_cell(crate::Cell::new(c, s), idx as u16 + 1, display_y as u16 + 1);
+                        b.put_cell(
+                            crate::Cell::new(c, s),
+                            idx as u16 + start_x_offset as u16,
+                            display_y as u16 + start_y_offset as u16,
+                        );
                     }
                 }
             }
@@ -3570,7 +3620,15 @@ impl Editor {
                 let char_w = cluster.width as usize;
 
                 if current_x + char_w > self.scroll_x && current_x < self.scroll_x + text_inner_w {
-                    let display_x = (current_x.saturating_sub(self.scroll_x) + prefix_width) as i16;
+                    let display_x_signed = current_x as isize - self.scroll_x as isize;
+
+                    let mut cut_left = false;
+                    let display_x = if display_x_signed < 0 {
+                        cut_left = true;
+                        prefix_width as i16
+                    } else {
+                        (display_x_signed as usize + prefix_width) as i16
+                    };
 
                     let is_selected = if let Some((start, end)) = selection {
                         let mut adj_start_0 = start.0;
@@ -3679,24 +3737,44 @@ impl Editor {
                         cluster.c
                     };
 
-                    if (display_x as usize) < inner_w {
-                        b.put_cell(
-                            crate::Cell {
-                                c: display_c,
-                                ext: cluster.ext,
-                                ext_len: cluster.ext_len,
-                                width: cluster.width,
-                                s: style,
-                            },
-                            display_x as u16 + 1,
-                            display_y as u16 + 1,
-                        );
-                        if cluster.width == 2 && (display_x as usize) + 1 < inner_w {
+                    let dx_u = display_x as usize;
+                    let fits_fully = !cut_left && dx_u + char_w <= render_w;
+
+                    if dx_u < render_w {
+                        if fits_fully {
                             b.put_cell(
-                                crate::Cell::dummy(),
-                                display_x as u16 + 2,
-                                display_y as u16 + 1,
+                                crate::Cell {
+                                    c: display_c,
+                                    ext: cluster.ext,
+                                    ext_len: cluster.ext_len,
+                                    width: cluster.width,
+                                    s: style,
+                                },
+                                display_x as u16 + start_x_offset as u16,
+                                display_y as u16 + start_y_offset as u16,
                             );
+                            if cluster.width == 2 {
+                                b.put_cell(
+                                    crate::Cell::dummy(),
+                                    display_x as u16 + start_x_offset as u16 + 1,
+                                    display_y as u16 + start_y_offset as u16,
+                                );
+                            }
+                        } else {
+                            let space_style = Style {
+                                fg: style.fg,
+                                bg: style.bg,
+                                md: style.md,
+                            };
+                            for dw in 0..char_w {
+                                if dx_u + dw < render_w {
+                                    b.put_cell(
+                                        crate::Cell::new(' ', space_style),
+                                        (dx_u + dw) as u16 + start_x_offset as u16,
+                                        display_y as u16 + start_y_offset as u16,
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -3711,7 +3789,7 @@ impl Editor {
                 if show_caret && i == target_y && target_j >= line_chars.len() {
                     if current_x >= self.scroll_x {
                         let display_x = current_x - self.scroll_x + prefix_width;
-                        if display_x < inner_w {
+                        if display_x < render_w {
                             b.put_cell(
                                 crate::Cell::new(
                                     ' ',
@@ -3725,8 +3803,8 @@ impl Editor {
                                         },
                                     },
                                 ),
-                                display_x as u16 + 1,
-                                display_y as u16 + 1,
+                                display_x as u16 + start_x_offset as u16,
+                                display_y as u16 + start_y_offset as u16,
                             );
                         }
                     }
@@ -3735,7 +3813,7 @@ impl Editor {
         }
 
         if self.mode == Mode::Search {
-            let bar_y = text_inner_h as u16 + 1;
+            let bar_y = render_h as u16 + start_y_offset as u16;
             let cursor_query = self.search_query.clone();
 
             let visible_width = inner_w.saturating_sub(1);
@@ -3752,21 +3830,21 @@ impl Editor {
             let visible_cursor_idx = 1 + self.search_cursor.saturating_sub(skip);
 
             let char_count = bar_text.chars().count();
-            if char_count < inner_w {
-                let spaces = inner_w.saturating_sub(char_count);
+            if char_count < render_w {
+                let spaces = render_w.saturating_sub(char_count);
                 bar_text.push_str(&" ".repeat(spaces));
             }
 
             let bar_bg = &theme.editor_fnd_bg;
 
-            for (x, c) in bar_text.chars().enumerate().take(inner_w) {
+            for (x, c) in bar_text.chars().enumerate().take(render_w) {
                 let is_cursor = x == visible_cursor_idx;
                 b.put_cell(
                     crate::Cell::new(
                         c,
                         Style {
                             fg: Color::Black,
-                            bg: bar_bg.color_at(x, inner_w),
+                            bg: bar_bg.color_at(x, render_w),
                             md: if is_cursor {
                                 Modifier::Underline
                             } else {
@@ -3774,14 +3852,81 @@ impl Editor {
                             },
                         },
                     ),
-                    x as u16 + 1,
+                    x as u16 + start_x_offset as u16,
                     bar_y,
                 );
             }
         }
 
+        let mut header_end_x = 1;
+        if self.is_editing {
+            let mode_str = match self.mode {
+                Mode::Command => {
+                    if self.visual_mode {
+                        "[VIS]"
+                    } else {
+                        "[CMD]"
+                    }
+                }
+                Mode::Search => "[FND]",
+                Mode::LineSearch => "[LNE]",
+                Mode::Insert => "[INS]",
+            };
+            header_end_x = 2 + mode_str.len() as u16;
+            if !self.rel_path.is_empty() {
+                let max_insert_len = (width.saturating_sub(header_end_x + 3)) as usize;
+                let mut display_path = self.rel_path.clone();
+                let path_chars = display_path.chars().count();
+                if path_chars + 2 > max_insert_len {
+                    if max_insert_len >= 4 {
+                        let keep = max_insert_len - 4;
+                        display_path = display_path.chars().take(keep).collect();
+                        display_path.push_str("..");
+                    } else {
+                        display_path.clear();
+                    }
+                }
+                if !display_path.is_empty() {
+                    b.insert_text(
+                        &format!(" {} ", display_path),
+                        header_end_x as i16,
+                        -1,
+                        false,
+                        theme.main_label.clone(),
+                        Gradient::Solid(Color::None),
+                        Modifier::Bold,
+                    );
+                    header_end_x += display_path.chars().count() as u16 + 2;
+                } else {
+                    b.insert_text(
+                        " ",
+                        header_end_x as i16,
+                        -1,
+                        false,
+                        theme.main_label.clone(),
+                        Gradient::Solid(Color::None),
+                        Modifier::Bold,
+                    );
+                    header_end_x += 1;
+                }
+            } else {
+                b.insert_text(
+                    " ",
+                    header_end_x as i16,
+                    -1,
+                    false,
+                    theme.main_label.clone(),
+                    Gradient::Solid(Color::None),
+                    Modifier::Bold,
+                );
+                header_end_x += 1;
+            }
+        }
+
+        let mut error_end_x = 1;
         if self.is_editing && self.error_count > 0 {
             let err_str = format!(" ERR {} ", self.error_count);
+            error_end_x = 2 + err_str.chars().count() as u16;
             let err_len = err_str.chars().count();
             let mut x = 2;
             for (i, c) in err_str.chars().enumerate() {
@@ -3799,6 +3944,118 @@ impl Editor {
                         height.saturating_sub(1),
                     );
                     x += 1;
+                }
+            }
+        }
+
+        if config.scrollbar_vertical && v_scroll_visible {
+            let total_lines = eff_len;
+            let visible_lines = render_h;
+            let is_border = config.scrollbar_vertical_mode.ends_with("border");
+            let track_len = if is_border {
+                height.saturating_sub(2) as usize
+            } else {
+                visible_lines
+            };
+
+            let scroll_ratio = self.scroll_y as f32 / (total_lines - visible_lines) as f32;
+            let thumb_size = (track_len as f32 * (visible_lines as f32 / total_lines as f32))
+                .round()
+                .clamp(1.0, track_len as f32) as usize;
+            let thumb_start = ((track_len - thumb_size) as f32 * scroll_ratio).round() as usize;
+
+            let x = match config.scrollbar_vertical_mode.as_str() {
+                "left" => b.padding,
+                "leftborder" => 0,
+                "rightborder" => width.saturating_sub(1),
+                _ => width.saturating_sub(1 + b.padding),
+            } as usize;
+            let y_offset = if is_border {
+                1
+            } else {
+                start_y_offset as usize
+            };
+
+            let ch = match config.scrollbar_vertical_style.as_str() {
+                "light" => '│',
+                "heavy" => '┃',
+                "double" => '║',
+                _ => '█',
+            };
+
+            for i in 0..thumb_size {
+                let y = y_offset + thumb_start + i;
+                if x < width as usize && y < height as usize {
+                    let style = Style {
+                        fg: theme.scrollbar_vertical.color_at(i, thumb_size),
+                        bg: Color::None,
+                        md: Modifier::None,
+                    };
+                    b.put_cell(crate::Cell::new(ch, style), x as u16, y as u16);
+                }
+            }
+        }
+
+        if config.scrollbar_horizontal && h_scroll_visible {
+            let total_cols = max_line_len;
+            let visible_cols = self.last_text_inner_w;
+            let mode = config.scrollbar_horizontal_mode.as_str();
+            let is_border = mode.ends_with("border");
+
+            let mut x_offset = if is_border {
+                1
+            } else {
+                start_x_offset as usize + prefix_width
+            };
+            let mut track_len = if is_border {
+                width.saturating_sub(2) as usize
+            } else {
+                visible_cols
+            };
+
+            if mode == "upborder" {
+                x_offset = header_end_x as usize;
+                track_len = width.saturating_sub(header_end_x + 1) as usize;
+            } else if mode == "downborder" {
+                x_offset = error_end_x as usize;
+                track_len = width.saturating_sub(error_end_x + 1) as usize;
+            }
+
+            let scroll_ratio = self.scroll_x as f32 / (total_cols - visible_cols) as f32;
+            let thumb_size = (track_len as f32 * (visible_cols as f32 / total_cols as f32))
+                .round()
+                .clamp(1.0, track_len as f32) as usize;
+            let thumb_start = ((track_len - thumb_size) as f32 * scroll_ratio).round() as usize;
+
+            let y = match mode {
+                "up" => b.padding,
+                "upborder" => 0,
+                "downborder" => height.saturating_sub(1),
+                _ => height.saturating_sub(1 + b.padding),
+            } as usize;
+
+            let ch = match config.scrollbar_horizontal_style.as_str() {
+                "light" => '─',
+                "heavy" => '━',
+                "double" => '═',
+                _ => {
+                    if mode == "up" || mode == "downborder" {
+                        '▀'
+                    } else {
+                        '▄'
+                    }
+                }
+            };
+
+            for i in 0..thumb_size {
+                let x = x_offset + thumb_start + i;
+                if x < width as usize && y < height as usize {
+                    let style = Style {
+                        fg: theme.scrollbar_horizontal.color_at(i, thumb_size),
+                        bg: Color::None,
+                        md: Modifier::None,
+                    };
+                    b.put_cell(crate::Cell::new(ch, style), x as u16, y as u16);
                 }
             }
         }

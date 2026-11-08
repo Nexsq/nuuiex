@@ -71,6 +71,7 @@ pub enum Color {
     BrightBlue,
     BrightMagenta,
     BrightCyan,
+    Ansi(u8),
     Rgb(u8, u8, u8),
 }
 
@@ -148,6 +149,44 @@ impl Color {
             Color::BrightMagenta => Some((214, 112, 214)),
             Color::BrightCyan => Some((41, 184, 219)),
             Color::Rgb(r, g, b) => Some((*r, *g, *b)),
+            Color::Ansi(n) => {
+                let n = *n;
+                if n < 16 {
+                    match n {
+                        0 => Some((0, 0, 0)),
+                        1 => Some((205, 49, 49)),
+                        2 => Some((13, 188, 121)),
+                        3 => Some((229, 229, 16)),
+                        4 => Some((36, 114, 200)),
+                        5 => Some((188, 63, 188)),
+                        6 => Some((17, 168, 205)),
+                        7 => Some((229, 229, 229)),
+                        8 => Some((102, 102, 102)),
+                        9 => Some((241, 76, 76)),
+                        10 => Some((35, 209, 139)),
+                        11 => Some((245, 245, 67)),
+                        12 => Some((59, 142, 234)),
+                        13 => Some((214, 112, 214)),
+                        14 => Some((41, 184, 219)),
+                        15 => Some((255, 255, 255)),
+                        _ => None,
+                    }
+                } else if n <= 231 {
+                    let idx = n - 16;
+                    let r = idx / 36;
+                    let g = (idx % 36) / 6;
+                    let b = idx % 6;
+
+                    let r_val = if r > 0 { 55 + r * 40 } else { 0 };
+                    let g_val = if g > 0 { 55 + g * 40 } else { 0 };
+                    let b_val = if b > 0 { 55 + b * 40 } else { 0 };
+
+                    Some((r_val, g_val, b_val))
+                } else {
+                    let v = 8 + (n - 232) * 10;
+                    Some((v, v, v))
+                }
+            }
         }
     }
 
@@ -163,10 +202,9 @@ impl Color {
             let r = (r1 as f32 * inv_t + r2 as f32 * t) as u8;
             let g = (g1 as f32 * inv_t + g2 as f32 * t) as u8;
             let b = (b1 as f32 * inv_t + b2 as f32 * t) as u8;
-
             Color::Rgb(r, g, b)
         } else {
-            *self
+            if t < 0.5 { *self } else { other }
         }
     }
 
@@ -189,6 +227,11 @@ impl Color {
             Color::BrightBlue => buf.extend_from_slice(b"\x1b[94m"),
             Color::BrightMagenta => buf.extend_from_slice(b"\x1b[95m"),
             Color::BrightCyan => buf.extend_from_slice(b"\x1b[96m"),
+            Color::Ansi(n) => {
+                buf.extend_from_slice(b"\x1b[38;5;");
+                push_num_u8(buf, *n);
+                buf.push(b'm');
+            }
             Color::Rgb(r, g, b) => {
                 buf.extend_from_slice(b"\x1b[38;2;");
                 push_num_u8(buf, *r);
@@ -220,6 +263,11 @@ impl Color {
             Color::BrightBlue => buf.extend_from_slice(b"\x1b[104m"),
             Color::BrightMagenta => buf.extend_from_slice(b"\x1b[105m"),
             Color::BrightCyan => buf.extend_from_slice(b"\x1b[106m"),
+            Color::Ansi(n) => {
+                buf.extend_from_slice(b"\x1b[48;5;");
+                push_num_u8(buf, *n);
+                buf.push(b'm');
+            }
             Color::Rgb(r, g, b) => {
                 buf.extend_from_slice(b"\x1b[48;2;");
                 push_num_u8(buf, *r);

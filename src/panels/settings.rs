@@ -138,6 +138,94 @@ fn build_categories(config: &Config, themes: &[String], theme_idx: usize) -> Vec
                 ),
             },
             Setting {
+                name: "Scrollbar Vert",
+                key: "scrollbar_vertical",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.scrollbar_vertical { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Vert Mode",
+                key: "scrollbar_vertical_mode",
+                kind: SettingType::Choice(
+                    vec![
+                        "left".to_string(),
+                        "leftborder".to_string(),
+                        "right".to_string(),
+                        "rightborder".to_string(),
+                    ],
+                    match config.scrollbar_vertical_mode.as_str() {
+                        "left" => 0,
+                        "leftborder" => 1,
+                        "rightborder" => 3,
+                        _ => 2,
+                    },
+                ),
+            },
+            Setting {
+                name: "Vert Style",
+                key: "scrollbar_vertical_style",
+                kind: SettingType::Choice(
+                    vec![
+                        "solid".to_string(),
+                        "light".to_string(),
+                        "heavy".to_string(),
+                        "double".to_string(),
+                    ],
+                    match config.scrollbar_vertical_style.as_str() {
+                        "light" => 1,
+                        "heavy" => 2,
+                        "double" => 3,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
+                name: "Scrollbar Horiz",
+                key: "scrollbar_horizontal",
+                kind: SettingType::Choice(
+                    vec!["true".to_string(), "false".to_string()],
+                    if config.scrollbar_horizontal { 0 } else { 1 },
+                ),
+            },
+            Setting {
+                name: "Horiz Mode",
+                key: "scrollbar_horizontal_mode",
+                kind: SettingType::Choice(
+                    vec![
+                        "up".to_string(),
+                        "upborder".to_string(),
+                        "down".to_string(),
+                        "downborder".to_string(),
+                    ],
+                    match config.scrollbar_horizontal_mode.as_str() {
+                        "up" => 0,
+                        "upborder" => 1,
+                        "downborder" => 3,
+                        _ => 2,
+                    },
+                ),
+            },
+            Setting {
+                name: "Horiz Style",
+                key: "scrollbar_horizontal_style",
+                kind: SettingType::Choice(
+                    vec![
+                        "solid".to_string(),
+                        "light".to_string(),
+                        "heavy".to_string(),
+                        "double".to_string(),
+                    ],
+                    match config.scrollbar_horizontal_style.as_str() {
+                        "light" => 1,
+                        "heavy" => 2,
+                        "double" => 3,
+                        _ => 0,
+                    },
+                ),
+            },
+            Setting {
                 name: "Reset Appearance",
                 key: "reset_appearance",
                 kind: SettingType::Action,
@@ -1336,6 +1424,13 @@ pub fn settings_modal(
                 apply_setting!(config, set, bool "show_caret", show_caret);
                 apply_setting!(config, set, bool "highlight_trailing_spaces", highlight_trailing_spaces);
 
+                apply_setting!(config, set, bool "scrollbar_vertical", scrollbar_vertical);
+                apply_setting!(config, set, choice "scrollbar_vertical_mode", scrollbar_vertical_mode);
+                apply_setting!(config, set, choice "scrollbar_vertical_style", scrollbar_vertical_style);
+                apply_setting!(config, set, bool "scrollbar_horizontal", scrollbar_horizontal);
+                apply_setting!(config, set, choice "scrollbar_horizontal_mode", scrollbar_horizontal_mode);
+                apply_setting!(config, set, choice "scrollbar_horizontal_style", scrollbar_horizontal_style);
+
                 apply_setting!(config, set, parse_clamp "keyvis_width", keyvis_width, 1, 1024);
                 apply_setting!(config, set, parse_clamp "keyvis_height", keyvis_height, 2, 32);
                 apply_setting!(config, set, choice_offset "keyvis_steps", keyvis_steps, 1);
@@ -2410,6 +2505,35 @@ pub fn settings_modal(
                                         ),
                                         _ => ("", 99),
                                     };
+
+                                    if action_type == 5
+                                        || action_type == 7
+                                        || action_type == 13
+                                        || action_type == 0
+                                    {
+                                        let is_running =
+                                            main_view.running_macros.iter().any(|m| m.is_some());
+                                        if is_running {
+                                            main_view.update_macro_focus(false);
+                                            crate::error::warning_box(
+                                                terminal,
+                                                canvas,
+                                                "Cannot reset library, config, or macrodata while a macro is running.",
+                                                &["OK"],
+                                                0,
+                                                0,
+                                                main_view.min_w,
+                                                main_view.min_h,
+                                                config.get_border(),
+                                                main_view.theme.warning_color.clone(),
+                                                |cvs, w, h, k| {
+                                                    main_view.draw_background(cvs, w, h, k, config)
+                                                },
+                                            );
+                                            main_view.update_macro_focus(true);
+                                            continue;
+                                        }
+                                    }
 
                                     let result = crate::error::warning_box(
                                         terminal,
