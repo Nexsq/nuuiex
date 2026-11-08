@@ -2946,23 +2946,52 @@ impl Editor {
             let mut syntax_modifiers = Vec::with_capacity(128);
 
             let mut display_line = String::new();
-            let mut folded_colon_pos = None;
+            let mut adj_start_0 = None;
+            let mut adj_end_0 = None;
 
             if !self.is_output {
                 let mut chars_vec: Vec<char> = self.state.lines[i].chars().collect();
+                let mut logical_start =
+                    selection.and_then(|s| if s.0.1 == i { Some(s.0.0) } else { None });
+                let mut logical_end =
+                    selection.and_then(|s| if s.1.1 == i { Some(s.1.0) } else { None });
+
                 if self.folded_lines.contains(&i) {
                     let hash_pos = chars_vec
                         .iter()
                         .position(|&c| c == '#')
                         .unwrap_or(chars_vec.len());
                     if let Some(colon_pos) = chars_vec[..hash_pos].iter().rposition(|&c| c == ':') {
-                        folded_colon_pos = Some(colon_pos);
                         chars_vec.remove(colon_pos);
+
+                        if let Some(ls) = logical_start.as_mut() {
+                            if *ls > colon_pos {
+                                *ls -= 1;
+                            }
+                        }
+                        if let Some(le) = logical_end.as_mut() {
+                            if *le > colon_pos {
+                                *le -= 1;
+                            }
+                        }
                     }
                 }
 
                 let mut i_char = 0;
+                let mut visual_j = 0;
+
                 while i_char < chars_vec.len() {
+                    if let Some(ls) = logical_start {
+                        if i_char == ls && adj_start_0.is_none() {
+                            adj_start_0 = Some(visual_j);
+                        }
+                    }
+                    if let Some(le) = logical_end {
+                        if i_char == le && adj_end_0.is_none() {
+                            adj_end_0 = Some(visual_j);
+                        }
+                    }
+
                     if i_char + 6 <= chars_vec.len()
                         && chars_vec[i_char..i_char + 6].iter().collect::<String>() == "Image:"
                     {
@@ -2986,13 +3015,54 @@ impl Editor {
                                     .collect::<String>(),
                                 chars_vec[end_img - 2..end_img].iter().collect::<String>()
                             );
+
+                            if let Some(ls) = logical_start {
+                                if ls > i_char && ls < end_img && adj_start_0.is_none() {
+                                    let hidden_start = start_img + 8;
+                                    let hidden_end = end_img - 2;
+                                    if ls <= hidden_start {
+                                        adj_start_0 = Some(visual_j + (ls - start_img));
+                                    } else if ls >= hidden_end {
+                                        adj_start_0 = Some(visual_j + 10 + (ls - hidden_end));
+                                    } else {
+                                        adj_start_0 = Some(visual_j + 8);
+                                    }
+                                }
+                            }
+                            if let Some(le) = logical_end {
+                                if le > i_char && le < end_img && adj_end_0.is_none() {
+                                    let hidden_start = start_img + 8;
+                                    let hidden_end = end_img - 2;
+                                    if le <= hidden_start {
+                                        adj_end_0 = Some(visual_j + (le - start_img));
+                                    } else if le >= hidden_end {
+                                        adj_end_0 = Some(visual_j + 10 + (le - hidden_end));
+                                    } else {
+                                        adj_end_0 = Some(visual_j + 8);
+                                    }
+                                }
+                            }
+
                             display_line.push_str(&collapsed);
                             i_char = end_img;
+                            visual_j += 12;
                             continue;
                         }
                     }
                     display_line.push(chars_vec[i_char]);
                     i_char += 1;
+                    visual_j += 1;
+                }
+
+                if let Some(ls) = logical_start {
+                    if i_char == ls && adj_start_0.is_none() {
+                        adj_start_0 = Some(visual_j);
+                    }
+                }
+                if let Some(le) = logical_end {
+                    if i_char == le && adj_end_0.is_none() {
+                        adj_end_0 = Some(visual_j);
+                    }
                 }
             } else {
                 display_line = self.state.lines[i].clone();
@@ -3673,6 +3743,27 @@ impl Editor {
                 }
             }
 
+            let (is_in_selection_range, line_selection_start, line_selection_end) =
+                if let Some((start, end)) = selection {
+                    if i >= start.1 && i <= end.1 {
+                        let s = if i == start.1 {
+                            adj_start_0.unwrap_or(start.0)
+                        } else {
+                            0
+                        };
+                        let e = if i == end.1 {
+                            adj_end_0.unwrap_or(end.0)
+                        } else {
+                            usize::MAX
+                        };
+                        (true, s, e)
+                    } else {
+                        (false, 0, usize::MAX)
+                    }
+                } else {
+                    (false, 0, usize::MAX)
+                };
+
             let mut current_x = 0;
             let mut j = 0;
             while j < line_chars.len() {
@@ -3696,30 +3787,9 @@ impl Editor {
                         (display_x_signed as usize + prefix_width) as i16
                     };
 
-                    let is_selected = if let Some((start, end)) = selection {
-                        let mut adj_start_0 = start.0;
-                        if i == start.1 {
-                            if let Some(cp) = folded_colon_pos {
-                                if adj_start_0 > cp {
-                                    adj_start_0 -= 1;
-                                }
-                            }
-                        }
-                        let mut adj_end_0 = end.0;
-                        if i == end.1 {
-                            if let Some(cp) = folded_colon_pos {
-                                if adj_end_0 > cp {
-                                    adj_end_0 -= 1;
-                                }
-                            }
-                        }
-
-                        let is_after_start = i > start.1 || (i == start.1 && j >= adj_start_0);
-                        let is_before_end = i < end.1 || (i == end.1 && j < adj_end_0);
-                        is_after_start && is_before_end
-                    } else {
-                        false
-                    };
+                    let is_selected = is_in_selection_range
+                        && j >= line_selection_start
+                        && j < line_selection_end;
 
                     let mut style = Style {
                         fg: if is_output_err_header {
