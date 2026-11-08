@@ -15,6 +15,10 @@ pub use library::lib;
 pub use panels::{editor, error, main, result::PanelResult, settings, toosmall};
 pub use theme::themecore;
 
+#[cfg(feature = "portable")]
+#[allow(unused_imports)]
+use directories as _;
+
 pub fn get_config_dir() -> Result<std::path::PathBuf, String> {
     let path = {
         #[cfg(feature = "portable")]

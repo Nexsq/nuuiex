@@ -3629,6 +3629,7 @@ pub struct Interpreter {
     rng_state: u64,
     macro_rel_path: String,
     pub try_depth: usize,
+    last_output_time: std::time::Instant,
 }
 
 #[derive(PartialEq)]
@@ -3667,6 +3668,7 @@ impl Interpreter {
             rng_state,
             macro_rel_path,
             try_depth: 0,
+            last_output_time: std::time::Instant::now(),
         }
     }
 
@@ -3905,7 +3907,12 @@ impl Interpreter {
         Ok(last_val)
     }
 
-    fn send_output(&mut self) {
+    fn send_output(&mut self, force: bool) {
+        if !force && self.last_output_time.elapsed() < std::time::Duration::from_millis(16) {
+            return;
+        }
+        self.last_output_time = std::time::Instant::now();
+
         let mut out_lock = self.output.lock().unwrap();
         let err_lock = self.errors.lock().unwrap();
         let mut caret = self.caret.lock().unwrap();
@@ -3954,7 +3961,7 @@ impl Interpreter {
 
     pub fn exec(&mut self, stmts: &[Stmt]) {
         let _ = self.exec_block(stmts);
-        self.send_output();
+        self.send_output(true);
     }
 
     fn exec_block(&mut self, stmts: &[Stmt]) -> Result<Signal, String> {
@@ -4713,10 +4720,11 @@ impl Interpreter {
                         rng_state: next_rng_state,
                         macro_rel_path: macro_rel_path_clone,
                         try_depth: 0,
+                        last_output_time: std::time::Instant::now(),
                     };
 
                     let _ = async_interp.exec_block(&body_clone);
-                    async_interp.send_output();
+                    async_interp.send_output(true);
                 });
 
                 Ok(Signal::Empty)
@@ -4857,13 +4865,23 @@ impl Interpreter {
             Expr::Bool(b) => Ok(Value::Bool(*b)),
             Expr::Nil => Ok(Value::Nil),
             Expr::FormatString(parts) => {
-                let mut result = String::new();
+                use std::fmt::Write;
+                let mut result = String::with_capacity(64);
                 for part in parts {
                     match part {
                         StringPart::Text(t) => result.push_str(t),
                         StringPart::Expr(e) => {
                             let val = self.eval_expr(e)?;
-                            result.push_str(&val.to_string());
+                            match val {
+                                Value::String(ref s) => result.push_str(s),
+                                Value::Number(n) => {
+                                    let _ = write!(result, "{}", n);
+                                }
+                                Value::Bool(b) => result.push_str(if b { "True" } else { "False" }),
+                                _ => {
+                                    let _ = write!(result, "{}", val);
+                                }
+                            }
                         }
                     }
                 }
@@ -5086,8 +5104,7 @@ impl Interpreter {
                         }
 
                         self.write_to_output(&combined);
-
-                        self.send_output();
+                        self.send_output(false);
                         return Ok(Value::Nil);
                     }
                     "sleep" | "sleepaccurate" => {
@@ -5104,6 +5121,8 @@ impl Interpreter {
                                     line, name
                                 ));
                             }
+
+                            self.send_output(true);
 
                             let dur = std::time::Duration::from_secs_f64(ms / 1000.0);
                             let target = std::time::Instant::now() + dur;
@@ -5196,7 +5215,7 @@ impl Interpreter {
                             let prompt = eval_args[0].1.to_string();
                             self.write_to_output(&prompt);
                         }
-                        self.send_output();
+                        self.send_output(true);
 
                         if self.tx.send(crate::EngineMessage::InputRequest).is_err() {
                             self.should_exit = true;
@@ -5442,6 +5461,8 @@ impl Interpreter {
                             Err(e) => return Err(format!("Line {}: {}", line, e)),
                         };
 
+                        self.send_output(true);
+
                         loop {
                             if self.cancel_token.load(Ordering::Relaxed) {
                                 self.should_exit = true;
@@ -5592,7 +5613,7 @@ impl Interpreter {
                         drop(out);
 
                         if do_send {
-                            self.send_output();
+                            self.send_output(true);
                         }
                         return Ok(Value::Nil);
                     }
@@ -5658,7 +5679,7 @@ impl Interpreter {
                         caret.1 = y;
                         drop(caret);
 
-                        self.send_output();
+                        self.send_output(true);
                         return Ok(Value::Nil);
                     }
                     "scroll" => {
@@ -6111,6 +6132,8 @@ impl Interpreter {
                         } else {
                             50.0
                         };
+
+                        self.send_output(true);
 
                         if let Err(e) = simulate_key(&key_str, true) {
                             return Err(format!("Line {}: {}", line, e));

@@ -20,6 +20,13 @@ pub struct Config {
     pub show_caret: bool,
     pub highlight_trailing_spaces: bool,
 
+    pub scrollbar_vertical: bool,
+    pub scrollbar_vertical_mode: String,
+    pub scrollbar_vertical_style: String,
+    pub scrollbar_horizontal: bool,
+    pub scrollbar_horizontal_mode: String,
+    pub scrollbar_horizontal_style: String,
+
     pub keyvis_width: usize,
     pub keyvis_height: usize,
     pub keyvis_steps: usize,
@@ -130,6 +137,13 @@ impl Default for Config {
             deck_mode: String::new(),
             show_caret: false,
             highlight_trailing_spaces: false,
+
+            scrollbar_vertical: false,
+            scrollbar_vertical_mode: String::new(),
+            scrollbar_vertical_style: String::new(),
+            scrollbar_horizontal: false,
+            scrollbar_horizontal_mode: String::new(),
+            scrollbar_horizontal_style: String::new(),
 
             keyvis_width: 0,
             keyvis_height: 0,
@@ -270,6 +284,19 @@ impl Config {
                     "highlight_trailing_spaces" => {
                         self.highlight_trailing_spaces =
                             val.parse().unwrap_or(self.highlight_trailing_spaces)
+                    }
+
+                    "scrollbar_vertical" => {
+                        self.scrollbar_vertical = val.parse().unwrap_or(self.scrollbar_vertical)
+                    }
+                    "scrollbar_vertical_mode" => self.scrollbar_vertical_mode = val.to_string(),
+                    "scrollbar_vertical_style" => self.scrollbar_vertical_style = val.to_string(),
+                    "scrollbar_horizontal" => {
+                        self.scrollbar_horizontal = val.parse().unwrap_or(self.scrollbar_horizontal)
+                    }
+                    "scrollbar_horizontal_mode" => self.scrollbar_horizontal_mode = val.to_string(),
+                    "scrollbar_horizontal_style" => {
+                        self.scrollbar_horizontal_style = val.to_string()
                     }
 
                     "keyvis_width" => {
@@ -646,6 +673,12 @@ impl Config {
         self.lib_width = default.lib_width;
         self.show_caret = default.show_caret;
         self.highlight_trailing_spaces = default.highlight_trailing_spaces;
+        self.scrollbar_vertical = default.scrollbar_vertical;
+        self.scrollbar_vertical_mode = default.scrollbar_vertical_mode;
+        self.scrollbar_vertical_style = default.scrollbar_vertical_style;
+        self.scrollbar_horizontal = default.scrollbar_horizontal;
+        self.scrollbar_horizontal_mode = default.scrollbar_horizontal_mode;
+        self.scrollbar_horizontal_style = default.scrollbar_horizontal_style;
     }
 
     pub fn reset_settings_menu(&mut self) {
@@ -874,6 +907,43 @@ impl Config {
                         &mut output,
                         "{} = {}{}",
                         key_str, self.highlight_trailing_spaces, comment
+                    )
+                    .unwrap(),
+
+                    "scrollbar_vertical" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.scrollbar_vertical, comment
+                    )
+                    .unwrap(),
+                    "scrollbar_vertical_mode" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.scrollbar_vertical_mode, comment
+                    )
+                    .unwrap(),
+                    "scrollbar_vertical_style" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.scrollbar_vertical_style, comment
+                    )
+                    .unwrap(),
+                    "scrollbar_horizontal" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.scrollbar_horizontal, comment
+                    )
+                    .unwrap(),
+                    "scrollbar_horizontal_mode" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.scrollbar_horizontal_mode, comment
+                    )
+                    .unwrap(),
+                    "scrollbar_horizontal_style" => writeln!(
+                        &mut output,
+                        "{} = {}{}",
+                        key_str, self.scrollbar_horizontal_style, comment
                     )
                     .unwrap(),
 

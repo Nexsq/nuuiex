@@ -291,6 +291,7 @@ Used for terminal styling and pixel color comparisons. The `Background` enum sha
 * **Standard Colors:** `None`, `Black`, `Red`, `Green`, `Yellow`, `Blue`, `Magenta`, `Cyan`, `White`, `Gray`
 * **Bright Colors:** `BrightGray`, `BrightRed`, `BrightGreen`, `BrightYellow`, `BrightBlue`, `BrightMagenta`, `BrightCyan`, `BrightWhite`
 * **Custom Hex Colors:** You can use exact hex codes, e.g., `Color:ff0055` or `Background:00ff00`
+* **Terminal ANSI Colors:** You can access the standard 0-255 terminal color palette using `ansiN`, e.g., `Color:ansi4` (terminal default blue) or `Background:ansi196` (standard terminal red).
 
 *(You can call `Color:00ff00::tostr()` to get its string representation).*
 
@@ -412,6 +413,11 @@ list_file = White
 
 tab_lazy = White
 tab_selected = Yellow
+
+scrollbar_vertical = White
+scrollbar_horizontal = White
+
+macro_output = White
 
 settings_entry = White
 settings_selected = Green

@@ -263,6 +263,23 @@ pub fn refresh(
         }
     }
 
+    let mut render_w = list_w.saturating_sub(2) as usize;
+    let render_h = list_h.saturating_sub(2) as usize;
+    let mut start_x_offset = 1;
+    let start_y_offset = 1;
+    let mut v_scroll_visible = false;
+    let total_lines = render_items.len();
+
+    if config.scrollbar_vertical && total_lines > render_h {
+        v_scroll_visible = true;
+        if config.scrollbar_vertical_mode == "left" {
+            start_x_offset += 1;
+            render_w = render_w.saturating_sub(1);
+        } else if config.scrollbar_vertical_mode == "right" {
+            render_w = render_w.saturating_sub(1);
+        }
+    }
+
     let max_selectable_idx = if view_path.is_empty() {
         parent_nodes.len().saturating_sub(1)
     } else {
@@ -290,14 +307,14 @@ pub fn refresh(
             .unwrap_or(0)
     };
 
-    let visible_items = list_h.saturating_sub(2) as usize;
+    let visible_items = render_h;
     if target_render_idx < *list_scroll {
         *list_scroll = target_render_idx;
     } else if target_render_idx >= *list_scroll + visible_items && visible_items > 0 {
         *list_scroll = target_render_idx.saturating_sub(visible_items - 1);
     }
 
-    let max_text_len = list_w.saturating_sub(2) as usize;
+    let max_text_len = render_w;
 
     for (display_line, item) in render_items
         .iter()
@@ -391,7 +408,7 @@ pub fn refresh(
             prefix.push(' ');
         }
 
-        let target_len = max_text_len.saturating_sub(2);
+        let target_len = max_text_len;
         let e_len = if is_editing_this { 2 } else { 0 };
         let allowed_len = target_len.saturating_sub(e_len);
 
@@ -456,7 +473,15 @@ pub fn refresh(
         }
 
         let display_y = (display_line - *list_scroll) as i16;
-        list_box.insert_text(&text, 1, display_y, false, fg_color, bg_color, md);
+        list_box.insert_text(
+            &text,
+            start_x_offset as i16 - 1,
+            display_y + start_y_offset as i16 - 1,
+            false,
+            fg_color,
+            bg_color,
+            md,
+        );
 
         if item.is_input {
             let cursor_char_idx = prefix_chars + visual_cursor_pos;
@@ -465,13 +490,59 @@ pub fn refresh(
                 visual_x += crate::render::canvas::char_width(c) as usize;
             }
 
-            let cursor_x = 1 + visual_x;
+            let cursor_x = start_x_offset as usize - 1 + visual_x;
             let box_x = cursor_x + list_box.padding as usize;
-            let box_y = display_y as usize + list_box.padding as usize;
+            let box_y =
+                display_y as usize + list_box.padding as usize + start_y_offset as usize - 1;
 
             if box_x < list_box.width as usize && box_y < list_box.height as usize {
                 let cell_idx = box_y * list_box.width as usize + box_x;
                 list_box.grid[cell_idx].s.md = Modifier::Underline;
+            }
+        }
+    }
+
+    if config.scrollbar_vertical && v_scroll_visible {
+        let is_border = config.scrollbar_vertical_mode.ends_with("border");
+        let track_len = if is_border {
+            list_box.height.saturating_sub(2) as usize
+        } else {
+            visible_items
+        };
+        let scroll_ratio = *list_scroll as f32 / (total_lines - visible_items) as f32;
+        let thumb_size = (track_len as f32 * (visible_items as f32 / total_lines as f32))
+            .round()
+            .clamp(1.0, track_len as f32) as usize;
+        let thumb_start = ((track_len - thumb_size) as f32 * scroll_ratio).round() as usize;
+
+        let x = match config.scrollbar_vertical_mode.as_str() {
+            "left" => list_box.padding,
+            "leftborder" => 0,
+            "rightborder" => list_box.width.saturating_sub(1),
+            _ => list_box.width.saturating_sub(1 + list_box.padding),
+        } as usize;
+        let y_offset = if is_border {
+            1
+        } else {
+            start_y_offset as usize
+        };
+
+        let ch = match config.scrollbar_vertical_style.as_str() {
+            "light" => '│',
+            "heavy" => '┃',
+            "double" => '║',
+            _ => '█',
+        };
+
+        for i in 0..thumb_size {
+            let y = y_offset + thumb_start + i;
+            if x < list_box.width as usize && y < list_box.height as usize {
+                let style = crate::Style {
+                    fg: theme.scrollbar_vertical.color_at(i, thumb_size),
+                    bg: crate::Color::None,
+                    md: crate::Modifier::None,
+                };
+                list_box.put_cell(crate::Cell::new(ch, style), x as u16, y as u16);
             }
         }
     }

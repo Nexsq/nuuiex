@@ -84,6 +84,9 @@ pub struct Theme {
 
     pub matrix_head_color: Gradient,
     pub matrix_body_color: Gradient,
+
+    pub scrollbar_vertical: Gradient,
+    pub scrollbar_horizontal: Gradient,
 }
 
 impl Theme {
@@ -152,6 +155,8 @@ impl Theme {
 
             matrix_head_color: Gradient::default(),
             matrix_body_color: Gradient::default(),
+            scrollbar_vertical: Gradient::default(),
+            scrollbar_horizontal: Gradient::default(),
         }
     }
 }
@@ -337,6 +342,13 @@ pub fn parse_color(val: &str) -> Result<Color, String> {
         return Ok(Color::BrightCyan);
     }
 
+    let lower_val = val.to_ascii_lowercase();
+    if let Some(ansi_str) = lower_val.strip_prefix("ansi") {
+        if let Ok(n) = ansi_str.parse::<u8>() {
+            return Ok(Color::Ansi(n));
+        }
+    }
+
     let hex_str = val.trim_start_matches('#');
     if hex_str.len() == 6 {
         if let Ok(rgb) = u32::from_str_radix(hex_str, 16) {
@@ -483,6 +495,8 @@ fn apply_theme_value(theme: &mut Theme, key: &str, val: &str) -> Result<(), Stri
 
         "matrix_head_color" => theme.matrix_head_color = parse_gradient(val)?,
         "matrix_body_color" => theme.matrix_body_color = parse_gradient(val)?,
+        "scrollbar_vertical" => theme.scrollbar_vertical = parse_gradient(val)?,
+        "scrollbar_horizontal" => theme.scrollbar_horizontal = parse_gradient(val)?,
         _ => {}
     }
     Ok(())
