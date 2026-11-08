@@ -229,6 +229,60 @@ pub fn get_clipboard() -> Option<String> {
     None
 }
 
+pub fn get_clipboard_image() -> Option<String> {
+    let is_wayland = is_wayland_session();
+
+    if is_wayland {
+        if let Ok(output) = build_clipboard_cmd("wl-paste", &["-t", "image/png"]).output() {
+            if output.status.success() && !output.stdout.is_empty() {
+                let b64 = crate::engine::interpreter::encode_base64(&output.stdout);
+                return Some(format!("Image:{}", b64));
+            }
+        }
+    }
+
+    let arboard_img = with_clipboard(|cb| cb.get_image().ok()).flatten();
+
+    if let Some(img) = arboard_img {
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        use image::ImageEncoder;
+        let encoder = image::codecs::png::PngEncoder::new_with_quality(
+            &mut cursor,
+            image::codecs::png::CompressionType::Fast,
+            image::codecs::png::FilterType::Adaptive,
+        );
+
+        if encoder
+            .write_image(
+                &img.bytes,
+                img.width as u32,
+                img.height as u32,
+                image::ExtendedColorType::Rgba8,
+            )
+            .is_ok()
+        {
+            let b64 = crate::engine::interpreter::encode_base64(&cursor.into_inner());
+            return Some(format!("Image:{}", b64));
+        }
+    }
+
+    if !is_wayland {
+        if let Ok(output) = build_clipboard_cmd(
+            "xclip",
+            &["-selection", "clipboard", "-t", "image/png", "-o"],
+        )
+        .output()
+        {
+            if output.status.success() && !output.stdout.is_empty() {
+                let b64 = crate::engine::interpreter::encode_base64(&output.stdout);
+                return Some(format!("Image:{}", b64));
+            }
+        }
+    }
+
+    None
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Mode {
     Command,
@@ -1840,7 +1894,19 @@ impl Editor {
     }
 
     fn paste_from_clipboard(&mut self) {
-        if let Some(text) = get_clipboard() {
+        if let Some(img_str) = get_clipboard_image() {
+            let line = &mut self.state.lines[self.state.cursor_y];
+            let byte_idx = line
+                .char_indices()
+                .nth(self.state.cursor_x)
+                .map(|(i, _)| i)
+                .unwrap_or(line.len());
+            let after = line.split_off(byte_idx);
+
+            self.state.lines[self.state.cursor_y].push_str(&img_str);
+            self.state.cursor_x += img_str.chars().count();
+            self.state.lines[self.state.cursor_y].push_str(&after);
+        } else if let Some(text) = get_clipboard() {
             let lines_to_insert: Vec<&str> = text.split('\n').collect();
             if lines_to_insert.is_empty() {
                 return;

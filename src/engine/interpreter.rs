@@ -2018,9 +2018,9 @@ fn get_screen_pixel(_x: i32, _y: i32) -> Result<(u8, u8, u8), String> {
     Err("getpixel is not supported on this OS".to_string())
 }
 
-const BASE64_ALPHABET: &[u8; 64] =
+pub const BASE64_ALPHABET: &[u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-fn encode_base64(data: &[u8]) -> String {
+pub fn encode_base64(data: &[u8]) -> String {
     let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
     let mut i = 0;
     while i < data.len() {
